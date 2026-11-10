@@ -45,6 +45,12 @@ type answerState struct {
 	slow    bool
 	// ownSkill is the due card's skill when Implied, so the line names reading or listening.
 	ownSkill string
+	// attemptID is the wrong graded attempt this feedback can take back.
+	// Zero when the answer was right, or when the check wrote no attempt.
+	// takenBack is set after the learner taps "My answer was also right".
+	// INIT-038/SPEC-009.
+	attemptID int64
+	takenBack bool
 }
 
 // prepareItem records the exposure of a new word and builds the item the visit is asked
@@ -198,9 +204,19 @@ func (s *server) answer(w http.ResponseWriter, r *http.Request) {
 	}
 	// Place stays the same length: a miss is not put back (ADR-0024 D3).
 	_, q.total, _ = q.sess.Place()
+	var attemptID int64
+	if !res.Correct && q.cur.LexemeID > 0 && q.item.Skill != "" {
+		// A lookup failure still shows the grade. The tap needs the id; without
+		// it the button stays off, and the answer already recorded is not lost.
+		got, ok, lookErr := latestAttempt(r.Context(), s.store, user.ID, q.cur.LexemeID, q.item.Skill, evidence.SourceReview, 0)
+		if lookErr == nil && ok && !got.correct {
+			attemptID = got.id
+		}
+	}
 	q.fb = &answerState{
 		item: *q.item, resp: resp, text: strings.TrimSpace(resp.Text), res: res,
 		implied: outcome.Implied, slow: outcome.Slow, ownSkill: q.cur.Skill,
+		attemptID: attemptID,
 	}
 	vm, err := s.cardVM(r.Context(), q)
 	s.mu.Unlock()
@@ -435,6 +451,13 @@ func feedbackView(it activity.Item, st *answerState) *views.FeedbackView {
 		f.Title = fmt.Sprintf("%d of %d pairs right", right, len(res.Pairs))
 	default:
 		f.Title = "Not quite"
+	}
+	// A tap takes the wrong grade back. It does not mark the answer right.
+	// INIT-038/SPEC-009.
+	if st.takenBack {
+		f.Title = views.AlsoRightTaken
+	} else if !res.Correct && st.attemptID > 0 {
+		f.AlsoRightID = st.attemptID
 	}
 
 	switch {

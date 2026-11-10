@@ -117,6 +117,12 @@ func (s *Store) WriteAttempt(ctx context.Context, w AttemptWrite) (AttemptResult
 			next.UserID, next.LexemeID, next.Skill = a.UserID, a.LexemeID, a.Skill
 			if prev == nil {
 				next.ID, err = insertCardTx(ctx, tx, next)
+				// A listen answer for a word with no clip is stored and does not
+				// create a card (INIT-038/SPEC-003).
+				if errors.Is(err, errListenNeedsClip) {
+					apply = false
+					err = nil
+				}
 			} else {
 				next.ID = prev.ID
 				err = updateCardTx(ctx, tx, next)
@@ -124,12 +130,14 @@ func (s *Store) WriteAttempt(ctx context.Context, w AttemptWrite) (AttemptResult
 			if err != nil {
 				return AttemptResult{}, err
 			}
-			log.CardID = next.ID
-			if err := insertReviewTx(ctx, tx, log); err != nil {
-				return AttemptResult{}, err
+			if apply {
+				log.CardID = next.ID
+				if err := insertReviewTx(ctx, tx, log); err != nil {
+					return AttemptResult{}, err
+				}
+				out.CardID = next.ID
+				out.Scheduled = true
 			}
-			out.CardID = next.ID
-			out.Scheduled = true
 		}
 	}
 
@@ -157,18 +165,24 @@ func (s *Store) WriteAttempt(ctx context.Context, w AttemptWrite) (AttemptResult
 // CorrectLatencies returns the latency in milliseconds of the learner's most
 // recent correct attempts for one activity, newest first, at most limit.
 // An attempt with a latency of 0 was not timed and is left out.
+// An active void leaves that attempt out. INIT-038/SPEC-002.
 func (s *Store) CorrectLatencies(ctx context.Context, userID int64, activity string, limit int) ([]int64, error) {
-	return s.correctLatencies(ctx, userID, activity, 0, time.Time{}, limit)
+	return s.correctLatencies(ctx, userID, activity, 0, time.Time{}, limit, EvidenceOpts{})
+}
+
+// CorrectLatenciesOpts is CorrectLatencies with EvidenceOpts.
+func (s *Store) CorrectLatenciesOpts(ctx context.Context, userID int64, activity string, limit int, opts EvidenceOpts) ([]int64, error) {
+	return s.correctLatencies(ctx, userID, activity, 0, time.Time{}, limit, opts)
 }
 
 // CorrectLatenciesBefore is CorrectLatencies limited to attempts strictly
 // before beforeID at beforeAt. INIT-023/SPEC-003 uses it when replaying a
 // stored attempt so the median matches what Attempt saw before that row.
 func (s *Store) CorrectLatenciesBefore(ctx context.Context, userID int64, activity string, beforeID int64, beforeAt time.Time, limit int) ([]int64, error) {
-	return s.correctLatencies(ctx, userID, activity, beforeID, beforeAt, limit)
+	return s.correctLatencies(ctx, userID, activity, beforeID, beforeAt, limit, EvidenceOpts{})
 }
 
-func (s *Store) correctLatencies(ctx context.Context, userID int64, activity string, beforeID int64, beforeAt time.Time, limit int) ([]int64, error) {
+func (s *Store) correctLatencies(ctx context.Context, userID int64, activity string, beforeID int64, beforeAt time.Time, limit int, opts EvidenceOpts) ([]int64, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
@@ -183,14 +197,14 @@ func (s *Store) correctLatencies(ctx context.Context, userID int64, activity str
 			SELECT latency_ms
 			FROM attempts
 			WHERE user_id = ? AND activity = ? AND correct = 1 AND latency_ms > 0
-			  AND (created_at < ? OR (created_at = ? AND id < ?))
+			  AND (created_at < ? OR (created_at = ? AND id < ?))`+skipVoid(opts.IncludeVoided, "attempt_id", "attempts.id")+`
 			ORDER BY created_at DESC, id DESC
 			LIMIT ?`, userID, activity, at, at, beforeID, limit)
 	} else {
 		rows, err = conn.QueryContext(ctx, `
 			SELECT latency_ms
 			FROM attempts
-			WHERE user_id = ? AND activity = ? AND correct = 1 AND latency_ms > 0
+			WHERE user_id = ? AND activity = ? AND correct = 1 AND latency_ms > 0`+skipVoid(opts.IncludeVoided, "attempt_id", "attempts.id")+`
 			ORDER BY created_at DESC, id DESC
 			LIMIT ?`, userID, activity, limit)
 	}
@@ -212,6 +226,43 @@ func (s *Store) correctLatencies(ctx context.Context, userID int64, activity str
 	return out, nil
 }
 
+// RecentAnswerLatencies is the latency in milliseconds of the learner's most
+// recent answers, newest first, at most limit. An attempt with a latency of 0
+// was not timed and is left out. Wrong answers count: this is seconds per
+// answer, not per correct answer. An active void leaves that attempt out.
+// INIT-038/SPEC-006.
+func (s *Store) RecentAnswerLatencies(ctx context.Context, userID int64, limit int) ([]int64, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT latency_ms
+		FROM attempts
+		WHERE user_id = ? AND latency_ms > 0`+skipVoid(false, "attempt_id", "attempts.id")+`
+		ORDER BY created_at DESC, id DESC
+		LIMIT ?`, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("db: answer latencies: %w", err)
+	}
+	defer rows.Close()
+	var out []int64
+	for rows.Next() {
+		var ms int64
+		if err := rows.Scan(&ms); err != nil {
+			return nil, fmt.Errorf("db: answer latencies: %w", err)
+		}
+		out = append(out, ms)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: answer latencies: %w", err)
+	}
+	return out, nil
+}
+
 // LexemeSkill is one learner and one word, used when scanning evidence by skill.
 type LexemeSkill struct {
 	UserID   int64
@@ -220,7 +271,18 @@ type LexemeSkill struct {
 
 // ListenReplayTargets returns every learner and word that has listen attempts
 // and no listen card. INIT-023/SPEC-003 replays those answers into cards once.
+// An active void leaves that attempt out, so a voided listen answer does not
+// by itself make a replay target. INIT-038/SPEC-002.
 func (s *Store) ListenReplayTargets(ctx context.Context) ([]LexemeSkill, error) {
+	return s.listenReplayTargets(ctx, EvidenceOpts{})
+}
+
+// ListenReplayTargetsOpts is ListenReplayTargets with EvidenceOpts.
+func (s *Store) ListenReplayTargetsOpts(ctx context.Context, opts EvidenceOpts) ([]LexemeSkill, error) {
+	return s.listenReplayTargets(ctx, opts)
+}
+
+func (s *Store) listenReplayTargets(ctx context.Context, opts EvidenceOpts) ([]LexemeSkill, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return nil, err
@@ -228,7 +290,7 @@ func (s *Store) ListenReplayTargets(ctx context.Context) ([]LexemeSkill, error) 
 	rows, err := conn.QueryContext(ctx, `
 		SELECT DISTINCT a.user_id, a.lexeme_id
 		FROM attempts AS a
-		WHERE a.skill = 'listen'
+		WHERE a.skill = 'listen'`+skipVoid(opts.IncludeVoided, "attempt_id", "a.id")+`
 		  AND NOT EXISTS (
 		    SELECT 1 FROM cards AS c
 		    WHERE c.user_id = a.user_id AND c.lexeme_id = a.lexeme_id AND c.skill = 'listen'
@@ -280,6 +342,9 @@ func (s *Store) WriteReplayedCard(ctx context.Context, card Card, logs []ReviewL
 		return false, nil
 	}
 	id, err := insertCardTx(ctx, tx, card)
+	if errors.Is(err, errListenNeedsClip) {
+		return false, nil
+	}
 	if err != nil {
 		return false, err
 	}
@@ -296,20 +361,32 @@ func (s *Store) WriteReplayedCard(ctx context.Context, card Card, logs []ReviewL
 }
 
 // ListAttempts returns the learner's attempts for one lexeme, oldest first.
+// An active void leaves that attempt out. INIT-038/SPEC-002.
 func (s *Store) ListAttempts(ctx context.Context, userID, lexemeID int64) ([]Attempt, error) {
-	return s.listAttempts(ctx, userID, lexemeID, "")
+	return s.listAttempts(ctx, userID, lexemeID, "", EvidenceOpts{})
+}
+
+// ListAttemptsOpts is ListAttempts with EvidenceOpts.
+func (s *Store) ListAttemptsOpts(ctx context.Context, userID, lexemeID int64, opts EvidenceOpts) ([]Attempt, error) {
+	return s.listAttempts(ctx, userID, lexemeID, "", opts)
 }
 
 // ListAttemptsBySkill returns the learner's attempts for one lexeme and skill, oldest first.
 // INIT-023/SPEC-003 reads listen attempts this way when replaying a word into a card.
+// An active void leaves that attempt out. INIT-038/SPEC-002.
 func (s *Store) ListAttemptsBySkill(ctx context.Context, userID, lexemeID int64, skill string) ([]Attempt, error) {
+	return s.ListAttemptsBySkillOpts(ctx, userID, lexemeID, skill, EvidenceOpts{})
+}
+
+// ListAttemptsBySkillOpts is ListAttemptsBySkill with EvidenceOpts.
+func (s *Store) ListAttemptsBySkillOpts(ctx context.Context, userID, lexemeID int64, skill string, opts EvidenceOpts) ([]Attempt, error) {
 	if skill == "" {
 		return nil, errors.New("db: list attempts by skill needs a skill")
 	}
-	return s.listAttempts(ctx, userID, lexemeID, skill)
+	return s.listAttempts(ctx, userID, lexemeID, skill, opts)
 }
 
-func (s *Store) listAttempts(ctx context.Context, userID, lexemeID int64, skill string) ([]Attempt, error) {
+func (s *Store) listAttempts(ctx context.Context, userID, lexemeID int64, skill string, opts EvidenceOpts) ([]Attempt, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return nil, err
@@ -320,14 +397,14 @@ func (s *Store) listAttempts(ctx context.Context, userID, lexemeID int64, skill 
 			SELECT id, user_id, lexeme_id, skill, activity, source, unit_id, prompt, response,
 				correct, dont_know, hint_used, latency_ms, created_at
 			FROM attempts
-			WHERE user_id = ? AND lexeme_id = ?
+			WHERE user_id = ? AND lexeme_id = ?`+skipVoid(opts.IncludeVoided, "attempt_id", "attempts.id")+`
 			ORDER BY id`, userID, lexemeID)
 	} else {
 		rows, err = conn.QueryContext(ctx, `
 			SELECT id, user_id, lexeme_id, skill, activity, source, unit_id, prompt, response,
 				correct, dont_know, hint_used, latency_ms, created_at
 			FROM attempts
-			WHERE user_id = ? AND lexeme_id = ? AND skill = ?
+			WHERE user_id = ? AND lexeme_id = ? AND skill = ?`+skipVoid(opts.IncludeVoided, "attempt_id", "attempts.id")+`
 			ORDER BY id`, userID, lexemeID, skill)
 	}
 	if err != nil {
@@ -414,6 +491,15 @@ func cardTx(ctx context.Context, tx *sql.Tx, userID, lexemeID int64, skill strin
 }
 
 func insertCardTx(ctx context.Context, tx *sql.Tx, card Card) (int64, error) {
+	if card.Skill == "listen" {
+		has, err := lexemeHasStoredClip(ctx, tx, card.LexemeID)
+		if err != nil {
+			return 0, err
+		}
+		if !has {
+			return 0, errListenNeedsClip
+		}
+	}
 	if card.State == "" {
 		card.State = "new"
 	}

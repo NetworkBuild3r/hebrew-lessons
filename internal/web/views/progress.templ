@@ -99,15 +99,14 @@ func tabState(t SkillTab) AnswerState {
 // grid when no ?skill= is chosen (INIT-023/SPEC-004, INIT-033/SPEC-007).
 templ knowCard(v ProgressView) {
 	<section class="c-card pknow" aria-labelledby="know-h">
-		if len(v.Directions) > 0 {
+		if v.Skill == "" {
 			@knowOverview(v)
 		} else {
 			<p class="eyebrow" id="know-h">@E("What you know · " + v.SkillName)</p>
 			<p class="pknow__head">
 				<span class="count"><bdi lang="en" dir="ltr">{ v.Known }</bdi></span>
-				<span class="pknow__unit">@T(v.Lang, "", "words estimated known")</span>
+				<span class="pknow__unit">@ProgressT(v.Lang, LabelRungProved)</span>
 			</p>
-			@estimateSourceNote(v.Lang, v.EstimateSource, v.PlacementDay)
 			<div class="pbar" dir="ltr">
 				@templ.Raw(v.BarSVG)
 			</div>
@@ -125,50 +124,60 @@ templ knowCard(v ProgressView) {
 	</section>
 }
 
-// knowOverview is the directions grid: known, solid, learning, struggling, due,
-// 14-day accuracy, and a verdict chip (ADR-0028 D4, D5). Waiting is ADR-0031 D5.
+// knowOverview leads with the proved ladder (ADR-0033 D4, D6). Understand by ear
+// and Hebrew from English are the large rows. Reading and spelling are smaller.
+// The any-skill count, placement estimates, and verdict chips are not here.
 templ knowOverview(v ProgressView) {
 	<p class="eyebrow" id="know-h">@T(v.Lang, "", "What you know")</p>
-	<p class="pknow__head">
-		<span class="pknow__figure" role="group" aria-label={ ProgressLabel(v.Lang, "Words you know") }>
-			<span class="count"><bdi lang="en" dir="ltr">{ v.Known }</bdi></span>
-			<span class="pknow__unit">@ProgressT(v.Lang, "Words you know")</span>
-		</span>
-		if v.WaitingText != "" {
-			<span class="pknow__figure" role="group" aria-label={ ProgressLabel(v.Lang, LabelLearnedTodayCheckTomorrow) }>
-				<span class="count"><bdi lang="en" dir="ltr">{ v.WaitingText }</bdi></span>
-				<span class="pknow__unit">@ProgressT(v.Lang, LabelLearnedTodayCheckTomorrow)</span>
-			</span>
-		}
-	</p>
-	<p class="pknow__explain">@ProgressT(v.Lang, LabelKnownExplain)</p>
 	<ul class="pknow__skills">
-		for _, row := range v.Directions {
-			<li class="pknow__skill" data-skill={ row.Skill } data-verdict={ row.Verdict }>
-				<a class="pknow__skill-link" href={ templ.SafeURL(row.Href) }>
-					<span class="pknow__skill-label">@ProgressT(v.Lang, row.Label)</span>
-					@verdictChip(v.Lang, row.Verdict, row.VerdictLabel)
-					if row.NoAudio {
-						<span class="pknow__nocard">@ProgressT(v.Lang, "No audio yet — practiced in lessons only")</span>
-					} else {
-						<span class="pknow__skill-bar" dir="ltr">
-							<span class="pknow__n" data-count="known"><bdi lang="en" dir="ltr">{ Num(row.Known) }</bdi> @ProgressT(v.Lang, "known")</span>
-							<span class="pknow__n" data-count="solid"><bdi lang="en" dir="ltr">{ Num(row.Solid) }</bdi> @ProgressT(v.Lang, "solid")</span>
-							<span class="pknow__n" data-count="learning"><bdi lang="en" dir="ltr">{ Num(row.Learning) }</bdi> @ProgressT(v.Lang, "learning")</span>
-							<span class="pknow__n" data-count="struggling"><bdi lang="en" dir="ltr">{ Num(row.Struggling) }</bdi> @ProgressT(v.Lang, "struggling")</span>
-							<span class="pknow__n" data-count="due"><bdi lang="en" dir="ltr">{ Num(row.Due) }</bdi> @ProgressT(v.Lang, "due")</span>
-						</span>
-						if row.AccuracyText != "" {
-							<span class="pknow__acc">@T(v.Lang, row.AccuracyHE, row.AccuracyText)</span>
-						}
+		for _, row := range v.LadderRows {
+			<li class="pknow__skill" data-skill={ row.Skill } data-size={ ladderSize(row.Small) } data-taught={ Num(row.Taught) }>
+				<p class="pknow__skill-label">@ProgressT(v.Lang, row.Label)</p>
+				<p class="pknow__of">
+					<bdi lang="en" dir="ltr">{ Num(row.Taught) }</bdi>
+					@ProgressT(v.Lang, row.OfPhrase)
+				</p>
+				<div class="pknow__rungs">
+					for _, rung := range row.Rungs {
+						<a class="pknow__rung" data-rung={ rung.Rung } href={ templ.SafeURL(rung.Href) }>
+							<span class="pknow__rung-label">@ProgressT(v.Lang, rung.Label)</span>
+							<bdi lang="en" dir="ltr">{ rung.Share }</bdi>
+						</a>
 					}
-					if row.PlacementLine != "" {
-						<span class="pknow__place">@T(v.Lang, row.PlacementHE, row.PlacementLine)</span>
-					}
-				</a>
+				</div>
+				if row.NoAudio {
+					<p class="pknow__nocard">@ProgressT(v.Lang, "No audio yet — practiced in lessons only")</p>
+				}
 			</li>
 		}
 	</ul>
+	if v.WhatChanged != nil {
+		<div class="pchanged" data-panel="what-changed" aria-labelledby="changed-h">
+			<h2 id="changed-h" class="pchart__title">@ProgressT(v.Lang, LabelWhatChanged)</h2>
+			<ul class="pchanged__nums">
+				<li data-count="rule4-with-voids">
+					<bdi lang="en" dir="ltr">{ Num(v.WhatChanged.WithVoids) }</bdi>
+					<span>@ProgressT(v.Lang, LabelRule4WithVoids)</span>
+				</li>
+				<li data-count="rule4-after-void">
+					<bdi lang="en" dir="ltr">{ Num(v.WhatChanged.AfterVoid) }</bdi>
+					<span>@ProgressT(v.Lang, LabelRule4AfterVoid)</span>
+				</li>
+				<li data-count="ladder">
+					<bdi lang="en" dir="ltr">{ Num(v.WhatChanged.Ladder) }</bdi>
+					<span>@ProgressT(v.Lang, LabelLadderProved)</span>
+				</li>
+			</ul>
+			<p class="pchanged__reason">@ProgressT(v.Lang, v.WhatChanged.Reason)</p>
+		</div>
+	}
+}
+
+func ladderSize(small bool) string {
+	if small {
+		return "small"
+	}
+	return "headline"
 }
 
 templ verdictChip(lang, verdict, label string) {

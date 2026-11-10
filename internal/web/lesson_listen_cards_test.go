@@ -95,6 +95,13 @@ func (fx listenCardFix) publishListenLesson(t *testing.T, title, target string, 
 func TestListenPickRightCreatesListenCard(t *testing.T) {
 	fx := openListenCardFix(t)
 	const hello = "שָׁלוֹם"
+	// A listen card is created only when the word has a clip (INIT-038/SPEC-003).
+	clip := "abababababababababababababababababababababababababababababababab"
+	if _, err := fx.store.InsertAudio(fx.ctx, db.Asset{
+		ID: clip, TextNFC: hello, Voice: "v", Model: "legacy", Bytes: 4, CreatedAt: fx.now,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	_, path := fx.publishListenLesson(t, "Right listen", hello, "בֹּקֶר", "עֶרֶב", "לַיְלָה")
 	runID := runValue(t, getAuthed(t, fx.h, fx.cookie, path))
 	if rec := postLesson(t, fx.h, fx.cookie, path, runID, itoa(fx.ids[hello]), true, "brian-csrf"); rec.Code != http.StatusOK {

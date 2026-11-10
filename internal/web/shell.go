@@ -12,6 +12,7 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/mcpstore"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
@@ -65,29 +66,34 @@ type TodayInputs struct {
 	// Due is how many reviews are due.
 	Due int
 	// HasLesson is true when a published lesson in the learner's scope is waiting.
+	// SPEC-011 does not offer that lesson on Today. The field stays so the
+	// lesson card can still be chosen if a later switch turns lessons back on.
 	HasLesson bool
+	// PlacementOn and CheckInOn are the config switches (ADR-0033 D12). Off,
+	// those actions are not offered.
+	PlacementOn bool
+	CheckInOn   bool
+	// Askable is true when a session built from cards that can be asked today
+	// has at least one card. Its length is Session.Minutes.
+	Askable bool
 }
 
-// ChooseTodayAction is the one next action Today offers, in this order: resume a
-// placement, start a placement, continue a lesson, take the check-in, open the next
-// lesson, then do the due reviews. A learner with none of these has ActionNone and no
-// gold button. Reviews stay on the page beside a lesson, so a finished lesson can
-// continue. The check-in sits below a lesson in progress, so it never takes a learner
-// out of one.
+// ChooseTodayAction is the one next action Today offers. With the placement
+// switch on, an open or never-started placement comes first, as it does today.
+// With the check-in switch on, a due check-in comes next. Otherwise a session
+// of cards that can be asked today is the action. Nothing due is ActionNone:
+// one line, and no empty session. Lessons are not a Today action
+// (INIT-038/SPEC-011).
 func ChooseTodayAction(in TodayInputs) views.TodayAction {
 	switch {
-	case in.PlacementActive:
+	case in.PlacementOn && in.PlacementActive:
 		return views.ActionResumePlacement
-	case in.PlacementNever:
+	case in.PlacementOn && in.PlacementNever:
 		return views.ActionStartPlacement
-	case in.LessonInProgress:
-		return views.ActionContinueLesson
-	case in.CheckinDue:
+	case in.CheckInOn && in.CheckinDue:
 		return views.ActionCheckin
-	case in.HasLesson:
-		return views.ActionNextLesson
-	case in.Due > 0:
-		return views.ActionReviews
+	case in.Askable:
+		return views.ActionSession
 	}
 	return views.ActionNone
 }
@@ -253,19 +259,23 @@ func (s *server) sectionLinks(ctx context.Context, ui views.UI) ([]views.Section
 	if len(published) > 0 {
 		out = append(out, views.SectionLink{Href: ui.Href("/learn"), Label: "Learn", Icon: "book", ID: "learn"})
 	}
-	showRoots, err := roots.Any(ctx, s.store)
-	if err != nil {
-		return nil, err
+	if s.showRoots {
+		showRoots, err := roots.Any(ctx, s.store)
+		if err != nil {
+			return nil, err
+		}
+		if showRoots {
+			out = append(out, views.SectionLink{Href: ui.Href("/roots"), Label: "Roots", Icon: "layers", ID: "roots"})
+		}
 	}
-	if showRoots {
-		out = append(out, views.SectionLink{Href: ui.Href("/roots"), Label: "Roots", Icon: "layers", ID: "roots"})
-	}
-	n, err := s.store.CheckedVerseCount(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if n > 0 {
-		out = append(out, views.SectionLink{Href: ui.Href("/isaiah"), Label: "Isaiah", Icon: "flag", ID: "isaiah"})
+	if s.showIsaiah {
+		n, err := s.store.CheckedVerseCount(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if n > 0 {
+			out = append(out, views.SectionLink{Href: ui.Href("/isaiah"), Label: "Isaiah", Icon: "flag", ID: "isaiah"})
+		}
 	}
 	return out, nil
 }
@@ -427,6 +437,12 @@ func (s *server) postReport(w http.ResponseWriter, r *http.Request, lang, csrf s
 		serverError(w)
 		return
 	}
+	// One batch of this learner's wrong answers in the unit. Right answers,
+	// other units, and anyone else's answers stay. INIT-038/SPEC-009.
+	if _, err := evidence.New(s.store, nil, nil).VoidUnitWrong(r.Context(), user.ID, id, db.LearnerScope(user.ID)); err != nil {
+		serverError(w)
+		return
+	}
 	// The unit is hidden in ReportUnit's own transaction, so Today, at the address below,
 	// no longer offers it.
 	w.Header().Set("Cache-Control", "no-store")
@@ -526,6 +542,10 @@ func (s *server) bandWordIDs(ctx context.Context, userID int64, band int) ([]int
 // postRecheck is POST /_hx/placement/recheck: open the check-in and go to the placement
 // screen, which resumes an open run. Which skill it asks is chosen here, not by the form.
 func (s *server) postRecheck(w http.ResponseWriter, r *http.Request, lang, _ string) {
+	if s == nil || !s.showCheckIn {
+		notFound(w, r)
+		return
+	}
 	to := "/placement"
 	if lang == "he" {
 		to = "/placement?lang=he"
@@ -578,28 +598,42 @@ func (s *server) checkinSkill(ctx context.Context, userID int64) (string, bool, 
 
 // fillToday decides Today's one action and fills the cards beside it. A failure in a
 // supporting read (the check-in, the learner model) is logged and that card is left off,
-// so one broken read does not take away the learner's next action. A failure in the
-// reads the action stands on (the lesson and the due count) is the caller's error.
-func (s *server) fillToday(r *http.Request, page *views.Home) {
+// so one broken read does not take away the learner's next action. A failure building
+// the session is the caller's error: Today must not claim nothing is due when it
+// could not read the queue.
+func (s *server) fillToday(r *http.Request, page *views.Home) error {
 	t := &page.Today
 	t.Reported = r.URL.Query().Get("reported") == "1"
 	in := TodayInputs{
-		Due:       page.Due,
-		HasLesson: page.Lesson,
+		Due:         page.Due,
+		HasLesson:   page.Lesson,
+		PlacementOn: s != nil && s.showPlacement,
+		CheckInOn:   s != nil && s.showCheckIn,
 	}
 	user, ok := auth.CurrentUser(r.Context())
 	signedIn := ok && user != nil
-	// A nil Placement is a learner with no run. The shell without a placement store sets an
-	// empty value, which offers nothing, and a request with no learner has no run to offer.
-	in.PlacementNever = signedIn && page.Placement == nil
-	in.PlacementActive = page.Placement != nil && page.Placement.Active
+	// A nil Placement is a learner with no run. The switch has to be on before
+	// that becomes the action. A request with no learner has no run to offer.
+	if in.PlacementOn {
+		in.PlacementNever = signedIn && page.Placement == nil
+		in.PlacementActive = page.Placement != nil && page.Placement.Active
+	}
 	in.LessonInProgress = page.Lesson && t.Step > 0
-	t.DailyLine = views.DailyLineFor(page.Due, session.SessionCap)
 
 	if signedIn && s != nil && s.store != nil {
 		ctx := r.Context()
-		if s.recheck != nil && !in.PlacementNever && !in.PlacementActive {
+		if in.CheckInOn && s.recheck != nil && !in.PlacementNever && !in.PlacementActive {
 			s.fillCheckin(ctx, user.ID, t, &in)
+		}
+		if page.Due > 0 && s.study != nil {
+			minutes, askable, err := s.askableMinutes(ctx, user.ID)
+			if err != nil {
+				return err
+			}
+			if askable {
+				t.SessionMinutes = minutes
+				in.Askable = true
+			}
 		}
 		s.fillModelCards(ctx, user.ID, t)
 		if _, line, err := s.canSayView(ctx, user.ID); err != nil {
@@ -609,6 +643,36 @@ func (s *server) fillToday(r *http.Request, page *views.Home) {
 		}
 	}
 	t.Action = ChooseTodayAction(in)
+	return nil
+}
+
+// askableMinutes builds the session SPEC-006 already sizes, from cards that
+// can be asked today, and returns Session.Minutes. ok is false when that
+// session has no card, so Today does not offer an empty sitting.
+// BuildSessionFor does not introduce new cards; the lexeme ids are the due set.
+func (s *server) askableMinutes(ctx context.Context, userID int64) (minutes int, ok bool, err error) {
+	due, err := s.store.ListDueCards(ctx, userID, s.now())
+	if err != nil || len(due) == 0 {
+		return 0, false, err
+	}
+	seen := map[int64]struct{}{}
+	ids := make([]int64, 0, len(due))
+	for _, card := range due {
+		if _, dup := seen[card.LexemeID]; dup {
+			continue
+		}
+		seen[card.LexemeID] = struct{}{}
+		ids = append(ids, card.LexemeID)
+	}
+	built, err := s.study.BuildSessionFor(ctx, userID, ids)
+	if err != nil {
+		return 0, false, err
+	}
+	_, total, _ := built.Place()
+	if total == 0 {
+		return 0, false, nil
+	}
+	return built.Minutes(), true, nil
 }
 
 // fillCheckin asks the engine whether the check-in is due and which skill it would ask.

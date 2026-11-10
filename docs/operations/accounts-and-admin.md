@@ -89,7 +89,7 @@ What a worksheet exercise becomes (teacher activity names; the AI maps them thro
 | A teacher note | Notes |
 | A pasted list of Hebrew–English lines | Word bank (paste) |
 
-A drawing task (for example “read and draw a family tree”) is not held. Do not invent a drawing block. The AI recipe for turning a Drive worksheet into a lesson is [worksheet-to-lesson](../../.cursor/skills/hebrew-worksheet/recipes.md#worksheet-to-lesson).
+A drawing task (for example “read and draw a family tree”) is not held. Do not invent a drawing block. There is no AI recipe for turning a Drive worksheet into a lesson: the `hebrew-worksheet` skill was removed under [ADR-0033](../decisions/ADR-0033-stage-1-trust-and-measurement.md), because the plan tools it called no longer exist.
 
 ### The Plans list and New plan
 

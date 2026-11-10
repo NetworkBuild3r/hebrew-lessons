@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -148,22 +147,21 @@ func clozeShots(t *testing.T, dir string) []shotJob {
 	}
 	h := NewOptions(nil, svc, Options{Store: store})
 	path := "/lesson/" + itoa(unitID) + "/0"
-	// Ada stops on the question. Bea has already graded it. Each GET shows that state.
+	// A cloze is a reveal. Both shots show the filled sentence.
 	adaCookie := mintSession(t, store, ada.ID, "ada-csrf", now.Add(time.Hour))
-	adaStory := getAuthed(t, h, adaCookie, path)
-	adaAsk := postLessonHX(t, h, adaCookie, path, runValue(t, adaStory), "continue", "ada-csrf", false)
-	if adaAsk.Code != http.StatusOK || !strings.Contains(adaAsk.Body.String(), "___") || strings.Contains(adaAsk.Body.String(), "TL-lomed") {
-		t.Fatalf("before shot is not an ungraded cloze: %d", adaAsk.Code)
+	adaAsk := clozeReveal(t, h, adaCookie, path, "ada-csrf", lomedID, false)
+	if strings.Contains(adaAsk, "___") || !strings.Contains(adaAsk, "TL-lomed") {
+		t.Fatal("cloze shot is not a reveal")
 	}
 	beaCookie := mintSession(t, store, bea.ID, "bea-csrf", now.Add(time.Hour))
-	_, graded := clozePair(t, h, beaCookie, path, "bea-csrf", lomedID, false)
-	if strings.Contains(graded, "___") || !strings.Contains(graded, "TL-lomed") {
-		t.Fatal("after shot is not a graded cloze")
+	beaAsk := clozeReveal(t, h, beaCookie, path, "bea-csrf", lomedID, false)
+	if strings.Contains(beaAsk, "___") || !strings.Contains(beaAsk, "TL-lomed") {
+		t.Fatal("cloze shot is not a reveal")
 	}
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	return []shotJob{
-		{Origin: srv.URL, Cookie: adaCookie.Value, Path: path, File: filepath.Join(dir, "cloze-before-390.png"), Wait: `document.body.innerText.includes("___")`, FullView: true},
+		{Origin: srv.URL, Cookie: adaCookie.Value, Path: path, File: filepath.Join(dir, "cloze-before-390.png"), Wait: `document.body.innerText.includes("TL-lomed")`, FullView: true},
 		{Origin: srv.URL, Cookie: beaCookie.Value, Path: path, File: filepath.Join(dir, "cloze-after-390.png"), Wait: `document.body.innerText.includes("TL-lomed")`, FullView: true},
 	}
 }

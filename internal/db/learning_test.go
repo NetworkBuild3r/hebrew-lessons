@@ -184,8 +184,8 @@ func TestMigration002AppliesOnTopOf001(t *testing.T) {
 	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
-	if n != 22 {
-		t.Fatalf("schema_migrations rows = %d after a second migrate, want 22", n)
+	if n != 23 {
+		t.Fatalf("schema_migrations rows = %d after a second migrate, want 23", n)
 	}
 	if err := conn.QueryRowContext(ctx, `SELECT applied_at FROM schema_migrations WHERE version = 2`).Scan(&applied2); err != nil {
 		t.Fatal(err)

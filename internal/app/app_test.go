@@ -364,6 +364,12 @@ func TestApplyDefaults(t *testing.T) {
 	if cfg.Clock == nil {
 		t.Fatal("clock default is nil")
 	}
+	if cfg.LearnerAutoPublish {
+		t.Fatal("learner auto-publish default is on")
+	}
+	if cfg.ShowRoots || cfg.ShowIsaiah || cfg.ShowPlacement || cfg.ShowCheckIn {
+		t.Fatal("a side-feature switch defaults on")
+	}
 }
 
 func TestMCPHealthOpenAndToolsClosed(t *testing.T) {

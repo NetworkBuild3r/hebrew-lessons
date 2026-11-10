@@ -83,6 +83,29 @@ func TestTodayAndDueCutoffDenver(t *testing.T) {
 	}
 }
 
+// A learning step later the same study day is due at the next cutoff.
+// A due time on a later study day stays where it was. INIT-038/SPEC-006.
+func TestEffectiveDueMovesSameStudyDay(t *testing.T) {
+	loc, err := ParseZone("America/Denver")
+	if err != nil {
+		t.Fatal(err)
+	}
+	z := Zone{Name: "America/Denver", Loc: loc, Source: SourceLearner}
+	reviewed := time.Date(2026, 10, 21, 16, 0, 0, 0, loc) // 16:00, cutoff is tomorrow 04:00
+	cutoff := DueCutoff(reviewed, z)
+	sameDay := reviewed.Add(10 * time.Minute)
+	if got := EffectiveDue(sameDay, reviewed, z); !got.Equal(cutoff) {
+		t.Fatalf("same-day due = %s, want cutoff %s", got, cutoff)
+	}
+	nextDay := cutoff.Add(time.Hour)
+	if got := EffectiveDue(nextDay, reviewed, z); !got.Equal(nextDay) {
+		t.Fatalf("later due = %s, want %s", got, nextDay)
+	}
+	if got := EffectiveDue(sameDay, time.Time{}, z); !got.Equal(sameDay) {
+		t.Fatalf("unreviewed due = %s, want %s", got, sameDay)
+	}
+}
+
 // ac-3: no time.UTC in production studyday sources except a named-zone branch.
 func TestNoUTCDefaultInSources(t *testing.T) {
 	entries, err := os.ReadDir(".")

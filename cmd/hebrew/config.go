@@ -33,6 +33,26 @@ func configFromEnv() (app.Config, error) {
 	if err != nil {
 		return app.Config{}, err
 	}
+	learnerAutoPublish, err := learnerAutoPublishFromEnv(os.Getenv("LEARNER_AUTO_PUBLISH"))
+	if err != nil {
+		return app.Config{}, err
+	}
+	showRoots, err := switchFromEnv("SHOW_ROOTS", os.Getenv("SHOW_ROOTS"))
+	if err != nil {
+		return app.Config{}, err
+	}
+	showIsaiah, err := switchFromEnv("SHOW_ISAIAH", os.Getenv("SHOW_ISAIAH"))
+	if err != nil {
+		return app.Config{}, err
+	}
+	showPlacement, err := switchFromEnv("SHOW_PLACEMENT", os.Getenv("SHOW_PLACEMENT"))
+	if err != nil {
+		return app.Config{}, err
+	}
+	showCheckIn, err := switchFromEnv("SHOW_CHECKIN", os.Getenv("SHOW_CHECKIN"))
+	if err != nil {
+		return app.Config{}, err
+	}
 	cfg := app.Config{
 		DataDir:              dataDir,
 		HTTPAddr:             os.Getenv("HTTP_ADDR"),
@@ -64,8 +84,33 @@ func configFromEnv() (app.Config, error) {
 		// means no male voice, and a speaker b clip fails rather than use the other voice.
 		ElevenLabsVoiceMale: strings.TrimSpace(os.Getenv("ELEVENLABS_VOICE_ID_MALE")),
 		ElevenLabsModel:     strings.TrimSpace(os.Getenv("ELEVENLABS_MODEL")),
+		LearnerAutoPublish:  learnerAutoPublish,
+		ShowRoots:           showRoots,
+		ShowIsaiah:          showIsaiah,
+		ShowPlacement:       showPlacement,
+		ShowCheckIn:         showCheckIn,
 	}
 	return app.ApplyDefaults(cfg), nil
+}
+
+// learnerAutoPublishFromEnv reads LEARNER_AUTO_PUBLISH. Empty is off.
+// on, 1, true, and yes turn it on. off, 0, false, and no leave it off.
+// INIT-038/SPEC-007. ADR-0033 D11.
+func learnerAutoPublishFromEnv(raw string) (bool, error) {
+	return switchFromEnv("LEARNER_AUTO_PUBLISH", raw)
+}
+
+// switchFromEnv reads one off-by-default switch. Empty is off.
+// on, 1, true, and yes turn it on. off, 0, false, and no leave it off.
+func switchFromEnv(name, raw string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "off", "0", "false", "no":
+		return false, nil
+	case "on", "1", "true", "yes":
+		return true, nil
+	default:
+		return false, fmt.Errorf("%s: invalid %q, want on or off", name, raw)
+	}
 }
 
 // cookieSecureFromEnv defaults an unset COOKIE_SECURE to true.

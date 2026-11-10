@@ -32,6 +32,9 @@ const nearMissDistance = 2
 type Store struct {
 	db     *db.Store
 	voices audio.Voices
+	// learnerAutoPublish is ADR-0033 D11. Off by default. The app sets it from
+	// Config.LearnerAutoPublish. INIT-038/SPEC-007.
+	learnerAutoPublish bool
 }
 
 // New wraps store. A nil store fails on the first call.

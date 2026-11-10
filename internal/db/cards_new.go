@@ -25,6 +25,15 @@ type NewCardsResult struct {
 // CreateNewCards (INIT-027/SPEC-005). createdAtText is FormatTime of the clock
 // moment this insert represents.
 func insertNewCard(ctx context.Context, tx *sql.Tx, learnerID, lexemeID int64, skill, dueText, createdAtText string) (bool, error) {
+	if skill == "listen" {
+		has, err := lexemeHasStoredClip(ctx, tx, lexemeID)
+		if err != nil {
+			return false, err
+		}
+		if !has {
+			return false, errListenNeedsClip
+		}
+	}
 	res, err := tx.ExecContext(ctx, `
 		INSERT OR IGNORE INTO cards (
 			user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, created_at
@@ -74,7 +83,8 @@ func (s *Store) CreateNewCards(ctx context.Context, learnerID int64, lexemeIDs [
 		}
 		word := NewCardWordResult{LexemeID: lexemeID, Created: []string{}}
 		for _, skill := range skills(hasClip) {
-			if skill == "" {
+			// A listen card exists only when the word has a clip (INIT-038/SPEC-003).
+			if skill == "" || (skill == "listen" && !hasClip) {
 				continue
 			}
 			inserted, err := insertNewCard(ctx, tx, learnerID, lexemeID, skill, dueText, dueText)
@@ -113,6 +123,7 @@ func (s *Store) CountDueNewCards(ctx context.Context, userID int64, now time.Tim
 		    SELECT 1 FROM review_log AS rl
 		    WHERE rl.card_id = c.id AND rl.reviewed_at <= ?
 		  )
+		  AND `+listenCardHasClipSQL("c")+`
 `+introNotFinished+`
 `, userID, FormatTime(now), FormatTime(now), LearnerScope(userID)).Scan(&n)
 	if err != nil {

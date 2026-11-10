@@ -95,6 +95,10 @@ type Activity struct {
 	// OrderAnswer is the learner's built line on an order reveal, pointed
 	// Hebrew only. Empty on ask. INIT-029/SPEC-004.
 	OrderAnswer []string
+	// AlsoRightID is the wrong graded attempt the learner can take back.
+	// Zero hides the button: a right answer, an ungraded reveal, and a step
+	// that recorded nothing. INIT-038/SPEC-009.
+	AlsoRightID int64
 }
 
 // orderAsk is the build-the-sentence step before Check. INIT-029/SPEC-004.
@@ -110,6 +114,13 @@ func orderRevealAnswer(a Activity) bool {
 // orderWrong is a graded wrong order reveal. INIT-029/SPEC-004.
 func orderWrong(a Activity) bool {
 	return strings.Contains(a.FeedbackClass, "feedback--wrong")
+}
+
+// alsoRightTap is the take-back button. It is a wrong graded answer that
+// recorded an attempt. A right answer and an ungraded reveal leave it off.
+// INIT-038/SPEC-009.
+func alsoRightTap(a Activity) bool {
+	return a.AlsoRightID != 0 && strings.Contains(a.FeedbackClass, "feedback--wrong")
 }
 
 // orderRightClass marks the learner's reveal row. INIT-029/SPEC-004.

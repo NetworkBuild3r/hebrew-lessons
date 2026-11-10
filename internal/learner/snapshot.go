@@ -154,6 +154,7 @@ func (m *Model) evaluateSnapshot(ctx context.Context, userID int64, at, asOf tim
 			}
 			sk := w.skill(skill)
 			ss.Counts[sk.State]++
+			ss.Ladder.Add(sk.Ladder)
 			if sk.State == Known || sk.State == Solid {
 				known++
 			}

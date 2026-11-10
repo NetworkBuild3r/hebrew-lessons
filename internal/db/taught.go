@@ -208,28 +208,17 @@ func (s *Store) RemoveTaughtRows(ctx context.Context, learnerID int64, on string
 	return out, nil
 }
 
-// lexemeHasStoredClip reports whether lookup would treat the lexeme as having
-// audio: a non-empty lexemes.audio_id, or a clip in audio_assets for its text.
-func lexemeHasStoredClip(ctx context.Context, tx *sql.Tx, lexemeID int64) (bool, error) {
-	var audio sql.NullString
-	var text string
-	err := tx.QueryRowContext(ctx, `
-		SELECT text_nfc, audio_id FROM lexemes WHERE id = ?`, lexemeID,
-	).Scan(&text, &audio)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, fmt.Errorf("db: lexeme %d not found", lexemeID)
-	}
+// TutorWordsRecorded reports whether this learner has a taught_words row.
+// Until that is true, Progress says the denominator is words the app taught
+// (ADR-0033 D5).
+func (s *Store) TutorWordsRecorded(ctx context.Context, learnerID int64) (bool, error) {
+	conn, err := s.connOrErr()
 	if err != nil {
-		return false, fmt.Errorf("db: lexeme audio: %w", err)
-	}
-	if audio.Valid && audio.String != "" {
-		return true, nil
+		return false, err
 	}
 	var n int
-	if err := tx.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM audio_assets WHERE text_nfc = ?`, text,
-	).Scan(&n); err != nil {
-		return false, fmt.Errorf("db: audio_assets: %w", err)
+	if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM taught_words WHERE learner_id = ?`, learnerID).Scan(&n); err != nil {
+		return false, fmt.Errorf("db: tutor words: %w", err)
 	}
 	return n > 0, nil
 }

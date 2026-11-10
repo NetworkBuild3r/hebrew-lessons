@@ -68,6 +68,14 @@ type Options struct {
 	// Placement is the placement engine, for the check-in on Today. Nil leaves the
 	// check-in off. See PlacementEngine.
 	Placement PlacementEngine
+	// ShowRoots, ShowIsaiah, ShowPlacement, and ShowCheckIn are the side-feature
+	// switches (ADR-0033 D12, INIT-038/SPEC-011). Off by default. A route behind
+	// a switch that is off is 404. One config change turns a feature back on.
+	// No feature code is deleted.
+	ShowRoots     bool
+	ShowIsaiah    bool
+	ShowPlacement bool
+	ShowCheckIn   bool
 	// Speech stores a missing story recording as one clip of the whole text.
 	// Nil, or a generator with no voice, leaves that story without the clip.
 	Speech *audio.Generator
@@ -101,9 +109,10 @@ func NewWithStore(health http.Handler, sessions *auth.Service, store *db.Store) 
 // runs is the store read for ownership and LatestPlacement. Both are
 // required for a POST; a nil pair still serves the read-only intro.
 // When runs is the process store, Today, Review, Progress, and the lesson
-// player use it too.
+// player use it too. This constructor turns the placement switch on.
+// Production uses NewOptions and leaves that switch off unless config sets it.
 func NewWithPlacement(health http.Handler, sessions *auth.Service, deck placementDeck, runs placementRuns) http.Handler {
-	opts := Options{Deck: deck, Runs: runs}
+	opts := Options{Deck: deck, Runs: runs, ShowPlacement: true}
 	if store, ok := runs.(*db.Store); ok {
 		opts.Store = store
 	}
@@ -151,6 +160,10 @@ func newHandler(health http.Handler, sessions *auth.Service, opts Options) http.
 	srv.runs = opts.Runs
 	srv.recheck = opts.Placement
 	srv.bands = opts.bands
+	srv.showRoots = opts.ShowRoots
+	srv.showIsaiah = opts.ShowIsaiah
+	srv.showPlacement = opts.ShowPlacement
+	srv.showCheckIn = opts.ShowCheckIn
 	mux := srv.routes(health, tokens, sessions != nil, secure)
 	if sessions != nil {
 		sessions.Register(mux)
@@ -211,10 +224,15 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 	mux.HandleFunc("POST /_hx/review/reveal", gated(gate, secure, s.reveal))
 	mux.HandleFunc("POST /_hx/review/grade", gated(gate, secure, s.grade))
 	mux.HandleFunc("POST /_hx/review/answer", gated(gate, secure, s.answer))
+	mux.HandleFunc("POST /_hx/also-right", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+		s.postAlsoRight(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
+	}))
 	mux.HandleFunc("POST /_hx/review/drill", gated(gate, secure, s.drill))
 	mux.HandleFunc("POST /_hx/review/next", gated(gate, secure, s.next))
 	mux.HandleFunc("POST /_hx/zone", gated(gate, secure, s.observeZone))
-	mountPlacement(mux, tokens, gate, secure, s.deck, s.runs)
+	if s.showPlacement {
+		mountPlacement(mux, tokens, gate, secure, s.deck, s.runs)
+	}
 	s.mountShell(mux, tokens, gate, secure)
 	mux.HandleFunc("GET /signin", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := auth.CurrentUser(r.Context()); ok {
@@ -306,7 +324,10 @@ func (s *server) serveHome(w http.ResponseWriter, r *http.Request, secure bool, 
 				})
 			}
 		}
-		s.fillToday(r, &page)
+		if err := s.fillToday(r, &page); err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
 		render(w, r, views.Today(page))
 		return
 	}
@@ -319,7 +340,10 @@ func (s *server) serveHome(w http.ResponseWriter, r *http.Request, secure bool, 
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	s.fillToday(r, &page)
+	if err := s.fillToday(r, &page); err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 	render(w, r, views.Today(page))
 }
 

@@ -29,7 +29,7 @@ const learnerModelDescription = "Read what the app knows about one learner's wor
 	"limit defaults to 50 and is cut to 200. limit in the reply is the page size that was used. " +
 	"nextCursor is null on the last page. Send it back as cursor, with the same filters, to read the next page. " +
 	"An unknown state, skill, or band, a cursor that this server did not issue, or a cursor longer than 256 characters is an error. " +
-	"summary.knownAnySkill is words known or solid in at least one skill, the same headline Progress shows. " +
+	"summary.knownAnySkill is the headline Progress shows. The rule that produced it is ruleVersion where a response carries it. " +
 	"standing is the same Standing the Progress page uses: knownAnySkill, and directions[] for listen, read, recall, and spell. " +
 	"Each direction has skill, direction (ADR-0028 D4 label), counts, accuracy14, answers14, verdict, reason, help[], and strong[]. " +
 	"verdict is needs_help when accuracy is below 75% over at least 10 checked answers in 14 days or the direction has struggling or regressed words; " +
@@ -60,7 +60,7 @@ type ModelMistake struct {
 
 // LearnerModelSummaryLite is the headline counts on get_learner_model.
 type LearnerModelSummaryLite struct {
-	KnownAnySkill int `json:"knownAnySkill" jsonschema:"Words known or solid in at least one skill. Equals standing.knownAnySkill and the Progress headline."`
+	KnownAnySkill int `json:"knownAnySkill" jsonschema:"The Progress headline. Equals standing.knownAnySkill. The rule is ruleVersion where a response carries it."`
 }
 
 type learnerModelOutput struct {

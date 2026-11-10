@@ -98,25 +98,27 @@ func TestClozeHidesChoiceTranslitUntilGraded(t *testing.T) {
 	beaCookie := mintSession(t, store, bea.ID, "bea-csrf", now.Add(time.Hour))
 
 	t.Run("full page", func(t *testing.T) {
-		ask, graded := clozePair(t, h, adaCookie, path, "ada-csrf", lomedID, false)
-		assertUngradedCloze(t, ask)
-		assertGradedCloze(t, graded)
-		if !strings.Contains(ask, "<html") || !strings.Contains(graded, "<html") {
+		ask := clozeReveal(t, h, adaCookie, path, "ada-csrf", lomedID, false)
+		assertClozeReveal(t, ask)
+		if !strings.Contains(ask, "<html") {
 			t.Fatal("a plain lesson response is not a full page")
 		}
 	})
 	t.Run("htmx", func(t *testing.T) {
-		ask, graded := clozePair(t, h, beaCookie, path, "bea-csrf", lomedID, true)
-		assertUngradedCloze(t, ask)
-		assertGradedCloze(t, graded)
-		if strings.Contains(ask, "<html") || strings.Contains(graded, "<html") {
+		ask := clozeReveal(t, h, beaCookie, path, "bea-csrf", lomedID, true)
+		assertClozeReveal(t, ask)
+		if strings.Contains(ask, "<html") {
 			t.Fatal("an htmx lesson response included the full page")
 		}
 	})
+	if n := countRows(t, store, `SELECT COUNT(*) FROM attempts`); n != 0 {
+		t.Fatalf("cloze recorded %d attempts", n)
+	}
 }
 
-// clozePair walks story → cloze ask → graded cloze. hx chooses the swap.
-func clozePair(t *testing.T, h http.Handler, cookie *http.Cookie, path, csrf string, answerID int64, hx bool) (ask, graded string) {
+// clozeReveal walks the story, then returns the cloze step. A cloze is a
+// reveal: the sentence is filled, and posting the old answer id writes nothing.
+func clozeReveal(t *testing.T, h http.Handler, cookie *http.Cookie, path, csrf string, answerID int64, hx bool) string {
 	t.Helper()
 	story := getAuthed(t, h, cookie, path)
 	runID := runValue(t, story)
@@ -124,44 +126,28 @@ func clozePair(t *testing.T, h http.Handler, cookie *http.Cookie, path, csrf str
 	if askRec.Code != http.StatusOK {
 		t.Fatalf("continue = %d\n%s", askRec.Code, askRec.Body.String())
 	}
-	ask = askRec.Body.String()
-	gradedRec := postLessonHX(t, h, cookie, path, runID, itoa(answerID), csrf, hx)
-	if gradedRec.Code != http.StatusOK {
-		t.Fatalf("answer = %d\n%s", gradedRec.Code, gradedRec.Body.String())
+	posted := postLessonHX(t, h, cookie, path, runID, itoa(answerID), csrf, hx)
+	if posted.Code != http.StatusOK || strings.Contains(posted.Body.String(), "feedback--") {
+		t.Fatalf("posting the answer graded a cloze: %d\n%s", posted.Code, posted.Body.String())
 	}
-	return ask, gradedRec.Body.String()
+	return askRec.Body.String()
 }
 
-func assertUngradedCloze(t *testing.T, body string) {
+func assertClozeReveal(t *testing.T, body string) {
 	t.Helper()
-	choices := choiceRegion(body)
-	if !strings.Contains(choices, "לוֹמֵד") {
-		t.Fatalf("ungraded cloze dropped the right word:\n%s", choices)
+	if strings.Contains(body, `class="choices"`) || strings.Contains(body, "___") {
+		t.Fatalf("cloze is still a question:\n%s", body)
 	}
-	for _, tr := range clozeChoiceTranslits {
-		if strings.Contains(body, tr) {
-			t.Fatalf("ungraded cloze shows choice translit %s:\n%s", tr, choices)
-		}
+	if !strings.Contains(body, "לוֹמֵד") || !strings.Contains(body, "TL-lomed") || !strings.Contains(body, "TL-ivrit") || !strings.Contains(body, "TL-ani") {
+		t.Fatalf("cloze reveal hid a word or its reading:\n%s", body)
 	}
-	if strings.Contains(body, "TL-ivrit") || strings.Contains(body, "TL-ani") {
-		t.Fatalf("ungraded cloze shows a Latin reading of a Hebrew word:\n%s", body)
-	}
-	// The English line is the cue: the other verbs fit "I __ Hebrew" too.
 	if !strings.Contains(body, `<p class="say-cue" lang="en">I study Hebrew.</p>`) {
-		t.Fatalf("ungraded cloze has no English cue:\n%s", body)
+		t.Fatalf("cloze reveal has no English cue:\n%s", body)
 	}
-}
-
-func assertGradedCloze(t *testing.T, body string) {
-	t.Helper()
-	if strings.Contains(body, "___") || !strings.Contains(body, "לוֹמֵד") {
-		t.Fatalf("graded cloze did not fill the gap:\n%s", body)
-	}
-	if !strings.Contains(body, "TL-lomed") {
-		t.Fatalf("graded cloze hides the answer translit:\n%s", body)
-	}
-	if !strings.Contains(body, `class="wcard__tr"`) {
-		t.Fatalf("graded cloze translit is not a reading:\n%s", body)
+	for _, tr := range clozeChoiceTranslits[1:] {
+		if strings.Contains(body, tr) {
+			t.Fatalf("cloze reveal shows a distractor reading %s:\n%s", tr, body)
+		}
 	}
 }
 

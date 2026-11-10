@@ -13,9 +13,25 @@ import (
 )
 
 const (
-	// SessionCap is the most distinct cards a session queues.
-	// A re-queued miss is another visit of a card already counted.
-	SessionCap = 20
+	// SessionMinMinutes and SessionMaxMinutes are the one-session budget
+	// (ADR-0033 D10). SessionTargetMinutes is the length the card count aims at.
+	SessionMinMinutes    = 20
+	SessionMaxMinutes    = 30
+	SessionTargetMinutes = 25
+
+	// AnswerPaceWindow is how many of the newest timed answers make the
+	// median seconds per answer. Fewer than this uses DefaultSecondsPerAnswer.
+	AnswerPaceWindow = 200
+
+	// DefaultSecondsPerAnswer is the pace when fewer than AnswerPaceWindow
+	// timed answers exist. 75 seconds fills the 25-minute target with 20 cards.
+	DefaultSecondsPerAnswer = 75
+
+	// SessionCap is the card count at the default pace. It is no longer a
+	// fixed stop for every learner: BuildSession uses CardsForPace. Today's
+	// daily line still reads this until SPEC-011. A re-queued miss is another
+	// visit of a card already counted.
+	SessionCap = SessionTargetMinutes * 60 / DefaultSecondsPerAnswer
 
 	// MaxKindRun is the longest run of the same activity kind across the
 	// session while another kind is still waiting (ADR-0028 D6).
@@ -162,14 +178,53 @@ func KnownShare(accuracy float64) float64 {
 // PlanFor splits SessionCap into known and struggling slots for accuracy.
 // The split rounds the known share with math.Round (half away from zero).
 func PlanFor(accuracy float64) Plan {
-	known := int(math.Round(float64(SessionCap) * KnownShare(accuracy)))
+	return planFor(accuracy, SessionCap)
+}
+
+// planFor is PlanFor for a card count from the minute budget.
+func planFor(accuracy float64, cap int) Plan {
+	if cap < 0 {
+		cap = 0
+	}
+	known := int(math.Round(float64(cap) * KnownShare(accuracy)))
 	if known < 0 {
 		known = 0
 	}
-	if known > SessionCap {
-		known = SessionCap
+	if known > cap {
+		known = cap
 	}
-	return Plan{Known: known, Struggle: SessionCap - known}
+	return Plan{Known: known, Struggle: cap - known}
+}
+
+// CardsForPace turns seconds per answer into a card count whose planned
+// length is between SessionMinMinutes and SessionMaxMinutes, aiming at
+// SessionTargetMinutes. A non-positive pace uses DefaultSecondsPerAnswer.
+// minutes is that planned length, rounded to the nearest minute.
+func CardsForPace(seconds float64) (cards, minutes int) {
+	if seconds <= 0 || math.IsNaN(seconds) || math.IsInf(seconds, 0) {
+		seconds = DefaultSecondsPerAnswer
+	}
+	lo := float64(SessionMinMinutes * 60)
+	hi := float64(SessionMaxMinutes * 60)
+	target := float64(SessionTargetMinutes * 60)
+	cards = int(math.Round(target / seconds))
+	if cards < 1 {
+		cards = 1
+	}
+	for cards > 1 && float64(cards)*seconds > hi {
+		cards--
+	}
+	for float64(cards)*seconds < lo && float64(cards+1)*seconds <= hi {
+		cards++
+	}
+	minutes = int(math.Round(float64(cards) * seconds / 60))
+	if minutes < SessionMinMinutes {
+		minutes = SessionMinMinutes
+	}
+	if minutes > SessionMaxMinutes {
+		minutes = SessionMaxMinutes
+	}
+	return cards, minutes
 }
 
 // Candidate is one card the mixer can see. The loader fills it. mix does
@@ -248,16 +303,62 @@ func mix(cands []Candidate, accuracy float64, now time.Time, seed int64) []CardR
 // mixGate is mix for a learner whose skills are open as gate says. Choosing cards is
 // the old mix. Each card is then asked through its own skill, or moved up, as annotate
 // does (INIT-027/SPEC-004). SkippedNoAudio counts due listen cards left out because
-// they have no clip (ADR-0028 D6).
+// they have no clip (ADR-0028 D6). The queue holds at most SessionCap study cards.
 func mixGate(cands []Candidate, accuracy float64, now time.Time, seed int64, gate activity.Gate) ([]CardRef, int) {
+	return mixGateCap(cands, accuracy, now, seed, gate, SessionCap)
+}
+
+// mixGateCap is mixGate with an explicit card count from the minute budget.
+func mixGateCap(cands []Candidate, accuracy float64, now time.Time, seed int64, gate activity.Gate, cap int) ([]CardRef, int) {
 	askable, skipped := filterReviewAskable(cands, now)
-	queue := mixCards(askable, accuracy, now, seed)
+	queue := mixCards(askable, accuracy, now, seed, cap)
 	byID := make(map[int64]Candidate, len(askable))
 	for _, c := range askable {
 		byID[c.ID] = c
 	}
 	// Kind weave can put the same lexeme side by side; separate again after it.
-	return separateLexemes(limitKindRuns(annotate(queue, byID, gate))), skipped
+	// Production (type_it, dictation) is asked before a meaning pick of the same word.
+	return separateLexemes(limitKindRuns(productionFirst(annotate(queue, byID, gate)))), skipped
+}
+
+// productionFirst moves a typing or dictation visit ahead of a meaning pick
+// of the same word (ADR-0033 D10). Drills are left where they are.
+func productionFirst(queue []CardRef) []CardRef {
+	out := append([]CardRef(nil), queue...)
+	for i := 0; i < len(out); i++ {
+		if !meaningPick(out[i]) {
+			continue
+		}
+		for j := i + 1; j < len(out); j++ {
+			if out[j].LexemeID != out[i].LexemeID || !productionAsk(out[j]) {
+				continue
+			}
+			card := out[j]
+			copy(out[i+1:j+1], out[i:j])
+			out[i] = card
+			break
+		}
+	}
+	return out
+}
+
+func productionAsk(ref CardRef) bool {
+	if ref.CardID <= 0 || ref.Kind == KindLetter || ref.Kind == KindPattern {
+		return false
+	}
+	return ref.Activity == activity.TypeIt || ref.Activity == activity.Dictation
+}
+
+func meaningPick(ref CardRef) bool {
+	if ref.CardID <= 0 || ref.LexemeID == 0 || ref.Kind == KindLetter || ref.Kind == KindPattern {
+		return false
+	}
+	switch ref.Activity {
+	case activity.ReadPick, activity.ListenPick, activity.WordMatch, activity.AudioMatch:
+		return true
+	default:
+		return false
+	}
 }
 
 // filterReviewAskable drops due listening cards that have no clip (ADR-0028 D6).
@@ -368,12 +469,12 @@ func ownSkillStrong(c Candidate) bool {
 	return false
 }
 
-func mixCards(cands []Candidate, accuracy float64, now time.Time, seed int64) []CardRef {
+func mixCards(cands []Candidate, accuracy float64, now time.Time, seed int64, cap int) []CardRef {
 	study, letters, patterns := splitKinds(cands)
 	ordered := append([]Candidate(nil), study...)
 	sortCandidates(seed, ordered)
 	dueS, dueK, fresh := splitPools(ordered, now)
-	planned := assemble(dueS, dueK, accuracy)
+	planned := assemble(dueS, dueK, accuracy, cap)
 	// New cards do not take a known or struggle slot or a drill step.
 	// They keep their order and are seeded through the woven queue, so
 	// they are not a block at the end. A pass then separates two visits
@@ -630,8 +731,8 @@ func classify(c Candidate, now time.Time) kind {
 // each). Room left under SessionCap is filled from the other due side under
 // the overall skill shares. Inside a skill the soonest-due order is kept
 // (ADR-0028 D6).
-func assemble(dueS, dueK []Candidate, accuracy float64) []CardRef {
-	plan := PlanFor(accuracy)
+func assemble(dueS, dueK []Candidate, accuracy float64, cap int) []CardRef {
+	plan := planFor(accuracy, cap)
 	typedTaken := map[int64]bool{}
 	take := func(pool []Candidate, n int, shares, used map[string]int) []Candidate {
 		if n <= 0 {
@@ -661,8 +762,8 @@ func assemble(dueS, dueK []Candidate, accuracy float64) []CardRef {
 	usedS, usedK := map[string]int{}, map[string]int{}
 	s := take(dueS, plan.Struggle, shareS, usedS)
 	k := take(dueK, plan.Known, shareK, usedK)
-	room := SessionCap - len(s) - len(k)
-	overall := skillShares(countBySkill(append(append([]Candidate{}, dueS...), dueK...)), SessionCap)
+	room := cap - len(s) - len(k)
+	overall := skillShares(countBySkill(append(append([]Candidate{}, dueS...), dueK...)), cap)
 	usedAll := map[string]int{}
 	for skill, n := range usedS {
 		usedAll[skill] += n
@@ -672,7 +773,7 @@ func assemble(dueS, dueK []Candidate, accuracy float64) []CardRef {
 	}
 	if room > 0 {
 		s = append(s, take(skipTaken(dueS, s), room, overall, usedAll)...)
-		room = SessionCap - len(s) - len(k)
+		room = cap - len(s) - len(k)
 	}
 	if room > 0 {
 		k = append(k, take(skipTaken(dueK, k), room, overall, usedAll)...)

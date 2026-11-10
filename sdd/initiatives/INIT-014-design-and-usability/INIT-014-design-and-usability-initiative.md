@@ -1,7 +1,7 @@
 # Initiative: Design and Usability — Hierarchy, Wayfinding, Copy, and Safe Lesson Visibility
 
 **Initiative ID:** INIT-014
-**Status:** planned
+**Status:** closed 2026-11-09, not needed. It was written for the Node app's shell, which the Go port replaced (ADR-0016, INIT-015). Its "Today shows one next action" idea is taken up by INIT-038 (Today offers one session). Decided in BRAIN-001. Earlier status: planned.
 **Slug:** INIT-014-design-and-usability
 **Discipline Profile:** `software`
 **Created:** 2026-10-17

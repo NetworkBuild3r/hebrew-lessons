@@ -59,7 +59,7 @@ func TestOrbButtonsCarryAudio(t *testing.T) {
 	assertOrbsWired(t, isaiah, "isaiah")
 
 	now := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
-	store, h := openShell(t, fixedClock(now), nil, nil)
+	store, h := openShellFlags(t, fixedClock(now), nil, nil, featuresOn())
 	learner := addLearner(t, store, "a@example.com", "sub-orb", now)
 
 	today := getLearner(t, h, learner, "/")

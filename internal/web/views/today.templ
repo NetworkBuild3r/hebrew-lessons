@@ -1,10 +1,9 @@
 package views
 
-// Today is the learner home. It offers one next action in gold, and nothing else is gold.
-// The action is chosen by web.ChooseTodayAction: resume a placement, start a placement,
-// continue a lesson, take the check-in, open the next lesson, or do the due reviews. The
-// cards beside it are quiet: what is due, the next lesson, a band slipping, and the words
-// to watch. There is no streak and no score.
+// Today is the learner home. The gold action is one session, "Today's session, about N
+// minutes", or one line when nothing is due (INIT-038/SPEC-011). Placement and the
+// check-in render only when their switches are on. The cards beside a switched-on
+// feature stay quiet. There is no streak and no score.
 templ Today(h Home) {
 	@Layout(h.Page()) {
 		<article class="today" data-action={ string(h.Today.Action) } data-due={ h.DueText } data-known={ h.KnownText } if h.PlacementState != "" {
@@ -40,10 +39,12 @@ templ Today(h Home) {
 			}
 			<div class="today__grid" data-hero={ Flag(h.Today.Action != ActionNone) }>
 				@todayHero(h)
-				<div class="today__side">
-					@todayReviewCard(h)
-					@todayLessonCard(h)
-				</div>
+				if h.Today.Action != ActionSession && h.Today.Action != ActionNone {
+					<div class="today__side">
+						@todayReviewCard(h)
+						@todayLessonCard(h)
+					</div>
+				}
 			</div>
 			for _, slip := range h.Today.Slips {
 				@slipCard(h, slip)
@@ -55,9 +56,19 @@ templ Today(h Home) {
 	}
 }
 
-// todayHero is the one next action. ActionNone draws nothing.
+// todayHero is the one next action. ActionNone is one line and no button.
 templ todayHero(h Home) {
 	switch h.Today.Action {
+		case ActionSession:
+			<section class="ink-card today-hero today-session" aria-labelledby="hero-title">
+				<h2 id="hero-title" class="today-hero__title">@E(SessionButtonText(h.Today.SessionMinutes))</h2>
+				<a class="btn btn-primary" href={ templ.SafeURL(h.Href("/review")) }>
+					@Icon("play", "")
+					<span>@E(SessionButtonText(h.Today.SessionMinutes))</span>
+				</a>
+			</section>
+		case ActionNone:
+			<p class="today-empty">@Pair(h.Lang, h.ZeroHE, h.ZeroEN)</p>
 		case ActionResumePlacement:
 			<section class="today-place today-place--resume" aria-labelledby="hero-title">
 				<p class="eyebrow">@T(h.Lang, "", "Placement")</p>

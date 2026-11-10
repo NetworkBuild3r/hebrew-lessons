@@ -50,6 +50,9 @@ type SkillState struct {
 	Retrievability float64 // Chance of recall now. 0 with no card.
 	Successes      int     // Successful reviews of the card.
 	WasLearned     bool    // The card has passed its learning stage. See WasLearned.
+	// Ladder is the proved rung when the word is taught. Empty when it is not
+	// counted (ADR-0033 D4).
+	Ladder Ladder
 }
 
 // ReviewStats is the review_log side of a word, summed over its cards. get_context shows it.
@@ -108,7 +111,11 @@ type Filter struct {
 	// otherwise the overall state.
 	State State
 	// Skill keeps the state filter to one skill. One of Skills, or empty.
+	// A Ladder filter requires Skill.
 	Skill string
+	// Ladder keeps words on this rung of Skill. Empty keeps every rung.
+	// One of proved, recalled_later, slipping, not_yet_asked.
+	Ladder string
 	// Band keeps words of one placement band, 0 to 4. Nil keeps every band.
 	Band *int
 	// Limit is the page size. 0 is DefaultPageSize, and more than MaxPageSize is cut to it.
@@ -175,6 +182,9 @@ type SkillSummary struct {
 	// Nil when there were none.
 	Retention  *float64
 	DueReviews int
+	// Ladder counts taught words on each rung of this skill (ADR-0033 D4).
+	// The four rung counts add up to Ladder.Taught. FSRS recall chance is not used.
+	Ladder LadderCounts
 }
 
 // Summary is the learner's picture across all words.
@@ -303,6 +313,12 @@ func (m *Model) List(ctx context.Context, userID int64, f Filter) ([]WordState, 
 	if f.Skill != "" && !slices.Contains(Skills, f.Skill) {
 		return nil, "", fmt.Errorf("learner: unknown skill %q", f.Skill)
 	}
+	if f.Ladder != "" && !ValidLadder(f.Ladder) {
+		return nil, "", fmt.Errorf("learner: unknown ladder %q", f.Ladder)
+	}
+	if f.Ladder != "" && f.Skill == "" {
+		return nil, "", fmt.Errorf("learner: ladder filter needs a skill")
+	}
 	if f.Band != nil && (*f.Band < 0 || *f.Band > 4) {
 		return nil, "", fmt.Errorf("learner: band %d is outside 0..4", *f.Band)
 	}
@@ -366,8 +382,20 @@ func (m *Model) List(ctx context.Context, userID int64, f Filter) ([]WordState, 
 	return page, next, nil
 }
 
+func (w WordState) ladderOf(skill string) Ladder {
+	for _, s := range w.Skills {
+		if s.Skill == skill {
+			return s.Ladder
+		}
+	}
+	return ""
+}
+
 func (f Filter) matches(w WordState) bool {
 	if f.Band != nil && w.Band != *f.Band {
+		return false
+	}
+	if f.Ladder != "" && string(w.ladderOf(f.Skill)) != f.Ladder {
 		return false
 	}
 	if f.State == "" {
@@ -519,7 +547,8 @@ func (m *Model) evaluate(ev db.LearnerEvidence, bands map[int64]int, now time.Ti
 			Outcomes: ls.Outcomes, Window: ls.Window, WindowCorrect: ls.WindowCorrect,
 			AgainOf: ls.AgainOf, Agains: ls.Agains, Recent: ls.Recent, RecentRight: ls.RecentRight,
 			HasCard: ls.HasCard, Successes: ls.ReviewSuccesses, Stability: ls.Stability,
-			SuccessDays: ls.SuccessDays,
+			SuccessDays: ls.SuccessDays, FirstSuccessDay: ls.FirstSuccessDay, LastSuccessDay: ls.LastSuccessDay,
+			LatestRight: ls.LatestRight,
 		}
 		if ls.HasCard && !ls.LastReview.IsZero() {
 			e.Retrievability = fsrs.Retrievability(ls.Stability, now.Sub(ls.LastReview).Hours()/24)
@@ -561,8 +590,13 @@ func (m *Model) evaluate(ev db.LearnerEvidence, bands map[int64]int, now time.Ti
 		}
 	}
 
+	for id := range ev.Taught {
+		word(id)
+	}
+
 	for id, w := range words {
 		es := evidence[id]
+		taughtDay, taught := ev.Taught[id]
 		var evidenced []State
 		windowRight, windowTotal := 0, 0
 		for i := range Skills {
@@ -571,7 +605,11 @@ func (m *Model) evaluate(ev db.LearnerEvidence, bands map[int64]int, now time.Ti
 				e = es[i]
 			}
 			e.Exposed = w.Exposures > 0
+			e.Taught, e.TaughtDay = taught, taughtDay
 			sk := &w.Skills[i]
+			if rung, ok := LadderOf(e); ok {
+				sk.Ladder = rung
+			}
 			sk.State = StateOf(e)
 			if e.HasEvidence() {
 				evidenced = append(evidenced, sk.State)

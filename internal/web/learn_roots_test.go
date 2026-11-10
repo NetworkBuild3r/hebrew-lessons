@@ -97,7 +97,7 @@ func TestLearnPageAndFirstStepLink(t *testing.T) {
 
 func TestRootsHubAndCardLink(t *testing.T) {
 	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
-	store, h := openShell(t, fixedClock(now), nil, nil)
+	store, h := openShellFlags(t, fixedClock(now), nil, nil, featuresOn())
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
 	const family, lonely = "שׁ־מ־ע", "ל־ב"
 	hear := units.Normalize("שָׁמַע")

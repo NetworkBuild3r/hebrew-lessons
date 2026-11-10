@@ -125,6 +125,37 @@ type SkillOverview struct {
 	PlacementDay   string
 }
 
+// LadderRung is one count on a Progress ladder row. Share is the percentage
+// and the count together, such as "40% (3)". Href lists exactly those words.
+type LadderRung struct {
+	Rung  string // proved, recalled_later, slipping, not_yet_asked
+	Label string
+	Share string
+	Href  string
+}
+
+// LadderRow is one skill on the Progress overview. Small is reading or spelling.
+// OfPhrase is the denominator label. Taught is how many words it counts.
+type LadderRow struct {
+	Skill    string
+	Label    string
+	Small    bool
+	Taught   int
+	OfPhrase string
+	NoAudio  bool
+	Rungs    []LadderRung
+}
+
+// WhatChanged is the 14-day comparison (ADR-0033 D4). WithVoids is the old
+// rule-4 count with voided answers included. AfterVoid is that count once
+// voids apply. Ladder is Hebrew-from-English proved. Reason states the whole rule.
+type WhatChanged struct {
+	WithVoids int
+	AfterVoid int
+	Ladder    int
+	Reason    string
+}
+
 // DirectionRow is one direction on the Progress overview grid (ADR-0028 D4, D5, D7).
 type DirectionRow struct {
 	Skill         string
@@ -181,6 +212,10 @@ type ProgressView struct {
 	Overview []SkillOverview
 	// Directions is the overview grid: one row per skill with Standing (ADR-0028).
 	Directions []DirectionRow
+	// LadderRows is the overview headline: two large rows, then reading and spelling (ADR-0033 D6).
+	LadderRows []LadderRow
+	// WhatChanged is set for 14 days after the ladder ships, then left nil.
+	WhatChanged *WhatChanged
 	// Help and Strong are the overview sections keyed by verdict (ADR-0028 D5).
 	Help   []StandingBlock
 	Strong []StandingBlock
@@ -391,8 +426,45 @@ const LabelLearnedTodayCheckTomorrow = "learned today, check tomorrow"
 // LabelKnownExplain is the one-line explanation under the Progress headline counts.
 const LabelKnownExplain = "A word counts as known once you get it right on a second day."
 
+// Denominator phrases for the ladder rows (ADR-0033 D5).
+const (
+	PhraseAppTaught   = "out of words the app has taught you"
+	PhraseTutorTaught = "taught words"
+)
+
+// The 14-day comparison (ADR-0033 D4, D6).
+const (
+	LabelWhatChanged    = "What changed"
+	LabelRule4WithVoids = "Old rule, voided answers included"
+	LabelRule4AfterVoid = "After the void"
+	LabelLadderProved   = "Hebrew from English, proved"
+	// LabelLadderRule states the whole proved ladder in one sentence.
+	LabelLadderRule = "A taught word is proved when checked answers were right on at least 3 different study days spanning at least 7 days and the newest checked answer is right; recalled later when it was right on a study day after the day it was taught but is not proved; slipping when it had reached proved or recalled later and the newest checked answer is wrong; and not yet asked when it is taught and neither of those has happened, and it leaves proved only when a checked answer is wrong."
+)
+
+// Ladder rung labels on the Progress overview.
+const (
+	LabelRungProved        = "proved"
+	LabelRungRecalledLater = "recalled later"
+	LabelRungSlipping      = "slipping"
+	LabelRungNotYetAsked   = "not yet asked"
+)
+
 var progressHE = map[string]string{
 	"Words you know":               "מִלִּים שֶׁיְּדוּעוֹת",
+	"Understand by ear":            "לְהָבִין בַּשְּׁמִיעָה",
+	"Hebrew from English":          "עִבְרִית מֵהָאַנְגְּלִית",
+	"Reading":                      "קְרִיאָה",
+	LabelRungProved:                "מוּכָח",
+	LabelRungRecalledLater:         "נִזְכָּר בְּיוֹם מְאֻחָר",
+	LabelRungSlipping:              "נִשְׁמָט",
+	LabelRungNotYetAsked:           "עֲדַיִן לֹא נִשְׁאַל",
+	PhraseAppTaught:                "מִתּוֹךְ הַמִּלִּים שֶׁהָאַפְּלִיקַצְיָה לִמְּדָה אוֹתְךָ",
+	PhraseTutorTaught:              "מִלִּים שֶׁנִּלְמְדוּ",
+	LabelWhatChanged:               "מָה הִשְׁתַּנָּה",
+	LabelRule4WithVoids:            "הַכְּלָל הַיָּשָׁן, כּוֹלֵל תְּשׁוּבוֹת שֶׁבּוּטְלוּ",
+	LabelRule4AfterVoid:            "אַחֲרֵי הַבִּיטּוּל",
+	LabelLadderProved:              "עִבְרִית מֵהָאַנְגְּלִית, מוּכָח",
 	LabelLearnedTodayCheckTomorrow: "נִלְמְדוּ הַיּוֹם, בְּדִיקָה מָחָר",
 	LabelKnownExplain:              "מִלָּה נֶחְשֶׁבֶת כִּידוּעָה כְּשֶׁעוֹנִים עָלֶיהָ נָכוֹן בְּיוֹם שֵׁנִי.",
 	"Words you know over time":     "מִלִּים שֶׁיְּדוּעוֹת לְאֹרֶךְ הַזְּמַן",

@@ -115,7 +115,7 @@ func startPlacementServer(t *testing.T, users int, breakFirst bool) *plBrowserSe
 		t.Fatal(err)
 	}
 	engine := placement.NewEngine(store, evidence.New(store, fsrs.New(store, clk), clk), clk, placement.WithSource(mrand.NewPCG(1, 7)))
-	s.h = NewOptions(nil, svc, Options{Store: store, Runs: store, Deck: engine, AudioDir: audioDir, SessionSecret: "spec-012-test-secret"})
+	s.h = NewOptions(nil, svc, Options{Store: store, Runs: store, Deck: engine, AudioDir: audioDir, SessionSecret: "spec-012-test-secret", ShowPlacement: true})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /audio/{name}", func(w http.ResponseWriter, r *http.Request) {

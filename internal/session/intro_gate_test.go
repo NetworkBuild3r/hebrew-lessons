@@ -248,7 +248,7 @@ func TestLearner1OneCardQueueReproduces(t *testing.T) {
 	for _, row := range reviewAhead {
 		shapeCard(t, store, user, ids[row.text], row.skill, fsrs.StateReview, now.Add(time.Duration(row.days)*24*time.Hour), int(fsrs.Good), now.Add(-48*time.Hour))
 	}
-	shapeCard(t, store, user, ids[gar], fsrs.SkillRecall, fsrs.StateLearning, now, int(fsrs.Hard), now.Add(-time.Hour))
+	shapeCard(t, store, user, ids[gar], fsrs.SkillRecall, fsrs.StateLearning, now, int(fsrs.Hard), now.Add(-48*time.Hour))
 	if err := store.InsertConfusionMiss(ctx, user, fsrs.MissOther, gar+"/"+po, ids[gar], now.Add(-time.Hour)); err != nil {
 		t.Fatal(err)
 	}

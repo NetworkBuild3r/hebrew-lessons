@@ -17,14 +17,17 @@ const (
 	ActionCheckin         TodayAction = "checkin"
 	ActionReviews         TodayAction = "reviews"
 	ActionNextLesson      TodayAction = "next_lesson"
-	// ActionNone is a learner with nothing to do: no gold button, and the cards say what to do next.
+	// ActionSession is the one sitting Today offers: the cards that can be
+	// asked today, sized by Session.Minutes (INIT-038/SPEC-011).
+	ActionSession TodayAction = "session"
+	// ActionNone is a learner with nothing due: one line, and no empty session.
 	ActionNone TodayAction = "none"
 )
 
 // TodayActions lists every action in the order the shell prefers them.
 var TodayActions = []TodayAction{
 	ActionResumePlacement, ActionStartPlacement, ActionContinueLesson,
-	ActionCheckin, ActionReviews, ActionNextLesson, ActionNone,
+	ActionCheckin, ActionReviews, ActionNextLesson, ActionSession, ActionNone,
 }
 
 // WatchWord is one row of "Words to watch": a struggling word and the skill that fails.
@@ -55,7 +58,11 @@ type TodayView struct {
 	CheckinLate  bool
 	CheckinWeeks int
 	// DailyLine is "12 reviews due · about 6 minutes". Empty when nothing is due.
+	// SPEC-011 leaves it empty: the session button carries Session.Minutes.
 	DailyLine string
+	// SessionMinutes is the planned length of the one session, from
+	// Session.Minutes. It is set only when that session has cards to ask.
+	SessionMinutes int
 	// Watch lists up to five struggling words, worst first.
 	Watch []WatchWord
 	// Slips lists the band-slip alerts to show, newest first.
@@ -120,6 +127,18 @@ func MinutesFor(due, sessionCap int) int {
 	n := min(due, sessionCap)
 	m := (n + 1) / 2
 	return max(m, 1)
+}
+
+// SessionButtonText is Today's one action: "Today's session, about 25 minutes".
+func SessionButtonText(minutes int) string {
+	if minutes < 1 {
+		minutes = 1
+	}
+	unit := "minutes"
+	if minutes == 1 {
+		unit = "minute"
+	}
+	return "Today's session, about " + strconv.Itoa(minutes) + " " + unit
 }
 
 // DailyLineFor is the streak-free daily line: how many reviews are due and about how long

@@ -1,7 +1,7 @@
 # Initiative: A teacher can build the plan the Figma shows
 
 **Initiative ID:** INIT-011
-**Status:** on_track. SPEC-001 through SPEC-005 are `complete`. SPEC-006 is still `ready`. It is a signed-in browser pass and is not done. The initiative is not ready to close until that pass is recorded.
+**Status:** closed 2026-11-09, not needed. The app serves only Brian, so teacher-facing plan building stops (BRAIN-001). SPEC-006's browser pass will not be run. Earlier status: SPEC-001 to SPEC-005 complete, SPEC-006 ready.
 **Slug:** INIT-011-teacher-plan-builder
 **Discipline Profile:** `software`
 **Created:** 2026-10-15. Revised the same day after a check against the teacher's Drive folder (section 0b).

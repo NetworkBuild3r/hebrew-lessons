@@ -140,6 +140,21 @@ type Config struct {
 	// ElevenLabsModel is ELEVENLABS_MODEL. Empty uses the legacy model.
 	ElevenLabsModel string
 
+	// LearnerAutoPublish is LEARNER_AUTO_PUBLISH. Off by default (ADR-0033 D11,
+	// INIT-038/SPEC-007). While off, put_unit with publish true on a learner
+	// scope saves a draft and returns a note naming ADR-0033, and publish_unit
+	// refuses a learner unit with that note. Shared units still publish.
+	// One config change turns learner auto-publish back on.
+	LearnerAutoPublish bool
+
+	// ShowRoots, ShowIsaiah, ShowPlacement, and ShowCheckIn are the side-feature
+	// switches (ADR-0033 D12, INIT-038/SPEC-011). Off by default. One environment
+	// value turns one feature back on. The routes stay in the binary.
+	ShowRoots     bool
+	ShowIsaiah    bool
+	ShowPlacement bool
+	ShowCheckIn   bool
+
 	// Clock stamps database times. Nil uses the system clock.
 	Clock clock.Clock
 	// TTS overrides the synthesizer. Nil selects ElevenLabs when
@@ -358,6 +373,11 @@ func NewApp(cfg Config) (*App, error) {
 		// Today offers the check-in when the engine says it is due (INIT-015/SPEC-017).
 		// The same engine as Deck: Today starts a re-check and /placement resumes it, so they must share one.
 		Placement: a.placementEngine,
+		// Side features stay off unless one switch is set (ADR-0033 D12).
+		ShowRoots:     cfg.ShowRoots,
+		ShowIsaiah:    cfg.ShowIsaiah,
+		ShowPlacement: cfg.ShowPlacement,
+		ShowCheckIn:   cfg.ShowCheckIn,
 	}))
 	a.mcp = newMCP(cfg, health, version, svc, store, tts, audioDir)
 	sweepCtx, stop := context.WithCancel(context.Background())
@@ -524,7 +544,7 @@ func newMCP(cfg Config, health, version http.Handler, sessions *auth.Service, st
 	// proxy's public host is the fallback when it is unset. The pod
 	// address is never advertised. Only /mcp reaches the authoring
 	// handler. Every other unmatched path is 404.
-	adapter := mcpstore.New(store).WithVoices(cfg.Voices())
+	adapter := mcpstore.New(store).WithVoices(cfg.Voices()).WithLearnerAutoPublish(cfg.LearnerAutoPublish)
 	users := sessionUsers{auth: sessions}
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health)
@@ -555,11 +575,12 @@ func newMCP(cfg Config, health, version http.Handler, sessions *auth.Service, st
 			}
 			return base + "/.well-known/oauth-protected-resource"
 		},
-		Course:  adapter,
-		Lexicon: adapter,
-		Lexemes: adapter,
-		Lookup:  adapter,
-		Units:   adapter,
+		Course:             adapter,
+		Lexicon:            adapter,
+		Lexemes:            adapter,
+		Lookup:             adapter,
+		Units:              adapter,
+		LearnerAutoPublish: cfg.LearnerAutoPublish,
 		Audio: audioGen{
 			gen: &audio.Generator{
 				TTS:   tts,

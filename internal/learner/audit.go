@@ -241,8 +241,9 @@ func CountOlderRuleDays(ctx context.Context, store *db.Store, userID int64, curr
 	return n, nil
 }
 
-// CountReviewSkippedNoAudio counts due listen cards whose lexeme has no audio_id
-// (ADR-0028 D6 / session SkippedNoAudio).
+// CountReviewSkippedNoAudio counts due listen cards whose word has no clip
+// by the one lookup (INIT-038/SPEC-003). Due counts already leave those
+// cards out, so this is 0 when every due listen word has a clip.
 func (m *Model) CountReviewSkippedNoAudio(ctx context.Context, userID int64) (int, error) {
 	if err := m.ready(userID); err != nil {
 		return 0, err
@@ -256,11 +257,11 @@ func (m *Model) CountReviewSkippedNoAudio(ctx context.Context, userID int64) (in
 		if c.Skill != fsrs.SkillListen {
 			continue
 		}
-		ref, ok, err := m.store.LexemeByID(ctx, c.LexemeID)
+		has, err := m.store.LexemeHasClip(ctx, c.LexemeID)
 		if err != nil {
 			return 0, err
 		}
-		if !ok || ref.AudioID == "" {
+		if !has {
 			n++
 		}
 	}

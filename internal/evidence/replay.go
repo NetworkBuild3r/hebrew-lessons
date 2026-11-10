@@ -123,6 +123,11 @@ func replayListenWord(ctx context.Context, store *db.Store, review *fsrs.Review,
 		if err != nil {
 			return false, err
 		}
+		zone, err := store.StudyZone(ctx, userID)
+		if err != nil {
+			return false, err
+		}
+		next.Due = fsrs.SameDayDue(next.Due, row.CreatedAt, zone)
 		next.UserID, next.LexemeID, next.Skill = userID, lexemeID, fsrs.SkillListen
 		prev = &next
 		logs = append(logs, log)

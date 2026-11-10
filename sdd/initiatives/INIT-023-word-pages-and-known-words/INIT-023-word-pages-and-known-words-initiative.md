@@ -1,6 +1,6 @@
 # INIT-023: Word pages, working play buttons, and words that count as known
 
-**Initiative ID:** INIT-023 · **Status:** on_track · **Created:** 2026-10-27 · **Owner:** Brian Nelson
+**Initiative ID:** INIT-023 · **Status:** closed 2026-11-09. The last open spec, SPEC-009 (forms and audio for taught words), is not needed as written: a clip for every taught word is part of INIT-038's listening fix, and word-page forms are frozen as reference (BRAIN-001) · **Created:** 2026-10-27 · **Owner:** Brian Nelson
 **Discipline Profile:** `software` · **Ticket:** none · **Branch:** `main`
 **Source:** Brian's review of Progress and Lessons on 2026-10-27 (three screenshots), and the learner data read over MCP the same day.
 

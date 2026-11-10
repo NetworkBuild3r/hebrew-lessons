@@ -52,8 +52,8 @@ func TestMigrateEmptyAndIdempotent(t *testing.T) {
 	}
 
 	s = openAt(t, dir, fixedClock{when})
-	if got := count(t, s, `SELECT COUNT(*) FROM schema_migrations`); got != 22 {
-		t.Fatalf("schema_migrations rows = %d, want 22", got)
+	if got := count(t, s, `SELECT COUNT(*) FROM schema_migrations`); got != 23 {
+		t.Fatalf("schema_migrations rows = %d, want 23", got)
 	}
 	wantApplied := FormatTime(when)
 	rows, err := s.conn.QueryContext(ctx, `SELECT version, applied_at FROM schema_migrations ORDER BY version`)
@@ -76,8 +76,8 @@ func TestMigrateEmptyAndIdempotent(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if len(versions) != 22 || versions[0] != 1 || versions[19] != 20 || versions[20] != 21 || versions[21] != 22 {
-		t.Fatalf("versions = %v, want 1..22", versions)
+	if len(versions) != 23 || versions[0] != 1 || versions[20] != 21 || versions[21] != 22 || versions[22] != 23 {
+		t.Fatalf("versions = %v, want 1..23", versions)
 	}
 	if got := count(t, s, `SELECT COUNT(*) FROM users`); got != 1 {
 		t.Fatalf("users = %d, want 1 after a second open", got)
@@ -104,6 +104,7 @@ func TestTables(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
+		"answer_voids",
 		"attempts",
 		"audio_assets",
 		"cards",

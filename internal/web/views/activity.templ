@@ -49,6 +49,16 @@ templ ActivityFrame(a ActivityView) {
 					@actAnswers(a)
 					@Sheet("Feedback") {
 						@actFeedback(a)
+						if a.Feedback != nil && !a.Feedback.Correct && a.Feedback.AlsoRightID != 0 {
+							<form method="post" action={ templ.SafeURL(AlsoRightPath) } hx-post={ AlsoRightPath } hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
+								<input type="hidden" name="_csrf" value={ a.CSRF }/>
+								<input type="hidden" name="attempt" value={ Num64(a.Feedback.AlsoRightID) }/>
+								<input type="hidden" name="card_id" value={ Num64(a.CardID) }/>
+								@ButtonWith(ButtonQuiet, submitAttrs(templ.Attributes{})) {
+									@E(AlsoRightLabel)
+								}
+							</form>
+						}
 						<form method="post" action="/_hx/review/next" hx-post="/_hx/review/next" hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
 							<input type="hidden" name="_csrf" value={ a.CSRF }/>
 							<input type="hidden" name="card_id" value={ Num64(a.CardID) }/>

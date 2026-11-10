@@ -123,10 +123,21 @@ type ModelQuery struct {
 	Limit  int
 }
 
+// LadderCounts is one skill's proved ladder, counted out of taught words (ADR-0033 D4).
+// The four rung counts add up to Taught. Read ruleVersion where a response carries it.
+type LadderCounts struct {
+	Taught        int `json:"taught" jsonschema:"Words the app has taught, the denominator for this skill."`
+	Proved        int `json:"proved"`
+	RecalledLater int `json:"recalledLater"`
+	Slipping      int `json:"slipping"`
+	NotYetAsked   int `json:"notYetAsked"`
+}
+
 // ModelSkill is one skill of one word.
 type ModelSkill struct {
 	Skill     string     `json:"skill"`
 	State     string     `json:"state"`
+	Ladder    string     `json:"ladder,omitempty" jsonschema:"proved, recalled_later, slipping, or not_yet_asked when the word is taught. Omitted when it is not counted."`
 	Attempts  int        `json:"attempts"`
 	Accuracy  float64    `json:"accuracy" jsonschema:"Share of the newest answers in this skill that were right, 0 to 1. 0 when there are none."`
 	LastSeen  *time.Time `json:"lastSeen" jsonschema:"UTC RFC3339, or null when the skill has never been answered."`
@@ -181,7 +192,7 @@ const DigestHistoryDays = 14
 // StandingView is Standing as JSON for get_learner_model (ADR-0028 D4/D5).
 type StandingView struct {
 	AsOf          time.Time               `json:"asOf" jsonschema:"UTC RFC3339 instant when this standing was computed."`
-	KnownAnySkill int                     `json:"knownAnySkill" jsonschema:"Words known or solid in at least one skill. Equals the Progress headline."`
+	KnownAnySkill int                     `json:"knownAnySkill" jsonschema:"The Progress headline. The rule is ruleVersion where a response carries it."`
 	Directions    []DirectionStandingView `json:"directions"`
 }
 
@@ -242,7 +253,7 @@ type CompactHelp struct {
 type DigestHistoryPoint struct {
 	Day           string `json:"day"`
 	KnownAnySkill int    `json:"knownAnySkill"`
-	RuleVersion   int    `json:"ruleVersion" jsonschema:"1 for unrebuilt days, 4 under current rules. Today's live point uses the current RuleVersion."`
+	RuleVersion   int    `json:"ruleVersion" jsonschema:"The rule version that produced this count. Read this field. Do not assume a version."`
 	Live          bool   `json:"live,omitempty" jsonschema:"True for today's live point appended after stored days."`
 }
 
@@ -263,17 +274,18 @@ type ModelSkillSummary struct {
 	PlacementRunAt *time.Time        `json:"placementRunAt,omitempty" jsonschema:"Finished time of the placement run that supplied this skill's bands. Null when estimateSource is evidence."`
 	Retention      *RetentionLabeled `json:"retention" jsonschema:"30-day due-review share for this skill, with window and asOf. Null when there were none."`
 	DueReviews     int               `json:"dueReviews"`
+	Ladder         LadderCounts      `json:"ladder" jsonschema:"proved, recalledLater, slipping, and notYetAsked out of taught words. The rule is ruleVersion where a response carries it."`
 }
 
 // ModelSummary is the learner's picture across all words.
 type ModelSummary struct {
 	// Words is the strict weakest-skill overall: known only when every practiced skill is
 	// known or solid. It is not the headline; use KnownAnySkill (ADR-0027 D1).
-	Words map[string]int `json:"words" jsonschema:"Strict count: words known in every practiced skill (weakest-skill overall). Not the headline; use knownAnySkill for words known or solid in at least one skill."`
+	Words map[string]int `json:"words" jsonschema:"A known-word count that is not the headline. Use knownAnySkill for the headline. The rule is ruleVersion where a response carries it."`
 	// KnownAnySkill is words known or solid in at least one skill, counted once (ADR-0027 D1).
-	KnownAnySkill int `json:"knownAnySkill" jsonschema:"Words known or solid in at least one skill. The headline shared with Home and Progress."`
+	KnownAnySkill int `json:"knownAnySkill" jsonschema:"The headline count shared with Home and Progress. The rule is ruleVersion where a response carries it."`
 	// WaitingForSecondDay is words that pass the old same-day known rule but need a later study day (ADR-0031 D5).
-	WaitingForSecondDay int                 `json:"waitingForSecondDay,omitempty" jsonschema:"Words that pass the old same-day known rule but have only one checked-success study day."`
+	WaitingForSecondDay int                 `json:"waitingForSecondDay,omitempty" jsonschema:"The Progress/Today learned-today count. The rule is ruleVersion where a response carries it."`
 	Skills              []ModelSkillSummary `json:"skills"`
 	Retention           *RetentionLabeled   `json:"retention" jsonschema:"30-day due-review share over all skills, with window and asOf. Null when there were none."`
 	DueReviews          int                 `json:"dueReviews"`

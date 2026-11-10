@@ -137,6 +137,13 @@ func (s *Store) StudyDigest(ctx context.Context, id int64, now time.Time, z stud
 
 // digestSkills fills live knownSolidNow / strugglingNow from the model and
 // knownSolid7dAgo from the snapshot on ago7 (ADR-0027 D4 / INIT-032/SPEC-005).
+func ladderCounts(c learner.LadderCounts) mcp.LadderCounts {
+	return mcp.LadderCounts{
+		Taught: c.Taught, Proved: c.Proved, RecalledLater: c.RecalledLater,
+		Slipping: c.Slipping, NotYetAsked: c.NotYetAsked,
+	}
+}
+
 func digestSkills(days []mcp.SnapshotDay, ago7 string, live learner.Summary) []mcp.DigestSkill {
 	var agoDay *mcp.SnapshotDay
 	for i := range days {
@@ -152,6 +159,7 @@ func digestSkills(days []mcp.SnapshotDay, ago7 string, live learner.Summary) []m
 			KnownSolidNow: sk.Counts[learner.Known] + sk.Counts[learner.Solid],
 			StrugglingNow: sk.Counts[learner.Struggling],
 			AgoDay:        ago7,
+			Ladder:        ladderCounts(sk.Ladder),
 		}
 		if agoDay != nil {
 			for _, snap := range agoDay.Skills {

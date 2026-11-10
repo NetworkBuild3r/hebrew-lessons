@@ -1,6 +1,6 @@
 # INIT-032: Every question has one right answer, and nothing covers the lesson
 
-**Initiative ID:** INIT-032 · **Status:** in progress · **Created:** 2026-11-06 · **Owner:** Brian Nelson
+**Initiative ID:** INIT-032 · **Status:** closed 2026-11-09. SPEC-002, SPEC-003, and SPEC-004 shipped in commit `67fd2cf`. SPEC-007 and SPEC-008 were taken over by INIT-037. SPEC-005 ("a word that also fits is never a wrong button") and SPEC-006 are replaced by INIT-038, which stops grading word-choice blanks and adds a "my answer was also right" tap. SPEC-001's ADR is covered by INIT-038's ADR-0033 · **Created:** 2026-11-06 · **Owner:** Brian Nelson
 **Discipline Profile:** `software` · **Ticket:** none · **Branch:** `main`
 **Source:** Brian, 2026-11-06, on https://hebrew.ibhacked.us/lesson/12/0: "now I have a card in the way of my lessons I cannot get rid of." Then: "Many can be right. but I don't pick the right one I am wrong. How can we also build it in a way that we don't have these options?" Then, on step 11 of the same lesson, a gap with no sentence at all: "Even worse."
 

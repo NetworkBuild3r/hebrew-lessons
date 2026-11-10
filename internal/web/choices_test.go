@@ -135,7 +135,8 @@ func TestLessonChoicesSkipEmptyEnglishGloss(t *testing.T) {
 	}
 
 	hebrew := lessonChoices(unit, nil, target, seed, true, true, lessonChoiceButtons, choiceExclude{})
-	if !choiceHas(hebrew, "2") || !choiceHas(hebrew, "3") || choiceHas(hebrew, "4") {
+	// An empty gloss overlaps every target, so it is not a Hebrew button either.
+	if choiceHas(hebrew, "2") || !choiceHas(hebrew, "3") || !choiceHas(hebrew, "4") || !choiceHas(hebrew, "1") {
 		t.Fatalf("hebrew buttons = %+v", hebrew)
 	}
 	for _, choice := range hebrew {
@@ -157,7 +158,7 @@ func TestLessonChoiceGradeAndReload(t *testing.T) {
 	for i, text := range letters {
 		inputs[i] = lexicon.Input{
 			TextNFC:  text,
-			Gloss:    "gloss-" + strconv.Itoa(i),
+			Gloss:    []string{"alef", "bet", "gimel", "dalet", "he", "vav", "zayin", "het"}[i],
 			Translit: sp("t-" + strconv.Itoa(i)),
 			POS:      sp("noun"),
 			Gender:   sp("m"),
@@ -356,6 +357,26 @@ func playChoiceSteps(t *testing.T, fx lessonFixture, path string, acts []units.A
 	body := getAuthed(t, fx.h, fx.cookie, path)
 	var lateIdx []int
 	for step, act := range acts {
+		if act.Type == units.ActivityCloze {
+			if got := choiceValuesAllowEmpty(t, body); len(got) != 0 {
+				t.Fatalf("%s step %d cloze rendered buttons %v", path, step, got)
+			}
+			runID := mustRunID(t, body)
+			target := viewByText(t, pool, act.Text)
+			if act.Target != "" {
+				target = viewByText(t, pool, act.Target)
+			}
+			ans := postLesson(t, fx.h, fx.cookie, path, itoa(runID), itoa(target.ID), true, lessonCSRF)
+			if ans.Code != http.StatusOK || strings.Contains(ans.Body.String(), "feedback--") {
+				t.Fatalf("%s step %d graded a cloze: %d %s", path, step, ans.Code, ans.Body.String())
+			}
+			cont := postLesson(t, fx.h, fx.cookie, path, itoa(runID), "continue", true, lessonCSRF)
+			if cont.Code != http.StatusOK {
+				t.Fatalf("continue %d %s", cont.Code, cont.Body.String())
+			}
+			body = cont.Body.String()
+			continue
+		}
 		again := getAuthed(t, fx.h, fx.cookie, path)
 		got := choiceValues(t, body)
 		if !slices.Equal(got, choiceValues(t, again)) {

@@ -129,13 +129,29 @@ func factsFromBrief(br brief.Brief, known map[int64]bool) units.BriefFacts {
 	return f
 }
 
+// WithLearnerAutoPublish sets whether a learner unit may be published.
+// Off is the default (ADR-0033 D11, INIT-038/SPEC-007). The app copies
+// Config.LearnerAutoPublish. One call with true restores today's publish.
+func (s *Store) WithLearnerAutoPublish(on bool) *Store {
+	if s != nil {
+		s.learnerAutoPublish = on
+	}
+	return s
+}
+
 // AutoPublishLearner implements mcp.LearnerUnits. The publish, the brief claim, and
 // the audit row are one transaction in db.AutoPublishLearnerUnit. A revision brief
 // must target this unitId and the unit must still be untouched inside that
 // transaction. INIT-030/SPEC-005.
+//
+// While learner auto-publish is off, this returns ErrLearnerAutoPublishOff and
+// writes nothing (ADR-0033 D11, INIT-038/SPEC-007).
 func (s *Store) AutoPublishLearner(ctx context.Context, req mcp.AutoPublishRequest) (mcp.PutResult, error) {
 	if err := s.ready(ctx); err != nil {
 		return mcp.PutResult{}, err
+	}
+	if !s.learnerAutoPublish {
+		return mcp.PutResult{}, mcp.ErrLearnerAutoPublishOff
 	}
 	issues := req.Issues
 	if issues == nil {

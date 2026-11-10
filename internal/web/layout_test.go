@@ -64,14 +64,14 @@ func TestTodayLayout(t *testing.T) {
 	if strings.Contains(body, `class="unit-title"`) || strings.Contains(body, "Getting ready in the morning") {
 		t.Fatal("empty Today still renders a sample lesson")
 	}
-	if strings.Contains(body, "btn-primary") || strings.Contains(body, `href="/lesson"`) {
-		t.Fatal("empty Today still offers a lesson or a filled action")
+	if strings.Contains(body, "btn-primary") || strings.Contains(body, `href="/lesson"`) || strings.Contains(body, "session, about") {
+		t.Fatal("empty Today still offers a lesson or a session")
 	}
-	if !strings.Contains(body, "quiet-card--due") || !strings.Contains(body, "quiet-card--next") {
-		t.Fatal("empty Today should show both quiet cards")
+	if !strings.Contains(body, "today-empty") || !strings.Contains(body, "Nothing due") {
+		t.Fatal("empty Today should say nothing is due in one line")
 	}
-	if !strings.Contains(body, "No lesson published yet") {
-		t.Fatal("empty Today should say no lesson is published")
+	if strings.Contains(body, "quiet-card--due") || strings.Contains(body, "quiet-card--next") {
+		t.Fatal("empty Today still shows the old quiet cards")
 	}
 	// The theme and log out live on Me (SPEC-017), so nothing in the header can wrap.
 	if strings.Contains(body, "theme-toggle") || strings.Contains(body, "data-theme-choice") || strings.Contains(body, "/auth/logout") {
@@ -107,8 +107,8 @@ func TestTodayLayout(t *testing.T) {
 	if strings.Contains(body, ">Start<") || strings.Contains(body, "הַתְחֵל") {
 		t.Fatal("empty Today should not offer a start button")
 	}
-	if !strings.Contains(body, "Nothing due") || !strings.Contains(body, "No lesson published yet") {
-		t.Fatal("empty Today should say nothing is due and no lesson is published")
+	if !strings.Contains(body, "Nothing due") {
+		t.Fatal("empty Today should say nothing is due")
 	}
 	scriptAt := strings.Index(body, `/static/js/theme.js`)
 	cssAt := strings.Index(body, "/static/css/tokens.css")
@@ -219,21 +219,12 @@ func TestZeroDueAndNoLesson(t *testing.T) {
 		t.Fatal("empty Today still renders a lesson card")
 	}
 	assertPair(t, body, "אֵין חֲזָרוֹת עַכְשָׁיו", "Nothing due", "en")
-	if !strings.Contains(body, "No lesson published yet") {
-		t.Fatal("empty Today should say no lesson is published")
+	if strings.Contains(body, "No lesson published yet") || strings.Contains(body, "quiet-card--next") {
+		t.Fatal("empty Today still offers a lesson placeholder")
 	}
-	if !strings.Contains(body, "quiet-card--due") || !strings.Contains(body, "icon-check") {
-		t.Fatal("nothing due should use the check placeholder")
-	}
-	if !strings.Contains(body, "quiet-card--next") || !strings.Contains(body, "icon-lessons") {
-		t.Fatal("missing lesson should be a placeholder card")
-	}
-	if !strings.Contains(body, "הַשִּׁעוּר הַבָּא יוֹפִיעַ כָּאן") || !strings.Contains(body, "Your next lesson will appear here") {
-		t.Fatal("missing lesson hint missing")
-	}
-	pill := regexp.MustCompile(`(?s)<section class="quiet-card quiet-card--due">.*?</section>`).FindString(body)
-	if !strings.Contains(pill, `<bdi lang="en" dir="ltr">Nothing due</bdi>`) {
-		t.Fatal("nothing-due english run must be an ltr bdi inside the pill")
+	line := regexp.MustCompile(`(?s)<p class="today-empty">.*?</p>`).FindString(body)
+	if !strings.Contains(line, `<bdi lang="en" dir="ltr">Nothing due</bdi>`) {
+		t.Fatal("nothing-due english run must be an ltr bdi on the one line")
 	}
 }
 
@@ -261,8 +252,8 @@ func TestEnglishShell(t *testing.T) {
 	if !strings.Contains(body, `<bdi lang="he" dir="rtl">`+views.AppName+`</bdi>`) {
 		t.Fatal("hebrew wordmark is not isolated in the english shell")
 	}
-	if !strings.Contains(body, "No lesson published yet") {
-		t.Fatal("empty lesson state left the english shell")
+	if !strings.Contains(body, "Nothing due") {
+		t.Fatal("empty Today left the english shell")
 	}
 }
 

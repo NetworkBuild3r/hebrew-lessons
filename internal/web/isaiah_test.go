@@ -33,7 +33,7 @@ func TestIsaiahCheckIsAnAdminAct(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := NewOptions(nil, svc, Options{Store: store})
+	h := NewOptions(nil, svc, Options{Store: store, ShowIsaiah: true, ShowRoots: true})
 	learner := addLearner(t, store, "a@example.com", "sub-a", now)
 	admin := addLearner(t, store, "admin@example.com", "sub-admin", now)
 	ctx := context.Background()

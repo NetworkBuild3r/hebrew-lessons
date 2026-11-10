@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -42,10 +43,24 @@ const (
 	backMax      = 6
 	placementMax = 6
 
+	// ladderCompareFrom is the day the proved ladder ships. The comparison panel
+	// stays 14 days and is gone after that (ADR-0033 D4).
 	// retentionBandHigh is the top of the retention target band. The bottom is the session target,
 	// sessionlimits.TargetSuccess (85%). The band is 85 to 90%.
 	retentionBandHigh = 0.90
 )
+
+// ladderCompareFrom is release B's comparison start. Shown through the 14th day.
+var ladderCompareFrom = time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC)
+
+const ladderCompareDays = 14
+
+func ladderCompareOpen(now time.Time) bool {
+	if now.Before(ladderCompareFrom) {
+		return false
+	}
+	return now.Before(ladderCompareFrom.AddDate(0, 0, ladderCompareDays))
+}
 
 // retentionBandLow is the bottom of the target band.
 const retentionBandLow = sessionlimits.TargetSuccess
@@ -266,15 +281,9 @@ func (s *server) fillSkillPanel(ctx context.Context, userID int64, v *views.Prog
 	}
 	skill := v.Skill
 	ss := skillOfSummary(sum, skill)
-	v.Known = fmt.Sprintf("%.0f", ss.EstimatedKnown)
-	v.EstimateSource = ss.EstimateSource
-	if ss.EstimateSource == learner.EstimateSourcePlacement && !ss.PlacementRunAt.IsZero() {
-		z, err := s.learnerZone(ctx, userID)
-		if err != nil {
-			return err
-		}
-		v.PlacementDay = dateText(ss.PlacementRunAt, s.now(), z)
-	}
+	// The skill tab's number is this skill's proved count, not a placement estimate.
+	v.Known = strconv.Itoa(ss.Ladder.Proved)
+	v.EstimateSource = ""
 
 	total := 0
 	for _, st := range learner.States {
@@ -311,8 +320,9 @@ func (s *server) fillSkillPanel(ctx context.Context, userID int64, v *views.Prog
 	return nil
 }
 
-// fillOverview is the Progress overview: headline, words-over-time (known_any + directions),
-// direction grid, help and strong (ADR-0028 D1–D5, D7).
+// fillOverview is the Progress overview. The headline is the proved ladder
+// (ADR-0033 D4, D6). Help and strong stay below it. The history line is the
+// Hebrew-from-English proved count under the current rule only.
 func (s *server) fillOverview(ctx context.Context, userID int64, v *views.ProgressView, sum learner.Summary, days []snapDay) error {
 	standing, err := s.model().Standing(ctx, userID)
 	if err != nil {
@@ -324,66 +334,20 @@ func (s *server) fillOverview(ctx context.Context, userID int64, v *views.Progre
 	}
 	now := s.now()
 	today := studyday.Today(now, z)
-	v.Known = strconv.Itoa(standing.KnownAnySkill)
-	if sum.WaitingForSecondDay > 0 {
-		v.WaitingText = strconv.Itoa(sum.WaitingForSecondDay)
-	}
 	v.SkillName = ""
 
-	bySkill := map[string]learner.SkillSummary{}
-	for _, ss := range sum.Skills {
-		bySkill[ss.Skill] = ss
+	tutor, err := s.store.TutorWordsRecorded(ctx, userID)
+	if err != nil {
+		return err
 	}
+	phrase := views.PhraseAppTaught
+	if tutor {
+		phrase = views.PhraseTutorTaught
+	}
+	dirs := map[string]learner.DirectionStanding{}
 	for _, d := range standing.Directions {
-		ss := bySkill[d.Skill]
-		row := views.DirectionRow{
-			Skill:        d.Skill,
-			Label:        d.Direction,
-			Known:        d.Known,
-			Solid:        d.Solid,
-			Learning:     d.Learning,
-			Struggling:   d.Struggling + d.Regressed,
-			Due:          d.Due,
-			Verdict:      d.Verdict,
-			VerdictLabel: views.VerdictLabel(d.Verdict),
-			Reason:       d.Reason,
-			NoAudio:      d.Verdict == "not_askable",
-			PracticeHref: strugglingPracticeHref(v.Page, d.Skill),
-			Href:         v.SkillTabHref(d.Skill),
-		}
-		if d.Accuracy14 != nil {
-			row.AccuracyText = fmt.Sprintf("%s · %d answers", percent(*d.Accuracy14), d.Answers14)
-			row.AccuracyHE = views.AnswersTextHE(percent(*d.Accuracy14), d.Answers14)
-		}
-		if ss.EstimateSource == learner.EstimateSourcePlacement && !ss.PlacementRunAt.IsZero() {
-			day := dateText(ss.PlacementRunAt, now, z)
-			row.PlacementLine = fmt.Sprintf("Placement estimate: about %.0f (%s, %s)",
-				ss.EstimatedKnown, strings.ToLower(directionShort(d.Skill)), day)
-			row.PlacementHE = views.PlacementLineHE(ss.EstimatedKnown, views.ProgressHE(d.Direction), day)
-		}
-		v.Directions = append(v.Directions, row)
-
-		// Keep Overview rows for older tests that still read known/learning/seen.
-		ov := views.SkillOverview{
-			Skill: d.Skill, Label: d.Direction,
-			Known: d.Known + d.Solid, Learning: d.Learning, Seen: ss.Counts[learner.Seen],
-			EstimateSource: ss.EstimateSource,
-		}
-		if ss.EstimateSource == learner.EstimateSourcePlacement && !ss.PlacementRunAt.IsZero() {
-			ov.PlacementDay = dateText(ss.PlacementRunAt, now, z)
-		}
-		if d.Skill == "listen" {
-			noCard, err := s.listenAnswersNoCards(ctx, userID, ss)
-			if err != nil {
-				return err
-			}
-			ov.NoCardHint = noCard
-		}
-		if d.Skill == "spell" && !skillHasEvidence(ss) {
-			ov.NoPracticeHint = true
-		}
-		v.Overview = append(v.Overview, ov)
-
+		dirs[d.Skill] = d
+		// Verdict chips are not on the headline. Help and strong name words.
 		if d.Verdict == "needs_help" {
 			v.Help = append(v.Help, standingBlock(v.Page, d, true))
 		}
@@ -391,13 +355,37 @@ func (s *server) fillOverview(ctx context.Context, userID int64, v *views.Progre
 			v.Strong = append(v.Strong, standingBlock(v.Page, d, false))
 		}
 	}
-
-	from := addDaysStr(today, -progressWindowDays)
-	totals, err := s.store.ListTotals(ctx, userID, from, addDaysStr(today, -1))
-	if err != nil {
-		return err
+	for _, spec := range []struct {
+		skill string
+		small bool
+	}{
+		{"listen", false},
+		{"recall", false},
+		{"read", true},
+		{"spell", true},
+	} {
+		v.LadderRows = append(v.LadderRows, ladderRow(v.Page, spec.skill, spec.small, phrase, skillOfSummary(sum, spec.skill).Ladder, dirs[spec.skill]))
 	}
-	v.Est = knownOverTimeChart(totals, days, standing, today)
+	if ladderCompareOpen(now) {
+		withVoids, err := s.model().Rule4Known(ctx, userID, true)
+		if err != nil {
+			return err
+		}
+		after, err := s.model().Rule4Known(ctx, userID, false)
+		if err != nil {
+			return err
+		}
+		v.WhatChanged = &views.WhatChanged{
+			WithVoids: withVoids,
+			AfterVoid: after,
+			Ladder:    recallProved(sum),
+			Reason:    views.LabelLadderRule,
+		}
+	}
+
+	// Past daily_totals are the any-skill count. They are not this line.
+	// The live point is Hebrew-from-English proved, rule version 5.
+	v.Est = provedOverTimeChart(today, recallProved(sum))
 	// Retention keeps the skill with the most known+solid evidence, plus today's live point.
 	bestSkill := learner.Skills[0]
 	bestKnown := -1
@@ -413,18 +401,68 @@ func (s *server) fillOverview(ctx context.Context, userID int64, v *views.Progre
 	return nil
 }
 
-func directionShort(skill string) string {
+func recallProved(sum learner.Summary) int {
+	return skillOfSummary(sum, "recall").Ladder.Proved
+}
+
+func ladderSkillLabel(skill string) string {
 	switch skill {
 	case "listen":
-		return "listening"
-	case "read":
-		return "reading"
+		return learner.HeadlineListen
 	case "recall":
-		return "English → Hebrew"
+		return learner.HeadlineRecall
+	case "read":
+		return "Reading"
 	case "spell":
-		return "spelling"
+		return "Spelling"
+	default:
+		return learner.DirectionLabel(skill)
 	}
-	return skill
+}
+
+func shareText(n, total int) string {
+	pct := 0
+	if total > 0 {
+		pct = int(math.Round(100 * float64(n) / float64(total)))
+	}
+	return fmt.Sprintf("%d%% (%d)", pct, n)
+}
+
+func ladderHref(page views.Page, skill, rung string) string {
+	q := url.Values{}
+	q.Set("skill", skill)
+	q.Set("ladder", rung)
+	if page.Lang == "he" {
+		q.Set("lang", "he")
+	}
+	return "/me/words?" + q.Encode()
+}
+
+func ladderRow(page views.Page, skill string, small bool, phrase string, counts learner.LadderCounts, d learner.DirectionStanding) views.LadderRow {
+	type rung struct {
+		id    string
+		label string
+		n     int
+	}
+	parts := []rung{
+		{string(learner.Proved), views.LabelRungProved, counts.Proved},
+		{string(learner.RecalledLater), views.LabelRungRecalledLater, counts.RecalledLater},
+		{string(learner.Slipping), views.LabelRungSlipping, counts.Slipping},
+		{string(learner.NotYetAsked), views.LabelRungNotYetAsked, counts.NotYetAsked},
+	}
+	row := views.LadderRow{
+		Skill: skill, Label: ladderSkillLabel(skill), Small: small,
+		Taught: counts.Taught, OfPhrase: phrase,
+		NoAudio: skill == "listen" && !d.Askable,
+	}
+	for _, p := range parts {
+		row.Rungs = append(row.Rungs, views.LadderRung{
+			Rung: p.id, Label: p.label,
+			Share: shareText(p.n, counts.Taught),
+			Href:  ladderHref(page, skill, p.id),
+		})
+	}
+	return row
 }
 
 func strugglingPracticeHref(page views.Page, skill string) string {
@@ -526,98 +564,32 @@ func skillOfSummary(sum learner.Summary, skill string) learner.SkillSummary {
 	return learner.SkillSummary{}
 }
 
-// knownOverTimeChart is the overview "Words you know over time": known_any from
-// daily_totals, plus a thinner line per askable direction, each ending on today's
-// live point (ADR-0028 D1, D2).
-func knownOverTimeChart(totals []db.DailyTotal, days []snapDay, standing learner.Standing, today string) views.ChartView {
-	c := views.ChartView{ID: "est", Title: "Words you know over time", ThroughToday: true}
-	var series []lineSeries
-	var knownPts []linePoint
-	for _, t := range totals {
-		if t.Day >= today {
-			continue
-		}
-		rv := t.RuleVersion
-		if rv == 0 {
-			rv = 1
-		}
-		knownPts = append(knownPts, linePoint{Day: t.Day, Value: float64(t.KnownAnySkill), OldRule: rv < jobs.RuleVersion})
+// currentRule reports whether a stored stamp is the rule this page draws.
+// A missing stamp is version 1. The chart never mixes versions (ADR-0033 D4).
+func currentRule(rv int) bool {
+	if rv == 0 {
+		rv = 1
 	}
-	knownPts = append(knownPts, linePoint{Day: today, Value: float64(standing.KnownAnySkill)})
-	series = append(series, lineSeries{ID: "known", Label: "Words you know", Points: knownPts})
+	return rv == jobs.RuleVersion
+}
 
-	for _, d := range standing.Directions {
-		if !d.Askable {
-			continue
-		}
-		var pts []linePoint
-		for _, day := range days {
-			if day.Day >= today {
-				continue
-			}
-			sk, ok := day.Skills[d.Skill]
-			if !ok {
-				continue
-			}
-			rv := sk.RuleVersion
-			if rv == 0 {
-				rv = 1
-			}
-			pts = append(pts, linePoint{Day: day.Day, Value: float64(knownOf(sk)), OldRule: rv < jobs.RuleVersion})
-		}
-		pts = append(pts, linePoint{Day: today, Value: float64(d.Known + d.Solid)})
-		series = append(series, lineSeries{ID: d.Skill, Label: d.Direction, Thin: true, Points: pts})
-	}
-
-	hasOld, hasNew := false, false
-	lo, hi := knownPts[0].Value, knownPts[0].Value
-	for _, s := range series {
-		for _, p := range s.Points {
-			lo, hi = math.Min(lo, p.Value), math.Max(hi, p.Value)
-			if p.OldRule {
-				hasOld = true
-			} else {
-				hasNew = true
-			}
-		}
-		c.Key = append(c.Key, s.Label)
-	}
-	// Marker only when the range mixes rule versions (INIT-036/SPEC-006).
-	c.OldRuleNote = hasOld && hasNew
-	if c.OldRuleNote {
-		c.Key = append(c.Key, "Dashed: old rule")
-	}
-	minY, maxY, ticks := niceCount(lo, hi)
+// provedOverTimeChart is the overview history line: Hebrew-from-English proved,
+// under the current rule only. Saved daily totals are the any-skill count, so
+// they are not points on this line.
+func provedOverTimeChart(today string, proved int) views.ChartView {
+	c := views.ChartView{ID: "est", Title: views.LabelLadderProved, ThroughToday: true}
+	pts := []linePoint{{Day: today, Value: float64(proved)}}
+	minY, maxY, ticks := niceCount(pts[0].Value, pts[0].Value)
 	c.SVG = lineChartSVG(lineSpec{
-		ID: "est", Label: "Words you know over time", Series: series,
+		ID: "est", Label: views.LabelLadderProved, Points: pts,
 		Min: minY, Max: maxY, Ticks: ticks,
 	})
-	first, last := knownPts[0], knownPts[len(knownPts)-1]
-	switch {
-	case len(knownPts) == 1:
-		c.Summary = fmt.Sprintf("%.0f words today. A line needs a second day.", last.Value)
-	default:
-		delta := int(math.Round(last.Value)) - int(math.Round(first.Value))
-		move := "no change"
-		switch {
-		case delta > 0:
-			move = "up " + views.CountText(delta, "word", "words")
-		case delta < 0:
-			move = "down " + views.CountText(-delta, "word", "words")
-		}
-		c.Summary = fmt.Sprintf("%.0f to %.0f · %s", first.Value, last.Value, move)
-	}
+	c.Summary = fmt.Sprintf("%.0f words today. A line needs a second day.", float64(proved))
 	c.Table = views.ChartTable{
-		Caption: "Words you know over time, by day",
-		Head:    []string{"Day", "Words you know"},
+		Caption: views.LabelLadderProved + ", by day",
+		Head:    []string{"Day", views.LabelLadderProved},
 	}
-	for _, p := range knownPts {
-		row := []string{shortDay(p.Day), fmt.Sprintf("%.0f", p.Value)}
-		if p.OldRule {
-			row[0] += " (old rule)"
-		}
-		c.Table.Rows = append(c.Table.Rows, row)
-	}
+	c.Table.Rows = append(c.Table.Rows, []string{shortDay(today), strconv.Itoa(proved)})
 	return c
 }
 
@@ -629,24 +601,11 @@ func skillKnownChart(skill, name string, days []snapDay, today string, live floa
 		if d.Day >= today {
 			continue
 		}
-		if sk, ok := d.Skills[skill]; ok {
-			rv := sk.RuleVersion
-			if rv == 0 {
-				rv = 1
-			}
-			pts = append(pts, linePoint{Day: d.Day, Value: float64(knownOf(sk)), OldRule: rv < jobs.RuleVersion})
+		if sk, ok := d.Skills[skill]; ok && currentRule(sk.RuleVersion) {
+			pts = append(pts, linePoint{Day: d.Day, Value: float64(knownOf(sk))})
 		}
 	}
 	pts = append(pts, linePoint{Day: today, Value: live})
-	hasOld, hasNew := false, false
-	for _, p := range pts {
-		if p.OldRule {
-			hasOld = true
-		} else {
-			hasNew = true
-		}
-	}
-	c.OldRuleNote = hasOld && hasNew
 	if len(pts) == 1 && live == 0 && len(days) == 0 {
 		c.Hint = "Practice a few days and your chart starts here."
 		return c
@@ -675,16 +634,9 @@ func skillKnownChart(skill, name string, days []snapDay, today string, live floa
 		}
 		c.Summary = fmt.Sprintf("%.0f to %.0f · %s", first.Value, last.Value, move)
 	}
-	if c.OldRuleNote {
-		c.Key = []string{"Dashed: old rule"}
-	}
 	c.Table = views.ChartTable{Caption: "Words you know, " + name + ", by day", Head: []string{"Day", "Words you know"}}
 	for _, p := range pts {
-		day := shortDay(p.Day)
-		if p.OldRule {
-			day += " (old rule)"
-		}
-		c.Table.Rows = append(c.Table.Rows, []string{day, fmt.Sprintf("%.0f", p.Value)})
+		c.Table.Rows = append(c.Table.Rows, []string{shortDay(p.Day), fmt.Sprintf("%.0f", p.Value)})
 	}
 	return c
 }
@@ -705,7 +657,7 @@ func retentionChart(skill, name string, days []snapDay, today string, live *floa
 		if d.Day >= today {
 			continue
 		}
-		if sk, ok := d.Skills[skill]; ok && sk.Retention != nil {
+		if sk, ok := d.Skills[skill]; ok && sk.Retention != nil && currentRule(sk.RuleVersion) {
 			pts = append(pts, linePoint{Day: d.Day, Value: *sk.Retention})
 		}
 	}

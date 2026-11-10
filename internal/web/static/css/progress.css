@@ -60,8 +60,52 @@
 .pknow__unit { color: var(--muted); font-size: var(--fs-body); font-weight: 600; }
 .pknow__explain { color: var(--muted); font-size: var(--fs-small); line-height: var(--lh-he-body); margin: 0; max-inline-size: var(--player-max); }
 
-/* Overview of every skill (INIT-023/SPEC-004). Each row links to that skill's tab. */
-.pknow__skills { display: grid; gap: var(--space-2); list-style: none; padding: 0; margin: 0; }
+/* Overview ladder (ADR-0033 D6). Rows wrap; nothing on this card forces a page-wide scroll. */
+.pknow__skills { display: grid; gap: var(--space-2); list-style: none; padding: 0; margin: 0; min-inline-size: 0; }
+.pknow__skill {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--surface-soft);
+  min-inline-size: 0;
+}
+.pknow__skill[data-size="small"] {
+  padding-block: var(--space-2);
+  background: transparent;
+}
+.pknow__skill[data-size="small"] .pknow__skill-label { font-size: var(--fs-small); font-weight: 600; }
+.pknow__of { color: var(--muted); font-size: var(--fs-small); line-height: var(--lh-he-body); margin: 0; }
+.pknow__rungs { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); min-inline-size: 0; }
+.pknow__rung {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1);
+  color: inherit;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  min-inline-size: 0;
+  min-block-size: var(--size-tap);
+}
+.pknow__rung bdi { font-weight: 700; font-variant-numeric: tabular-nums; }
+.pchanged { display: grid; gap: var(--space-2); min-inline-size: 0; }
+.pchanged__nums {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.pchanged__nums li { display: grid; gap: var(--space-1); min-inline-size: 0; }
+.pchanged__nums bdi { font-weight: 700; font-size: var(--fs-h2); }
+.pchanged__reason { color: var(--muted); font-size: var(--fs-small); line-height: var(--lh-he-body); margin: 0; max-inline-size: var(--player-max); overflow-wrap: anywhere; }
+@media (min-width: 640px) {
+  .pchanged__nums { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 .pknow__skill-link {
   display: grid;
   gap: var(--space-1);

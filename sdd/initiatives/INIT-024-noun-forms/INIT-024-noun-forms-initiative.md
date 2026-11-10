@@ -1,6 +1,6 @@
 # INIT-024: Noun and adjective forms on the live server
 
-**Initiative ID:** INIT-024 · **Status:** on_track · **Created:** 2026-10-28 · **Owner:** Brian Nelson
+**Initiative ID:** INIT-024 · **Status:** closed 2026-11-09. SPEC-001 is met: production build `cb699bc` includes the noun-forms code. SPEC-002 and SPEC-003 (storing and voicing forms for words already met) are not needed: word-page forms are frozen as reference (BRAIN-001) · **Created:** 2026-10-28 · **Owner:** Brian Nelson
 **Discipline Profile:** `software` · **Ticket:** none · **Branch:** `main`
 **Source:** INIT-023/SPEC-009 stopped after the verbs. The live server has no `upsert_noun_forms`, and `generate_audio` there has no `lemmaId`.
 

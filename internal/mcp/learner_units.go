@@ -24,7 +24,15 @@ var (
 	// ErrReviseStarted is a revision brief whose unit already has a lesson run.
 	// INIT-030/SPEC-005.
 	ErrReviseStarted = errors.New("unit has been started")
+	// ErrLearnerAutoPublishOff is ADR-0033 D11. AutoPublishLearner returns it
+	// while the switch is off, and writes nothing. The text is LearnerAutoPublishNote.
+	// INIT-038/SPEC-007.
+	ErrLearnerAutoPublishOff = errors.New(LearnerAutoPublishNote)
 )
+
+// LearnerAutoPublishNote is the ADR-0033 D11 note. put_unit returns it as
+// publishReason. publish_unit returns it as the tool error. INIT-038/SPEC-007.
+const LearnerAutoPublishNote = "Learner auto-publish is off (ADR-0033). The learner unit was not published."
 
 // RuleBriefReviseStarted is the put_unit block when a revision brief's unit
 // already has a lesson_runs row. INIT-030/SPEC-005.

@@ -61,7 +61,7 @@ func startLearnRootsServer(t *testing.T) (origin, cookie, lesson, root string) {
 	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
 	srv := httptest.NewUnstartedServer(nil)
 	origin = "http://" + srv.Listener.Addr().String()
-	store, app := openShellAt(t, fixedClock(now), origin, nil, nil)
+	store, app := openShellAtFlags(t, fixedClock(now), origin, nil, nil, featuresOn())
 	srv.Config.Handler = app
 	srv.Start()
 	t.Cleanup(srv.Close)

@@ -16,7 +16,7 @@ import (
 
 func TestMyStuffIsolationAndSections(t *testing.T) {
 	now := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
-	store, h := openShell(t, fixedClock(now), nil, nil)
+	store, h := openShellFlags(t, fixedClock(now), nil, nil, featuresOn())
 	a := addLearner(t, store, "a@example.com", "sub-a", now)
 	b := addLearner(t, store, "b@example.com", "sub-b", now)
 	ctx := context.Background()

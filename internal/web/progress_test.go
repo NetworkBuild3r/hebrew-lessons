@@ -776,8 +776,8 @@ func TestProgressShowsOnlyTheSignedInLearnersData(t *testing.T) {
 			t.Fatalf("%s shows the other learner's slip", q)
 		}
 		rows := tableRows(section(t, body, "c-card pchart", `data-chart="est"`))
-		if len(rows) < 2 {
-			t.Fatalf("%s: no estimate rows", q)
+		if len(rows) < 1 {
+			t.Fatalf("%s: no chart rows", q)
 		}
 		// Other learner's seeded estimates were 777+; none of those may appear.
 		for _, r := range rows {
@@ -1113,34 +1113,66 @@ func overviewKnown(t *testing.T, row string) int {
 	return n
 }
 
-// ac-1: /progress shows Read 11, Recall 2, Listen explanation, Spell not practiced.
+func rungCount(t *testing.T, row, rung string) int {
+	t.Helper()
+	re := regexp.MustCompile(`data-rung="` + rung + `"[^>]*>[\s\S]*?<bdi[^>]*>([0-9]+)% \(([0-9]+)\)</bdi>`)
+	m := re.FindStringSubmatch(row)
+	if m == nil {
+		t.Fatalf("no %s count in row:\n%s", rung, row)
+	}
+	n, err := strconv.Atoi(m[2])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func rungSum(t *testing.T, row string) int {
+	t.Helper()
+	n := 0
+	for _, rung := range []string{"proved", "recalled_later", "slipping", "not_yet_asked"} {
+		n += rungCount(t, row, rung)
+	}
+	return n
+}
+
+// The overview leads with the ladder. Each row's four counts sum to taught.
 func TestProgressOverviewShowsKnownPerSkill(t *testing.T) {
-	_, _, _, get := overviewApp(t)
+	store, l, clk, get := overviewApp(t)
+	sum := summaryOf(t, store, clk, l.user.ID)
 	body := get("/progress")
 	if !strings.Contains(body, `data-skill=""`) || !strings.Contains(body, `class="pknow__skills"`) {
 		t.Fatal(" /progress did not open the overview")
 	}
-	want := map[string]int{"read": 11, "recall": 2}
-	for skill, n := range want {
+	if !strings.Contains(body, "Understand by ear") || !strings.Contains(body, "Hebrew from English") {
+		t.Fatal("headline rows are missing")
+	}
+	for _, skill := range []string{"listen", "recall", "read", "spell"} {
 		row := overviewRow(t, body, skill)
-		if got := overviewKnown(t, row); got != n {
-			t.Errorf("%s known = %d, want %d", skill, got, n)
+		lc := skillSummary(sum, skill).Ladder
+		if got := rungSum(t, row); got != lc.Taught {
+			t.Errorf("%s rungs sum %d, taught %d", skill, got, lc.Taught)
 		}
-		if !strings.Contains(row, `href="/progress?skill=`+skill+`"`) {
-			t.Errorf("%s row does not link to its tab:\n%s", skill, row)
+		if !strings.Contains(row, `data-taught="`+strconv.Itoa(lc.Taught)+`"`) {
+			t.Errorf("%s taught attribute:\n%s", skill, row)
+		}
+		if strings.Contains(row, "data-verdict=") || strings.Contains(row, "Placement estimate:") {
+			t.Errorf("%s row still has a verdict or a placement estimate:\n%s", skill, row)
 		}
 	}
 	listen := overviewRow(t, body, "listen")
-	if !strings.Contains(listen, "No audio yet") || strings.Contains(listen, `data-count="known"`) {
-		t.Errorf("listen overview should show No audio yet, not a counts bar:\n%s", listen)
+	if !strings.Contains(listen, `data-size="headline"`) || !strings.Contains(listen, "No audio yet") {
+		t.Errorf("listen row:\n%s", listen)
 	}
-	spell := overviewRow(t, body, "spell")
-	if !strings.Contains(spell, `data-verdict="building"`) {
-		t.Errorf("spell row should be building:\n%s", spell)
+	if !strings.Contains(overviewRow(t, body, "read"), `data-size="small"`) || !strings.Contains(overviewRow(t, body, "spell"), `data-size="small"`) {
+		t.Fatal("reading and spelling should be the smaller rows")
+	}
+	if strings.Contains(body, "Words you know") || strings.Contains(body, "Say it from English") {
+		t.Fatal("the old headline is still on the page")
 	}
 }
 
-// ac-2: Listen with no audio shows "No audio yet", not a counts bar (ADR-0028 D4/D6).
+// Listen with no audio still shows the ladder counts, and says there is no audio.
 func TestProgressOverviewListenNoCardExplanation(t *testing.T) {
 	_, _, _, get := overviewApp(t)
 	row := overviewRow(t, get("/progress"), "listen")
@@ -1148,11 +1180,11 @@ func TestProgressOverviewListenNoCardExplanation(t *testing.T) {
 	if !strings.Contains(row, want) {
 		t.Fatalf("listen row lacks the no-audio reason:\n%s", row)
 	}
-	if strings.Contains(row, `class="pknow__skill-bar"`) || strings.Contains(row, `data-count=`) {
-		t.Fatalf("listen row still has a counts bar:\n%s", row)
+	if rungSum(t, row) == 0 && !strings.Contains(row, "0% (0)") {
+		t.Fatalf("listen row has no ladder counts:\n%s", row)
 	}
-	if !strings.Contains(row, `href="/progress?skill=listen"`) {
-		t.Fatalf("listen row does not link to its tab:\n%s", row)
+	if !strings.Contains(row, `ladder=proved`) || !strings.Contains(row, `skill=listen`) {
+		t.Fatalf("listen counts do not link to their words:\n%s", row)
 	}
 }
 
@@ -1175,8 +1207,11 @@ func TestProgressSkillTabStillShowsSingleSkill(t *testing.T) {
 		t.Fatalf("%d state bars, want 1", got)
 	}
 	headline := regexp.MustCompile(`class="count"><bdi lang="en" dir="ltr">([0-9]+)</bdi>`)
-	if m := headline.FindStringSubmatch(body); m == nil || m[1] != fmt.Sprintf("%.0f", ss.EstimatedKnown) {
-		t.Errorf("headline %v, want %.0f", m, ss.EstimatedKnown)
+	if m := headline.FindStringSubmatch(body); m == nil || m[1] != strconv.Itoa(ss.Ladder.Proved) {
+		t.Errorf("headline %v, want proved %d", m, ss.Ladder.Proved)
+	}
+	if strings.Contains(body, "words estimated known") || strings.Contains(body, "Placement estimate:") || strings.Contains(body, "From placement") {
+		t.Fatal("the skill tab still shows a placement estimate")
 	}
 	form := regexp.MustCompile(`(?s)<form class="ptabs".*?</form>`).FindString(body)
 	if !regexp.MustCompile(`value="read" class="c-answer" data-state="selected" aria-pressed="true"`).MatchString(form) {
@@ -1189,42 +1224,20 @@ func TestProgressOverviewMatchesLearnerModel(t *testing.T) {
 	store, l, clk, get := overviewApp(t)
 	sum := summaryOf(t, store, clk, l.user.ID)
 	body := get("/progress")
-	if m := regexp.MustCompile(`class="count"><bdi lang="en" dir="ltr">([0-9]+)</bdi>`).FindStringSubmatch(body); m == nil || m[1] != strconv.Itoa(sum.KnownAnySkill) {
-		t.Errorf("headline %v, want %d from Summary.KnownAnySkill", m, sum.KnownAnySkill)
-	}
-	if !strings.Contains(body, "Words you know") {
-		t.Error("overview missing Words you know label")
-	}
-	if sum.KnownAnySkill == 0 {
-		t.Fatal("fixture KnownAnySkill is 0; reading-known words should count")
+	if strings.Contains(body, "Words you know") || strings.Contains(body, "Say it from English") {
+		t.Error("overview still leads with the any-skill count")
 	}
 	for _, ss := range sum.Skills {
 		row := overviewRow(t, body, ss.Skill)
-		known := ss.Counts[learner.Known] + ss.Counts[learner.Solid]
-		learning := ss.Counts[learner.Learning]
-		seen := ss.Counts[learner.Seen]
-		if ss.Skill == "listen" {
-			if !strings.Contains(row, "No audio yet") {
-				t.Errorf("listen should show No audio yet when Summary has %d seen and %d known", seen, known)
-			}
-			if known != 0 || learning != 0 || seen != 29 {
-				t.Errorf("fixture listen counts known=%d learning=%d seen=%d, want 0/0/29", known, learning, seen)
-			}
-			continue
+		lc := ss.Ladder
+		if got := rungCount(t, row, "proved"); got != lc.Proved {
+			t.Errorf("%s proved on page = %d, ladder %d", ss.Skill, got, lc.Proved)
 		}
-		if ss.Skill == "spell" {
-			if !strings.Contains(row, `data-verdict="building"`) {
-				t.Errorf("spell should be building when Summary has no evidence")
-			}
-			continue
+		if got := rungSum(t, row); got != lc.Taught {
+			t.Errorf("%s rungs %d, taught %d", ss.Skill, got, lc.Taught)
 		}
-		// Direction grid shows known and solid separately; known count is Known only.
-		if got := overviewKnown(t, row); got != ss.Counts[learner.Known] {
-			t.Errorf("%s known on page = %d, Summary.Known = %d", ss.Skill, got, ss.Counts[learner.Known])
-		}
-		reLearn := regexp.MustCompile(`data-count="learning"><bdi[^>]*>([0-9]+)</bdi>`)
-		if m := reLearn.FindStringSubmatch(row); m == nil || m[1] != strconv.Itoa(learning) {
-			t.Errorf("%s learning on page = %v, Summary = %d", ss.Skill, m, learning)
+		if !strings.Contains(row, "% (") {
+			t.Errorf("%s percentage has no count:\n%s", ss.Skill, row)
 		}
 	}
 	estCard := section(t, body, "c-card pchart", `data-chart="est"`)
@@ -1235,8 +1248,12 @@ func TestProgressOverviewMatchesLearnerModel(t *testing.T) {
 		}
 	}
 	est := tableRows(estCard)
-	if len(est) == 0 || est[len(est)-1][1] != strconv.Itoa(sum.KnownAnySkill) {
-		t.Fatalf("overview chart last point %v, want KnownAnySkill %d", est[len(est)-1], sum.KnownAnySkill)
+	want := strconv.Itoa(skillSummary(sum, "recall").Ladder.Proved)
+	if len(est) == 0 || est[len(est)-1][1] != want {
+		t.Fatalf("overview chart last point %v, want Hebrew-from-English proved %s", est[len(est)-1], want)
+	}
+	if strings.Contains(estCard, "old rule") {
+		t.Fatal("overview chart mixes rule versions")
 	}
 }
 
@@ -1326,11 +1343,12 @@ func TestProgressKnownAnySkillHeadlineAboveZero(t *testing.T) {
 		t.Fatal("KnownAnySkill is 0 for solid/known read + learning recall")
 	}
 	body := getLearner(t, h, l, "/progress")
-	if m := regexp.MustCompile(`class="count"><bdi lang="en" dir="ltr">([0-9]+)</bdi>`).FindStringSubmatch(body); m == nil || m[1] != strconv.Itoa(sum.KnownAnySkill) {
-		t.Fatalf("headline %v, want %d KnownAnySkill", m, sum.KnownAnySkill)
+	recall := overviewRow(t, body, "recall")
+	if got := rungCount(t, recall, "proved"); got != skillSummary(sum, "recall").Ladder.Proved {
+		t.Fatalf("recall proved = %d, ladder %d", got, skillSummary(sum, "recall").Ladder.Proved)
 	}
-	if !strings.Contains(body, "Words you know") {
-		t.Fatal("missing Words you know label")
+	if strings.Contains(body, "Words you know") {
+		t.Fatal("Progress still leads with Words you know")
 	}
 }
 
@@ -1358,15 +1376,9 @@ func TestProgressListeningOnlyPlacementMarksEvidenceSkills(t *testing.T) {
 	seedProgressSnapshots(t, store, l.user.ID, 2, progEst)
 
 	body := getLearner(t, h, l, "/progress")
-	for _, skill := range []string{"read", "recall", "spell"} {
-		row := overviewRow(t, body, skill)
-		if strings.Contains(row, "Placement estimate:") {
-			t.Errorf("%s row should not show a placement estimate:\n%s", skill, row)
-		}
-	}
-	listen := overviewRow(t, body, "listen")
-	if !strings.Contains(listen, "Placement estimate:") {
-		t.Errorf("listen row missing Placement estimate:\n%s", listen)
+	know := section(t, body, "c-card pknow", "")
+	if strings.Contains(know, "Placement estimate:") || strings.Contains(know, "From placement") {
+		t.Fatalf("headline still shows a placement estimate:\n%s", know)
 	}
 	place := section(t, body, "c-card pplace", "")
 	if !strings.Contains(place, "Listening level 2, about 50 words") || !strings.Contains(place, "Reading not tested") {
@@ -1385,8 +1397,11 @@ func TestProgressSpellNotPracticedThenLearningAfterTypeIt(t *testing.T) {
 
 	before := getLearner(t, h, l, "/progress")
 	spell := overviewRow(t, before, "spell")
-	if !strings.Contains(spell, `data-verdict="building"`) {
-		t.Fatalf("before typed answer:\n%s", spell)
+	if strings.Contains(spell, "data-verdict=") {
+		t.Fatalf("spell row still shows a verdict:\n%s", spell)
+	}
+	if rungSum(t, spell) != skillSummary(summaryOf(t, store, clk, l.user.ID), "spell").Ladder.Taught {
+		t.Fatalf("spell rungs do not sum to taught:\n%s", spell)
 	}
 
 	ctx := context.Background()
@@ -1410,9 +1425,9 @@ func TestProgressSpellNotPracticedThenLearningAfterTypeIt(t *testing.T) {
 
 	after := getLearner(t, h, l, "/progress")
 	row := overviewRow(t, after, "spell")
-	reLearn := regexp.MustCompile(`data-count="learning"><bdi[^>]*>([0-9]+)</bdi>`)
-	if m := reLearn.FindStringSubmatch(row); m == nil || m[1] != "1" {
-		t.Fatalf("spell learning = %v, want 1:\n%s", m, row)
+	got := skillSummary(summaryOf(t, store, clk, l.user.ID), "spell").Ladder
+	if rungCount(t, row, "proved") != got.Proved || rungSum(t, row) != got.Taught {
+		t.Fatalf("spell ladder on the page does not match the model %+v:\n%s", got, row)
 	}
 }
 
@@ -1523,14 +1538,14 @@ func TestProgressKnownAnyLastPointEqualsHeadline(t *testing.T) {
 	store, l, clk, get, _ := standingLearner1App(t)
 	sum := summaryOf(t, store, clk, l.user.ID)
 	body := get("/progress")
-	headline := regexp.MustCompile(`class="count"><bdi lang="en" dir="ltr">([0-9]+)</bdi>`)
-	m := headline.FindStringSubmatch(body)
-	if m == nil || m[1] != strconv.Itoa(sum.KnownAnySkill) {
-		t.Fatalf("headline %v, want KnownAnySkill %d", m, sum.KnownAnySkill)
+	want := strconv.Itoa(skillSummary(sum, "recall").Ladder.Proved)
+	recall := overviewRow(t, body, "recall")
+	if got := rungCount(t, recall, "proved"); strconv.Itoa(got) != want {
+		t.Fatalf("proved %d, want %s", got, want)
 	}
 	est := tableRows(section(t, body, "c-card pchart", `data-chart="est"`))
-	if len(est) == 0 || est[len(est)-1][1] != m[1] {
-		t.Fatalf("chart last point %v, want headline %s", est[len(est)-1], m[1])
+	if len(est) == 0 || est[len(est)-1][1] != want {
+		t.Fatalf("chart last point %v, want headline %s", est[len(est)-1], want)
 	}
 	if !strings.Contains(section(t, body, "c-card pchart", `data-chart="est"`), "Through today") {
 		t.Fatal("missing Through today")
@@ -1541,11 +1556,14 @@ func TestProgressDirectionNamesAndNoAudio(t *testing.T) {
 	_, _, _, get, _ := standingLearner1App(t)
 	body := get("/progress")
 	for _, name := range []string{
-		"Reading (Hebrew → English)", "English → Hebrew", "Spelling", "Listening",
+		"Understand by ear", "Hebrew from English", "Reading", "Spelling",
 	} {
 		if !strings.Contains(body, name) {
-			t.Errorf("missing direction name %q", name)
+			t.Errorf("missing ladder name %q", name)
 		}
+	}
+	if strings.Contains(body, "Say it from English") {
+		t.Fatal("the old pronunciation name is on the page")
 	}
 	listen := overviewRow(t, body, "listen")
 	if !strings.Contains(listen, "No audio yet") {
@@ -1579,12 +1597,13 @@ func TestProgressReadingPlacementUsesReadingRunDate(t *testing.T) {
 	_, _, _, get, _ := standingLearner1App(t)
 	body := get("/progress")
 	read := overviewRow(t, body, "read")
-	// Reading run finished ~20 days before progNow (Oct 18) → Sep 28.
-	if !strings.Contains(read, "Placement estimate:") || !strings.Contains(read, "Sep 28") {
-		t.Fatalf("reading placement line should use the reading run date (Sep 28):\n%s", read)
+	if strings.Contains(read, "Placement estimate:") {
+		t.Fatalf("reading row still shows a placement estimate:\n%s", read)
 	}
-	if strings.Contains(read, "Oct 16") {
-		t.Fatalf("reading placement used the newer listening run date:\n%s", read)
+	place := section(t, body, "c-card pplace", "")
+	// Reading run finished ~20 days before progNow (Oct 18) → Sep 28.
+	if !strings.Contains(place, "Sep 28") {
+		t.Fatalf("placement history should use the reading run date (Sep 28):\n%s", place)
 	}
 }
 
@@ -1615,8 +1634,8 @@ func TestProgressOldRuleDaysAreDashed(t *testing.T) {
 	}
 	body := getLearner(t, h, l, "/progress")
 	est := section(t, body, "c-card pchart", `data-chart="est"`)
-	if !strings.Contains(est, "old rule") || !strings.Contains(est, "pc__line--old") {
-		t.Fatalf("rule_version=1 day should be dashed with old rule note:\n%s", est)
+	if strings.Contains(est, "old rule") || strings.Contains(est, "pc__line--old") || strings.Contains(est, "Oct 16") {
+		t.Fatalf("a rule_version=1 day is still on the chart:\n%s", est)
 	}
 	if !strings.Contains(est, "Through today") {
 		t.Fatal("missing Through today")
@@ -1652,9 +1671,8 @@ func TestProgressOldRuleDaysAreDashed(t *testing.T) {
 		}
 		body = getLearner(t, h, l, "/progress")
 		est = section(t, body, "c-card pchart", `data-chart="est"`)
-		if !strings.Contains(est, old.lbl) || !strings.Contains(est, "pc__line--old") {
-			t.Fatalf("rule_version=%d day (below current %d) should be dashed with %q:\n%s",
-				old.rv, jobs.RuleVersion, old.lbl, est)
+		if strings.Contains(est, old.lbl) || strings.Contains(est, "old rule") || strings.Contains(est, "pc__line--old") {
+			t.Fatalf("rule_version=%d day is on the chart:\n%s", old.rv, est)
 		}
 	}
 }
@@ -1741,24 +1759,15 @@ func TestProgressWaitingShowsBesideKnown(t *testing.T) {
 
 	body := getLearner(t, h, l, "/progress")
 	know := section(t, body, "c-card pknow", "")
-	if !strings.Contains(know, `aria-label="Words you know"`) {
-		t.Fatalf("missing Words you know figure:\n%s", know)
+	if strings.Contains(know, "Words you know") || strings.Contains(know, views.LabelLearnedTodayCheckTomorrow) || strings.Contains(know, views.LabelKnownExplain) {
+		t.Fatalf("the old headline is still on Progress:\n%s", know)
 	}
-	if !strings.Contains(know, `aria-label="`+views.LabelLearnedTodayCheckTomorrow+`"`) {
-		t.Fatalf("missing waiting figure:\n%s", know)
+	if !strings.Contains(know, "Hebrew from English") || !strings.Contains(know, "Understand by ear") {
+		t.Fatalf("ladder rows missing:\n%s", know)
 	}
-	if !strings.Contains(know, views.LabelLearnedTodayCheckTomorrow) {
-		t.Fatalf("missing waiting label copy:\n%s", know)
-	}
-	if !strings.Contains(know, views.LabelKnownExplain) {
-		t.Fatalf("missing known explanation:\n%s", know)
-	}
-	if !strings.Contains(know, `>`+strconv.Itoa(sum.WaitingForSecondDay)+`<`) {
-		t.Fatalf("waiting count %d missing:\n%s", sum.WaitingForSecondDay, know)
-	}
-	// Two separate role=group figures, not one mashed string.
-	if n := strings.Count(know, `role="group"`); n < 2 {
-		t.Fatalf("want ≥2 role=group figures, got %d:\n%s", n, know)
+	home := getLearner(t, h, l, "/")
+	if !strings.Contains(home, views.LabelLearnedTodayCheckTomorrow) {
+		t.Fatal("Today should still show the waiting figure")
 	}
 }
 
@@ -1781,11 +1790,11 @@ func TestProgressWaitingAbsentWhenNoneWait(t *testing.T) {
 
 	body := getLearner(t, h, l, "/progress")
 	know := section(t, body, "c-card pknow", "")
-	if strings.Contains(know, views.LabelLearnedTodayCheckTomorrow) {
-		t.Fatalf("waiting label should be absent when none wait:\n%s", know)
+	if strings.Contains(know, views.LabelLearnedTodayCheckTomorrow) || strings.Contains(know, views.LabelKnownExplain) || strings.Contains(know, "Words you know") {
+		t.Fatalf("old headline copy should be absent:\n%s", know)
 	}
-	if !strings.Contains(know, views.LabelKnownExplain) {
-		t.Fatalf("explanation should still show:\n%s", know)
+	if !strings.Contains(know, "Hebrew from English") {
+		t.Fatalf("ladder headline missing:\n%s", know)
 	}
 	home := getLearner(t, h, l, "/")
 	if strings.Contains(home, views.LabelLearnedTodayCheckTomorrow) {
@@ -1823,8 +1832,8 @@ func TestProgressRuleChangeMarkerOnlyOnMixedVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	est := section(t, getLearner(t, h, l, "/progress"), "c-card pchart", `data-chart="est"`)
-	if strings.Contains(est, `class="pchart__note pchart__old"`) || strings.Contains(est, "Dashed: old rule") {
-		t.Fatalf("current-rule-only chart must not show the change marker:\n%s", est)
+	if strings.Contains(est, `class="pchart__note pchart__old"`) || strings.Contains(est, "Dashed: old rule") || strings.Contains(est, "old rule") {
+		t.Fatalf("the chart must use one rule version:\n%s", est)
 	}
 
 	// Mix in a rule-version-3 day: marker must appear.
@@ -1847,11 +1856,8 @@ func TestProgressRuleChangeMarkerOnlyOnMixedVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	est = section(t, getLearner(t, h, l, "/progress"), "c-card pchart", `data-chart="est"`)
-	if !strings.Contains(est, `class="pchart__note pchart__old"`) || !strings.Contains(est, "Dashed: old rule") {
-		t.Fatalf("mixed v3/v4 chart must show the change marker:\n%s", est)
-	}
-	if !strings.Contains(est, "Oct 15 (old rule)") {
-		t.Fatalf("v3 day should be labeled old rule:\n%s", est)
+	if strings.Contains(est, `class="pchart__note pchart__old"`) || strings.Contains(est, "Dashed: old rule") || strings.Contains(est, "Oct 15") {
+		t.Fatalf("a mixed-version day is on the chart:\n%s", est)
 	}
 }
 
@@ -1875,30 +1881,26 @@ func TestProgressTodayAndDigestShareWaitingCounts(t *testing.T) {
 	if sum.WaitingForSecondDay != 1 || sum.KnownAnySkill < 2 {
 		t.Fatalf("summary known=%d waiting=%d", sum.KnownAnySkill, sum.WaitingForSecondDay)
 	}
-	wantKnown := strconv.Itoa(sum.KnownAnySkill)
+	wantProved := strconv.Itoa(skillSummary(sum, "recall").Ladder.Proved)
 	wantWait := strconv.Itoa(sum.WaitingForSecondDay)
 
 	progress := getLearner(t, h, l, "/progress")
 	know := section(t, progress, "c-card pknow", "")
-	reFigure := regexp.MustCompile(`(?s)aria-label="([^"]+)"[^>]*>\s*<span class="count"><bdi[^>]*>([0-9]+)</bdi>`)
-	figures := map[string]string{}
-	for _, m := range reFigure.FindAllStringSubmatch(know, -1) {
-		figures[m[1]] = m[2]
+	if strings.Contains(know, "Words you know") || strings.Contains(know, views.LabelLearnedTodayCheckTomorrow) {
+		t.Fatalf("Progress still shows the old headline:\n%s", know)
 	}
-	if figures["Words you know"] != wantKnown {
-		t.Fatalf("Progress known figure = %q, want %s (%v)", figures["Words you know"], wantKnown, figures)
-	}
-	if figures[views.LabelLearnedTodayCheckTomorrow] != wantWait {
-		t.Fatalf("Progress waiting figure = %q, want %s (%v)", figures[views.LabelLearnedTodayCheckTomorrow], wantWait, figures)
+	if got := rungCount(t, overviewRow(t, progress, "recall"), "proved"); strconv.Itoa(got) != wantProved {
+		t.Fatalf("Progress proved = %d, want %s", got, wantProved)
 	}
 
 	home := getLearner(t, h, l, "/")
+	reFigure := regexp.MustCompile(`(?s)aria-label="([^"]+)"[^>]*>\s*<span class="count"><bdi[^>]*>([0-9]+)</bdi>`)
 	homeFigs := map[string]string{}
 	for _, m := range reFigure.FindAllStringSubmatch(home, -1) {
 		homeFigs[m[1]] = m[2]
 	}
-	if homeFigs["Words you know"] != wantKnown || homeFigs[views.LabelLearnedTodayCheckTomorrow] != wantWait {
-		t.Fatalf("Today figures = %v, want known=%s waiting=%s", homeFigs, wantKnown, wantWait)
+	if homeFigs["Words you know"] != wantProved || homeFigs[views.LabelLearnedTodayCheckTomorrow] != wantWait {
+		t.Fatalf("Today figures = %v, want known=%s waiting=%s", homeFigs, wantProved, wantWait)
 	}
 
 	z := denverZone(t)

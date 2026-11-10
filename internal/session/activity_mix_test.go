@@ -210,8 +210,8 @@ func TestMixAsksARepeatedWordThroughEachCardsSkill(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("queue = %+v", got)
 	}
-	if got[0].AskSkill != fsrs.SkillRead || got[1].AskSkill != fsrs.SkillRecall {
-		t.Fatalf("skills = %q then %q, want read then recall", got[0].AskSkill, got[1].AskSkill)
+	if got[0].AskSkill != fsrs.SkillRecall || got[1].AskSkill != fsrs.SkillRead {
+		t.Fatalf("skills = %q then %q, want recall then read", got[0].AskSkill, got[1].AskSkill)
 	}
 }
 
@@ -473,7 +473,7 @@ func TestBuildSessionReadsConfusionsFromTheLearnerModel(t *testing.T) {
 	ctx := context.Background()
 	userID := mustUser(t, store)
 	fillPool(t, store, 30)
-	due, reviewed := clk.Now().Add(-time.Minute), clk.Now().Add(-time.Hour)
+	due, reviewed := clk.Now().Add(-time.Minute), clk.Now().Add(-48*time.Hour)
 	heLex := addVoicedLexeme(t, store, "מבולבל", "confused", false)
 	steadyLex := addVoicedLexeme(t, store, "יציב2", "steady", false)
 	he := addCardFor(t, store, userID, heLex, fsrs.SkillRead, due, int(fsrs.Good), reviewed)

@@ -48,6 +48,17 @@ type attemptSlice struct {
 // once for each way. Same-day review does not count. Lookback is 60 days from
 // now. Below 20 answers Enough is false. INIT-029/SPEC-007; ADR-0025 D8.
 func LaterDayResults(ctx context.Context, store *db.Store, learnerID int64, now time.Time, zone studyday.Zone) ([]PracticeResult, error) {
+	return laterDayResults(ctx, store, learnerID, now, zone, false)
+}
+
+// LaterDayResultsIncludeVoided is LaterDayResults counting attempts an active
+// void covers. Audits use it. A void whose undone_at is set always counts.
+// INIT-038/SPEC-002.
+func LaterDayResultsIncludeVoided(ctx context.Context, store *db.Store, learnerID int64, now time.Time, zone studyday.Zone) ([]PracticeResult, error) {
+	return laterDayResults(ctx, store, learnerID, now, zone, true)
+}
+
+func laterDayResults(ctx context.Context, store *db.Store, learnerID int64, now time.Time, zone studyday.Zone, includeVoided bool) ([]PracticeResult, error) {
 	if store == nil {
 		return nil, errors.New("evidence: store is not configured")
 	}
@@ -59,7 +70,7 @@ func LaterDayResults(ctx context.Context, store *db.Store, learnerID int64, now 
 	}
 
 	since := now.Add(-laterDayLookback)
-	rows, err := loadAttemptsForLaterDay(ctx, store, learnerID, since, now)
+	rows, err := loadAttemptsForLaterDay(ctx, store, learnerID, since, now, includeVoided)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +170,8 @@ type laterDayRow struct {
 
 // loadAttemptsForLaterDay reads this learner's attempts from since through now.
 // uses attempts_user_created (user_id, created_at). INIT-029/SPEC-007.
-func loadAttemptsForLaterDay(ctx context.Context, store *db.Store, learnerID int64, since, now time.Time) ([]laterDayRow, error) {
+// An active void leaves that attempt out unless includeVoided is set. INIT-038/SPEC-002.
+func loadAttemptsForLaterDay(ctx context.Context, store *db.Store, learnerID int64, since, now time.Time, includeVoided bool) ([]laterDayRow, error) {
 	conn, err := store.DB()
 	if err != nil {
 		return nil, err
@@ -170,7 +182,7 @@ func loadAttemptsForLaterDay(ctx context.Context, store *db.Store, learnerID int
 	rows, err := conn.QueryContext(ctx, `
 		SELECT id, lexeme_id, activity, source, correct, created_at
 		FROM attempts
-		WHERE user_id = ? AND created_at >= ? AND created_at <= ?
+		WHERE user_id = ? AND created_at >= ? AND created_at <= ?`+laterDayVoidSQL(includeVoided)+`
 		ORDER BY created_at ASC, id ASC`,
 		learnerID,
 		db.FormatTime(since.Add(-24*time.Hour)),
@@ -205,4 +217,15 @@ func loadAttemptsForLaterDay(ctx context.Context, store *db.Store, learnerID int
 		return nil, fmt.Errorf("evidence: later-day attempts: %w", err)
 	}
 	return out, nil
+}
+
+// laterDayVoidSQL hides an attempt an active void names. The attempts table
+// in this query has no alias. INIT-038/SPEC-002.
+func laterDayVoidSQL(includeVoided bool) string {
+	if includeVoided {
+		return ""
+	}
+	return ` AND NOT EXISTS (
+		SELECT 1 FROM answer_voids AS av
+		WHERE av.attempt_id = attempts.id AND av.undone_at IS NULL)`
 }

@@ -1,7 +1,7 @@
 # Initiative: Go server port
 
 **Initiative ID:** INIT-014
-**Status:** approved 2026-10-18. SPEC-001 is complete: [ADR-0016](../../../docs/decisions/ADR-0016-go-server-port.md) is Accepted. The build phases Go-1 through Go-17 stay in that ADR. They are not specs yet.
+**Status:** closed 2026-11-09, done by other means. The port was carried out through INIT-015 and later initiatives, and production runs the Go server (build `cb699bc`, deployed 2026-11-09). No specs remain. Earlier status: approved 2026-10-18. SPEC-001 is complete: [ADR-0016](../../../docs/decisions/ADR-0016-go-server-port.md) is Accepted. The build phases Go-1 through Go-17 stay in that ADR. They are not specs yet.
 **Slug:** INIT-014-go-server-port
 **Discipline Profile:** `software`
 **Created:** 2026-10-18

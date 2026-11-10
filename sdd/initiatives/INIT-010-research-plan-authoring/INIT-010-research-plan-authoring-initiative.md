@@ -1,7 +1,7 @@
 # Initiative: Build a research-shaped plan from the admin builder and from MCP
 
 **Initiative ID:** INIT-010
-**Status:** on_track (SPEC-001, SPEC-002, and SPEC-003 complete 2026-10-14. SPEC-004, SPEC-005, and SPEC-006 are not started. `/editor/` is not live until the server restarts.)
+**Status:** closed 2026-11-09, not needed. The `/editor/` plan builder belonged to the Node app that the Go port replaced, and lessons will come from the tutor's classes rather than a plan builder (BRAIN-001). SPEC-004 to SPEC-006 will not be started. Earlier status: SPEC-001 to SPEC-003 complete 2026-10-14.
 **Slug:** INIT-010-research-plan-authoring
 **Discipline Profile:** `software`
 **Created:** 2026-10-14

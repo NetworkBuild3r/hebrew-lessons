@@ -797,7 +797,8 @@ func (s *Store) advancePlayerRun(ctx context.Context, tx *sql.Tx, run PlayerRun,
 // enqueueNewWords inserts a new read card and a new recall card for each
 // new word in the lesson, due at now. INIT-023/SPEC-002: it also inserts a
 // listen card when this lesson has a listen_pick that targets that word and
-// the word has a clip. A card the learner already has is left unchanged.
+// the word has a clip (INIT-038/SPEC-003, the one lookup). A card the learner
+// already has is left unchanged.
 // ListDueCards keeps these out until finished_at is set, which this
 // transaction has just done.
 func enqueueNewWords(ctx context.Context, tx *sql.Tx, userID, unitID int64, lessonIx int, now time.Time) error {
@@ -883,11 +884,11 @@ func listenTargetsWithAudio(ctx context.Context, tx *sql.Tx, unitID int64, lesso
 		if id == 0 || !fresh[id] {
 			continue
 		}
-		var audio sql.NullString
-		if err := tx.QueryRowContext(ctx, `SELECT audio_id FROM lexemes WHERE id = ?`, id).Scan(&audio); err != nil {
-			return nil, fmt.Errorf("db: lesson cards: %w", err)
+		has, err := lexemeHasStoredClip(ctx, tx, id)
+		if err != nil {
+			return nil, err
 		}
-		if audio.Valid && audio.String != "" {
+		if has {
 			out[id] = true
 		}
 	}

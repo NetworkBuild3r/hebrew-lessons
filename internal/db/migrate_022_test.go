@@ -82,11 +82,11 @@ func TestMigrate022KeepsRowsAndDefaults(t *testing.T) {
 		t.Fatalf("migrate 022: %v", err)
 	}
 	want := make([]int, 0, 22)
-	for i := 1; i <= 22; i++ {
+	for i := 1; i <= 23; i++ {
 		want = append(want, i)
 	}
 	if got := m6Applied(t, conn); !reflect.DeepEqual(got, want) {
-		t.Fatalf("versions after = %v, want 1..22", got)
+		t.Fatalf("versions after = %v, want 1..23", got)
 	}
 	if got := m6Dump(t, conn, `SELECT user_id, day, skill, state, count, est_known FROM daily_snapshots ORDER BY user_id, day, skill, state`); !reflect.DeepEqual(got, before) {
 		t.Fatalf("snapshot core columns changed\n got: %v\nwant: %v", got, before)

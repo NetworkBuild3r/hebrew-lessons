@@ -1,6 +1,6 @@
 # INIT-031: The connection feeds the learner, and the agent owns the lessons it built
 
-**Initiative ID:** INIT-031 · **Status:** planned · **Created:** 2026-11-05 · **Owner:** Brian Nelson
+**Initiative ID:** INIT-031 · **Status:** closed 2026-11-09, not needed. It would have let the agent own and rewrite the lessons it built, while BRAIN-001 retires AI-written units and the reviser (INIT-038 turns auto-publish off). No spec was started · **Created:** 2026-11-05 · **Owner:** Brian Nelson
 **Discipline Profile:** `software` · **Ticket:** none · **Branch:** `main`
 **Source:** Brian, 2026-11-05. First: the connection has to expose the revision workflow before improvements can be published safely. Then: "Agent can delete, remove, rebuild and mix match etc anything lessons it built. The MCP is to feed it user data, so the AI makes informed and correct decisions."
 

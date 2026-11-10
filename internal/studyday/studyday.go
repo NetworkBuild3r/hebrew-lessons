@@ -156,3 +156,18 @@ func DueCutoff(now time.Time, z Zone) time.Time {
 	}
 	return start
 }
+
+// EffectiveDue is when a card can be asked. A due time that falls inside the
+// same study day as the review that scheduled it is the next cutoff after that
+// review (ADR-0033 D10). A card that has never been reviewed keeps its due.
+// A zone with no location leaves due unchanged.
+func EffectiveDue(due, reviewed time.Time, z Zone) time.Time {
+	if reviewed.IsZero() || z.Loc == nil {
+		return due
+	}
+	cutoff := DueCutoff(reviewed, z)
+	if due.Before(cutoff) {
+		return cutoff
+	}
+	return due
+}

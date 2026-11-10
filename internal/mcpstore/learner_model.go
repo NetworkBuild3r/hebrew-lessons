@@ -81,7 +81,8 @@ func modelWord(w learner.WordState) mcp.ModelWord {
 	out.ConfusedWith = confusedWith(w.Confusions)
 	for _, sk := range w.Skills {
 		out.Skills = append(out.Skills, mcp.ModelSkill{
-			Skill: sk.Skill, State: string(sk.State), Attempts: sk.Attempts, Accuracy: sk.Accuracy,
+			Skill: sk.Skill, State: string(sk.State), Ladder: string(sk.Ladder),
+			Attempts: sk.Attempts, Accuracy: sk.Accuracy,
 			LastSeen: timePtr(sk.LastSeen), Stability: sk.Stability,
 		})
 	}
@@ -150,6 +151,7 @@ func (s *Store) LearnerModelSummary(ctx context.Context, id int64) (mcp.ModelSum
 			Counts: counts, EstimatedKnown: sk.EstimatedKnown,
 			EstimateSource: sk.EstimateSource, DueReviews: sk.DueReviews,
 			Retention: labelRetention(sk.Retention, asOfDay),
+			Ladder:    ladderCounts(sk.Ladder),
 		}
 		if sk.EstimateSource == learner.EstimateSourcePlacement && !sk.PlacementRunAt.IsZero() {
 			at := sk.PlacementRunAt.UTC()

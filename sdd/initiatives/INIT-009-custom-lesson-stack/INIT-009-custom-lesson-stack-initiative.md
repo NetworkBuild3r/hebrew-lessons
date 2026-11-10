@@ -1,7 +1,7 @@
 # Initiative: Custom lessons in an ordered plan
 
 **Initiative ID:** INIT-009
-**Status:** paused 2026-10-14. The operator corrected the model the same day: a lesson is the activities (words, story, match, spelling, reinforcement), and a plan is those lessons stacked. INIT-010 plans that. Do not execute the rest of INIT-009. SPEC-003's "no plan yet" gate is in the way and INIT-010/SPEC-004 removes it.
+**Status:** closed 2026-11-09, not needed. An admin plan builder is out of scope for a personal tool, and lessons will come from the tutor's classes, not from a plan builder (BRAIN-001; INIT-038 stops AI-written units). Earlier status: paused 2026-10-14. The operator corrected the model the same day: a lesson is the activities (words, story, match, spelling, reinforcement), and a plan is those lessons stacked. INIT-010 plans that. Do not execute the rest of INIT-009. SPEC-003's "no plan yet" gate is in the way and INIT-010/SPEC-004 removes it.
 **Slug:** INIT-009-custom-lesson-stack
 **Discipline Profile:** `software` (config §7.1 `active_discipline_profiles` was not present in the skill config read for this session; the procedure fails closed to `software`, and that is the profile this repo already uses)
 **Created:** 2026-10-14

@@ -71,8 +71,13 @@ func TestGradeUpdatesCardAndLog(t *testing.T) {
 	if got.Reps != int(want.Card.Reps) || got.Lapses != int(want.Card.Lapses) {
 		t.Fatalf("reps/lapses = %d/%d, want %d/%d", got.Reps, got.Lapses, want.Card.Reps, want.Card.Lapses)
 	}
-	if !got.Due.Equal(want.Card.Due) {
-		t.Fatalf("due = %s, want %s", got.Due, want.Card.Due)
+	zone, err := store.StudyZone(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantDue := SameDayDue(want.Card.Due, clk.Now(), zone)
+	if !got.Due.Equal(wantDue) {
+		t.Fatalf("due = %s, want cutoff %s (fsrs %s)", got.Due, wantDue, want.Card.Due)
 	}
 	if !got.LastReview.Equal(clk.Now()) {
 		t.Fatalf("last review = %s, want the fake clock %s", got.LastReview, clk.Now())

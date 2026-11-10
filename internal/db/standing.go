@@ -68,8 +68,8 @@ func (s *Store) AttemptTally(ctx context.Context, userID int64, since, asOf time
 	return out, nil
 }
 
-// CountLexemesWithAudio returns how many lexemes have a non-empty audio_id.
-// Listening askability reads this: review HasAudio comes from lexemes.audio_id.
+// CountLexemesWithAudio returns how many lexemes have a clip by the one
+// lookup (INIT-038/SPEC-003). Listening askability reads this.
 func (s *Store) CountLexemesWithAudio(ctx context.Context) (int, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
@@ -77,8 +77,8 @@ func (s *Store) CountLexemesWithAudio(ctx context.Context) (int, error) {
 	}
 	var n int
 	if err := conn.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM lexemes
-		WHERE audio_id IS NOT NULL AND audio_id != ''`).Scan(&n); err != nil {
+		SELECT COUNT(*) FROM lexemes AS l
+		WHERE `+LexemeHasClipSQL("l")).Scan(&n); err != nil {
 		return 0, fmt.Errorf("db: count lexemes with audio: %w", err)
 	}
 	return n, nil

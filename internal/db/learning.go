@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
 
 const cardColumns = `id, user_id, lexeme_id, skill, state, due, stability, difficulty, reps, lapses, last_review, suspended`
@@ -274,6 +276,45 @@ func (s *Store) ApplyReview(ctx context.Context, card Card, log ReviewLog) error
 	return nil
 }
 
+// SetCardSchedule writes the schedule columns of an existing card.
+// It does not append a review_log row and does not change suspended or created_at.
+// A zero LastReview is stored as NULL. The void replay uses it to put the card
+// back where the remaining reviews leave it. INIT-038/SPEC-004.
+func (s *Store) SetCardSchedule(ctx context.Context, card Card) error {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return err
+	}
+	if card.ID == 0 {
+		return errors.New("db: card id is empty")
+	}
+	if card.State == "" {
+		return errors.New("db: card state is empty")
+	}
+	var last any
+	if !card.LastReview.IsZero() {
+		last = FormatTime(card.LastReview)
+	}
+	res, err := conn.ExecContext(ctx, `
+		UPDATE cards
+		SET state = ?, due = ?, stability = ?, difficulty = ?, reps = ?, lapses = ?, last_review = ?
+		WHERE id = ?`,
+		card.State, FormatTime(card.Due), card.Stability, card.Difficulty,
+		card.Reps, card.Lapses, last, card.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("db: update card schedule: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("db: update card schedule: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("db: card %d: not found", card.ID)
+	}
+	return nil
+}
+
 // SetCardSuspended sets cards.suspended. A suspended card stays in the table
 // and stays out of the due query.
 func (s *Store) SetCardSuspended(ctx context.Context, id int64, suspended bool) error {
@@ -319,6 +360,7 @@ func (s *Store) ListDueCards(ctx context.Context, userID int64, now time.Time) (
 		WHERE c.user_id = ?
 		  AND c.suspended = 0
 		  AND c.due <= ?
+		  AND `+listenCardHasClipSQL("c")+`
 `+introNotFinished+`
 		ORDER BY c.due, c.id`, userID, FormatTime(now), LearnerScope(userID))
 	if err != nil {
@@ -336,7 +378,24 @@ func (s *Store) ListDueCards(ctx context.Context, userID int64, now time.Time) (
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("db: list due cards: %w", err)
 	}
-	return out, nil
+	// A same-day learning step is due at the next cutoff, not at the short
+	// interval already stored on the card (ADR-0033 D10, INIT-038/SPEC-006).
+	// Clipless listen cards are already left out by listenCardHasClipSQL.
+	z, err := s.StudyZone(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	kept := out[:0]
+	for _, card := range out {
+		if studyday.EffectiveDue(card.Due, card.LastReview, z).After(now) {
+			continue
+		}
+		kept = append(kept, card)
+	}
+	if len(kept) == 0 {
+		return nil, nil
+	}
+	return kept, nil
 }
 
 // ReviewLogs returns the card's log, oldest first.

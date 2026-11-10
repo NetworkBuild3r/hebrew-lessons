@@ -3,6 +3,7 @@ package evidence
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
 
 // Words used by the tests. kelev and kala differ by one letter (bet and he).
@@ -57,6 +59,21 @@ func (e *env) lexeme(text string) int64 {
 		e.t.Fatal(err)
 	}
 	return id
+}
+
+// clip stores an audio_assets row for the lexeme's exact text so a listen
+// card may be created (INIT-038/SPEC-003).
+func (e *env) clip(lexemeID int64) {
+	e.t.Helper()
+	var text string
+	if err := e.conn().QueryRow(`SELECT text_nfc FROM lexemes WHERE id = ?`, lexemeID).Scan(&text); err != nil {
+		e.t.Fatal(err)
+	}
+	if _, err := e.store.InsertAudio(context.Background(), db.Asset{
+		ID: fmt.Sprintf("%064x", lexemeID), TextNFC: text, Voice: "v", Model: "legacy", Bytes: 4, CreatedAt: e.clk.t,
+	}); err != nil {
+		e.t.Fatal(err)
+	}
 }
 
 func (e *env) conn() *sql.DB {
@@ -110,6 +127,7 @@ func (e *env) attempt(lexeme int64) Attempt {
 func TestAttemptWritesOneAttemptAndOneReview(t *testing.T) {
 	e := newEnv(t)
 	lex := e.lexeme(kelev)
+	e.clip(lex)
 	unit, err := testharness.InsertUnit(context.Background(), e.store, "Unit", "published")
 	if err != nil {
 		t.Fatal(err)
@@ -300,8 +318,13 @@ func TestANewCardDoesNotJumpAheadForAFastAnswer(t *testing.T) {
 	if !ok {
 		t.Fatal("the fast answer created no card")
 	}
-	if wait := card.Due.Sub(shown); wait <= 0 || wait > 15*time.Minute {
-		t.Fatalf("new card due in %v, want within 15 minutes", wait)
+	zone, err := e.store.StudyZone(ctx, e.user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantDue := studyday.DueCutoff(shown, zone)
+	if !card.Due.Equal(wantDue) {
+		t.Fatalf("new card due %s, want the next cutoff %s", card.Due, wantDue)
 	}
 
 	if _, err := e.conn().ExecContext(ctx, `UPDATE cards SET state = 'review' WHERE id = ?`, card.ID); err != nil {

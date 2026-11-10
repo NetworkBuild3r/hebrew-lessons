@@ -59,6 +59,7 @@ func TestSteakCheckpointOmitsUntaughtButtons(t *testing.T) {
 				// Bank line so the newWords enter lesson_items before the cloze.
 				{Type: units.ActivityStory, Text: tbGar + " " + tbRoeh + " " + tbOkhel + " " + tbShote},
 				{Type: units.ActivityCloze, Text: tbAni + " " + tbGar, Translation: "I live", Target: tbGar},
+				{Type: units.ActivityRecall, Text: tbGar},
 			},
 		}},
 	}, "shared")
@@ -74,10 +75,17 @@ func TestSteakCheckpointOmitsUntaughtButtons(t *testing.T) {
 		}
 		body = ans.Body.String()
 	}
-	buttons := choiceValuesAllowEmpty(t, body)
-	if len(buttons) == 0 {
-		t.Fatal("expected graded cloze buttons from taught newWords")
+	if buttons := choiceValuesAllowEmpty(t, body); len(buttons) != 0 {
+		t.Fatalf("cloze is a reveal, got buttons %v", buttons)
 	}
+	if n := countRows(t, fx.store, `SELECT COUNT(*) FROM attempts WHERE user_id = ?`, fx.userID); n != 0 {
+		t.Fatalf("cloze recorded %d attempts", n)
+	}
+	recall := postLesson(t, fx.h, fx.cookie, path, itoa(mustRunID(t, body)), "continue", true, lessonCSRF)
+	if recall.Code != http.StatusOK {
+		t.Fatalf("continue cloze: %d", recall.Code)
+	}
+	buttons := choiceValues(t, recall.Body.String())
 	for _, id := range buttons {
 		if id == itoa(ids[tbLehachin]) || id == itoa(ids[tbOseh]) {
 			t.Fatalf("untaught button %s among %v", id, buttons)

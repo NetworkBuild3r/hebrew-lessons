@@ -1,6 +1,6 @@
 # INIT-036: "Known" means remembered on a later day, and the learner can hear the difference
 
-**Initiative ID:** INIT-036 · **Status:** on_track · **Created:** 2026-11-08 · **Owner:** Brian Nelson
+**Initiative ID:** INIT-036 · **Status:** closed 2026-11-09. SPEC-001 to SPEC-007 shipped in build `cb699bc`. SPEC-008 to SPEC-012 (the sound-contrast drill) are not needed: they wait on a native speaker to approve the pairs, and no one will check content (BRAIN-001). The "known" rule is replaced by INIT-038's "proved" ladder · **Created:** 2026-11-08 · **Owner:** Brian Nelson
 **Discipline Profile:** `software` · **Ticket:** none · **Branch:** `main` (deliberately not a worktree: the checkout carries about 46 line-ending-only modified files, and the repo's own initiatives such as INIT-032 work in place on `main`)
 **Source:** [ASMT-003](../../assessments/ASMT-003-hebrew-web-app/ASMT-003-hebrew-web-app-assessment-report.md), phases 1 and 2 of its spec skeleton. Brian's answers to the handoff questions, 2026-11-08: self-reported speaking counts toward nothing until speech can be checked; the later-day rule and the headline follow the research.
 

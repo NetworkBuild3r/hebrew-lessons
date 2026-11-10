@@ -43,7 +43,17 @@ type DirectionStanding struct {
 	Help                   []WordNote
 	Strong                 []WordNote
 	Askable                bool
+	// Ladder is this skill's proved rung, counted out of taught words (ADR-0033 D4).
+	Ladder LadderCounts
 }
+
+// Headline names for the two rows Progress leads with (ADR-0033 D6).
+// Listen is Hebrew heard and a meaning picked. Recall is English shown and
+// Hebrew typed or picked. Pronunciation is not a row.
+const (
+	HeadlineListen = "Understand by ear"
+	HeadlineRecall = "Hebrew from English"
+)
 
 // WordNote is one word on a help or strong list.
 type WordNote struct {
@@ -151,6 +161,7 @@ func buildDirection(skill string, snap Snapshot, tallies map[int64]db.AttemptTal
 		d.Learning = ss.Counts[Learning]
 		d.Struggling = ss.Counts[Struggling]
 		d.Regressed = ss.Counts[Regressed]
+		d.Ladder = ss.Ladder
 		break
 	}
 	for _, row := range tallies {

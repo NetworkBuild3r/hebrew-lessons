@@ -19,7 +19,7 @@ import (
 
 func TestWordPageVerbPresentAndPast(t *testing.T) {
 	now := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
-	store, h := openShell(t, fixedClock(now), nil, nil)
+	store, h := openShellFlags(t, fixedClock(now), nil, nil, Options{ShowRoots: true})
 	learner := addLearner(t, store, "a@example.com", "sub-word-verb", now)
 	ctx := context.Background()
 
@@ -160,7 +160,7 @@ func TestWordPageVerbPresentAndPast(t *testing.T) {
 
 func TestWordPageLinksFromMeAndCard(t *testing.T) {
 	now := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
-	store, h := openShell(t, fixedClock(now), nil, nil)
+	store, h := openShellFlags(t, fixedClock(now), nil, nil, featuresOn())
 	learner := addLearner(t, store, "b@example.com", "sub-word-links", now)
 	ctx := context.Background()
 

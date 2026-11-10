@@ -8,9 +8,24 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 
 	gofsrs "github.com/open-spaced-repetition/go-fsrs/v3"
 )
+
+// SameDayDue is the due time a review stores. A next due that falls inside
+// the same study day as now is the next study-day cutoff (ADR-0033 D10).
+// A zone with no location leaves due unchanged.
+func SameDayDue(due, now time.Time, z studyday.Zone) time.Time {
+	if z.Loc == nil {
+		return due
+	}
+	cutoff := studyday.DueCutoff(now, z)
+	if due.Before(cutoff) {
+		return cutoff
+	}
+	return due
+}
 
 // Review schedules cards.
 // The study queue is package session. The clock is the process clock from configuration.
@@ -157,6 +172,11 @@ func (r *Review) GradeWithChoice(ctx context.Context, cardID int64, rating Ratin
 	next := row
 	next.State = state
 	next.Due = info.Card.Due
+	z, err := r.store.StudyZone(ctx, row.UserID)
+	if err != nil {
+		return err
+	}
+	next.Due = SameDayDue(next.Due, now, z)
 	next.Stability = info.Card.Stability
 	next.Difficulty = info.Card.Difficulty
 	next.Reps = int(info.Card.Reps)

@@ -16,6 +16,8 @@ func TestThresholdsArePinned(t *testing.T) {
 		{"AccuracyFloorPercent", AccuracyFloorPercent, 60},
 		{"KnownRecentRight", KnownRecentRight, 3},
 		{"KnownStudyDays", KnownStudyDays, 2},
+		{"ProvedSuccessDays", ProvedSuccessDays, 3},
+		{"ProvedSpanDays", ProvedSpanDays, 7},
 		{"LearningSuccesses", LearningSuccesses, 3},
 		{"ConfusionPairMin", ConfusionPairMin, 3},
 		{"ConfusionWindowDays", ConfusionWindowDays, 30},

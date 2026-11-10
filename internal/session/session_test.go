@@ -347,7 +347,7 @@ func TestConfusionMarksStruggling(t *testing.T) {
 	ctx := context.Background()
 	userID := mustUser(t, store)
 	fillPool(t, store, 30)
-	reviewed := clk.Now().Add(-time.Hour)
+	reviewed := clk.Now().Add(-48 * time.Hour)
 	due := clk.Now().Add(-time.Minute)
 	heLex := addVoicedLexeme(t, store, "בלבול", "confusion", false)
 	he := addCardFor(t, store, userID, heLex, fsrs.SkillRead, due, int(fsrs.Good), reviewed)
@@ -399,12 +399,12 @@ func TestLapseRules(t *testing.T) {
 	userID := mustUser(t, store)
 	now := clk.Now()
 	due := now.Add(-time.Minute)
-	lapsed := addCard(t, store, userID, "נפילות", fsrs.SkillRead, due, StruggleLapses, int(fsrs.Good), now.Add(-time.Hour), false)
+	lapsed := addCard(t, store, userID, "נפילות", fsrs.SkillRead, due, StruggleLapses, int(fsrs.Good), now.Add(-48*time.Hour), false)
 	recent := addCard(t, store, userID, "טרי", fsrs.SkillRead, due, 1, int(fsrs.Again), now.Add(-48*time.Hour), false)
 	insertReview(t, store, recent, int(fsrs.Good), now.Add(-24*time.Hour))
 	old := addCard(t, store, userID, "ישן", fsrs.SkillRead, due, 1, int(fsrs.Again), now.Add(-8*24*time.Hour), false)
 	insertReview(t, store, old, int(fsrs.Good), now.Add(-time.Hour))
-	clean := addCard(t, store, userID, "נקי", fsrs.SkillRead, due, 0, int(fsrs.Good), now.Add(-time.Hour), false)
+	clean := addCard(t, store, userID, "נקי", fsrs.SkillRead, due, 0, int(fsrs.Good), now.Add(-48*time.Hour), false)
 
 	got := drain(t, mustBuild(t, svc, userID))
 	flags := map[int64]bool{}
@@ -433,7 +433,7 @@ func TestNotDueKnownOnlyFillTheGap(t *testing.T) {
 		// INIT-027/SPEC-004 ac-1
 		svc, store, clk := openSvc(t, 1)
 		userID := mustUser(t, store)
-		reviewed := clk.Now().Add(-time.Hour)
+		reviewed := clk.Now().Add(-48 * time.Hour)
 		var dueIDs []int64
 		for i := 0; i < 5; i++ {
 			due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
@@ -469,7 +469,7 @@ func TestNotDueKnownOnlyFillTheGap(t *testing.T) {
 	t.Run("skip later cards when due known fill the cap", func(t *testing.T) {
 		svc, store, clk := openSvc(t, 1)
 		userID := mustUser(t, store)
-		reviewed := clk.Now().Add(-time.Hour)
+		reviewed := clk.Now().Add(-48 * time.Hour)
 		dueSet := map[int64]bool{}
 		for i := 0; i < 20; i++ {
 			due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
@@ -511,7 +511,7 @@ func TestEmptyDeck(t *testing.T) {
 func TestDeterministic(t *testing.T) {
 	_, store, clk := openSvc(t, 1)
 	userID := mustUser(t, store)
-	reviewed := clk.Now().Add(-2 * time.Hour)
+	reviewed := clk.Now().Add(-48 * time.Hour)
 	due := clk.Now().Add(-time.Hour)
 	for i := 0; i < 25; i++ {
 		addCard(t, store, userID, fmt.Sprintf("tie-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Good), reviewed, false)
@@ -603,7 +603,7 @@ func TestRecordRestoresClaimWhenGradeFails(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	userID := mustUser(t, store)
 	fillPool(t, store, 30)
-	reviewed := clk.Now().Add(-time.Hour)
+	reviewed := clk.Now().Add(-48 * time.Hour)
 	due := clk.Now().Add(-time.Minute)
 	lex := addVoicedLexeme(t, store, "נכשל", "failed", false)
 	id := addCardFor(t, store, userID, lex, fsrs.SkillRead, due, int(fsrs.Good), reviewed)
@@ -636,7 +636,7 @@ func TestLatestRatingIgnoresTheFuture(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	userID := mustUser(t, store)
 	now := clk.Now()
-	id := addCard(t, store, userID, "עתיד", fsrs.SkillRecall, now.Add(-time.Minute), 0, int(fsrs.Good), now.Add(-time.Hour), false)
+	id := addCard(t, store, userID, "עתיד", fsrs.SkillRecall, now.Add(-time.Minute), 0, int(fsrs.Good), now.Add(-48*time.Hour), false)
 	insertReview(t, store, id, int(fsrs.Hard), now.Add(24*time.Hour))
 	sess := mustBuild(t, svc, userID)
 	card, ok := sess.Next()
@@ -997,9 +997,9 @@ func TestFinishedLessonWordsEnterReview(t *testing.T) {
 	waitingHe, waitingEn := enqueuePair(t, store, userID, waitingWord, now)
 
 	got := drain(t, mustBuild(t, svc, userID))
-	// Lesson position still beats card id. The two skills of one word are
-	// not left adjacent: early read, late read, early recall, late recall.
-	want := []int64{earlyHe, lateHe, earlyEn, lateEn}
+	// Lesson position still beats card id. Typing is asked before the meaning
+	// pick, and the two skills of one word are not left adjacent.
+	want := []int64{earlyEn, lateEn, earlyHe, lateHe}
 	if ids := idsOf(got); !sameIDs(ids, want) {
 		t.Fatalf("queue = %v, want %v", ids, want)
 	}
@@ -1042,7 +1042,7 @@ func TestNewCardCaps(t *testing.T) {
 			t.Fatalf("len = %d, want %d", len(got), NewPerSessionMid)
 		}
 		// The five earliest new cards, with the two skills of one word split.
-		want := []int64{ids[0], ids[2], ids[1], ids[3], ids[4]}
+		want := []int64{ids[1], ids[3], ids[0], ids[2], ids[4]}
 		if !sameIDs(idsOf(got), want) {
 			t.Fatalf("queue = %v, want %v", idsOf(got), want)
 		}
@@ -1324,12 +1324,12 @@ func seedLearner1(t *testing.T, store *db.Store, now time.Time, userID int64) le
 	fix.learning, err = store.InsertCard(ctx, db.Card{
 		UserID: userID, LexemeID: lex, Skill: fsrs.SkillRead, State: fsrs.StateLearning,
 		Due: now.Add(-time.Minute), Stability: 0.5, Difficulty: 5, Reps: 1, Lapses: 0,
-		LastReview: now.Add(-2 * time.Hour),
+		LastReview: now.Add(-48 * time.Hour),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	insertReview(t, store, fix.learning, int(fsrs.Hard), now.Add(-2*time.Hour))
+	insertReview(t, store, fix.learning, int(fsrs.Hard), now.Add(-48*time.Hour))
 
 	// Extra due known cards give interleaveNew a base long enough for the seed
 	// to place new cards differently. A few not-due cards must stay out.
@@ -1448,8 +1448,8 @@ func assertLearner1Queue(t *testing.T, cards []CardRef, fix learner1) {
 	if i := struggleRun(cards); i >= 0 {
 		t.Fatalf("struggle run at %d: %s", i, describeQueue(cards))
 	}
-	// The read card of a new pair stays ahead of its recall card.
-	if indexOf(cards, fix.firstNew[0]) > indexOf(cards, fix.firstNew[1]) {
+	// Typing from English is asked before the meaning pick of the same new word.
+	if indexOf(cards, fix.firstNew[1]) > indexOf(cards, fix.firstNew[0]) {
 		t.Fatalf("new pair order flipped: %s", describeQueue(cards))
 	}
 }
@@ -1560,13 +1560,13 @@ func TestOneLexemePoolEnds(t *testing.T) {
 		insertReview(t, store, recall, int(fsrs.Good), reviewed)
 		sess := mustBuild(t, svc, userID)
 		first, ok := sess.Next()
-		if !ok || first.CardID != read {
-			t.Fatalf("first = %+v ok=%v, want %d", first, ok, read)
+		if !ok || first.CardID != recall {
+			t.Fatalf("first = %+v ok=%v, want %d", first, ok, recall)
 		}
-		revealAndRecord(t, sess, ctx, read, fsrs.Again)
+		revealAndRecord(t, sess, ctx, recall, fsrs.Again)
 		second, ok := sess.Next()
-		if !ok || second.CardID != recall {
-			t.Fatalf("second = %+v ok=%v, want %d", second, ok, recall)
+		if !ok || second.CardID != read {
+			t.Fatalf("second = %+v ok=%v, want %d", second, ok, read)
 		}
 		if extra, ok := sess.Next(); ok {
 			t.Fatalf("one lexeme queued %+v after the pair", extra)

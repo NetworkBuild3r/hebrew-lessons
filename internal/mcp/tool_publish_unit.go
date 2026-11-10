@@ -25,7 +25,7 @@ const publishUnitDescription = "Publish one unit. Admin only, including the stat
 	"A listen_pick of two or more words that are in the lexicon with no translation blocks a new draft, and it blocks an older revision. Checking the current published revision reports that missing translation as a warning. " +
 	"Pedagogy warnings do not block, and they are included in issues. " +
 	"Publishing the same revision again reports unchanged and writes nothing. " +
-	"A learner-scoped unit is refused here: it publishes only through put_unit with a briefId."
+	"A learner-scoped unit is refused here. When learner auto-publish is off, the refusal is the ADR-0033 note. When it is on, the unit publishes only through put_unit with a briefId."
 
 var errLearnerUnitNotHere = errors.New("A learner-scoped unit is not published with publish_unit. Use put_unit with publish true and the learner's briefId, so the brief checks run.")
 
@@ -67,8 +67,12 @@ func (s *service) publishUnit(ctx context.Context, _ *mcp.CallToolRequest, in pu
 		return nil, out, storeErr("The unit could not be read.", err)
 	}
 	if learnerScope(snap.Scope) {
-		// publish_unit runs only the v2 rules. A learner unit reaches Today only through
-		// the brief checks, so this tool must not be a way around them (SPEC-020 und-2).
+		// ADR-0033 D11 (INIT-038/SPEC-007): while learner auto-publish is off, refuse
+		// with the same note put_unit returns. When it is on, publish_unit still
+		// refuses a learner unit, as it does today (SPEC-020 und-2).
+		if !s.learnerAutoPublish {
+			return nil, out, ErrLearnerAutoPublishOff
+		}
 		return nil, out, errLearnerUnitNotHere
 	}
 	doc := snap.Doc
@@ -135,6 +139,10 @@ func (s *service) publishLearnerDraft(ctx context.Context, scope, briefID string
 	if !learnerScope(scope) {
 		return saved, false, issues, "Shared units are published with publish_unit, so the draft was kept.", nil
 	}
+	// ADR-0033 D11 (INIT-038/SPEC-007). The draft is already saved. Nothing is published.
+	if !s.learnerAutoPublish {
+		return saved, false, issues, LearnerAutoPublishNote, nil
+	}
 	learnerID, ok := learnerScopeID(scope)
 	if !ok {
 		return saved, false, issues, "The scope has no learner id, so the draft was kept.", nil
@@ -199,6 +207,8 @@ func (s *service) publishLearnerDraft(ctx context.Context, scope, briefID string
 		// INIT-030/SPEC-005: a run started after the revision brief was built.
 		out := sortIssues(append(append([]units.Issue(nil), checked...), blockIssue(RuleBriefReviseStarted, "this unit has been started and cannot be revised")))
 		return saved, false, out, blockedReason(out), nil
+	case errors.Is(err, ErrLearnerAutoPublishOff):
+		return saved, false, checked, LearnerAutoPublishNote, nil
 	case errors.Is(err, ErrUnitNotInScope):
 		slog.Warn("mcp auto publish refused", "unit", saved.UnitID, "learner", learnerID)
 		return saved, false, checked, "The unit is not in that learner's scope, so the draft was kept.", nil

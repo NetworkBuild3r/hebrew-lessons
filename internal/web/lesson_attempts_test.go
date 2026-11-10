@@ -11,6 +11,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/lexicon"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
@@ -71,13 +72,20 @@ func TestLessonChecksWriteAttempts(t *testing.T) {
 		NewWords: []string{hello, morning},
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
 			{Type: units.ActivityRecall, Text: hello},
-			{Type: units.ActivityListenPick, Text: line},
+			{Type: units.ActivityListenPick, Text: hello},
 			{Type: units.ActivityProduce, Text: hello},
 			{Type: units.ActivityCloze, Text: line},
 			{Type: units.ActivityStory, Text: line + " " + evening + " " + night},
 		}}},
 	}, "shared")
 	publish(t, store, earlierID, unitID)
+	// A right listen_pick schedules a listen card only when the word has a clip.
+	// INIT-038/SPEC-003.
+	if _, err := store.InsertAudio(ctx, db.Asset{
+		ID: strings.Repeat("ab", 32), TextNFC: hello, Voice: "v", Model: "legacy", Bytes: 4, CreatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	when := db.FormatTime(now)
 	if _, err := store.ExecContext(ctx, `
 		INSERT INTO lesson_runs (user_id, unit_id, lesson_ix, started_at, finished_at, score)
@@ -128,16 +136,16 @@ func TestLessonChecksWriteAttempts(t *testing.T) {
 	post("continue")
 	post(itoa(ids[morning])) // produce: wrong pick
 	post("continue")
-	post(itoa(ids[hello])) // cloze: right
+	post(itoa(ids[hello])) // cloze reveal: records nothing
 	post("continue")
-	// The story step is not checked.
-	if attempts() != 4 {
-		t.Fatalf("attempts after four checked steps = %d, want 4", attempts())
+	// The story step is not checked. The cloze is an ungraded reveal.
+	if attempts() != 3 {
+		t.Fatalf("attempts after the checked steps = %d, want 3", attempts())
 	}
 
-	// A meaning answer schedules the read card. A right listen_pick schedules
-	// the listen card. Produce and cloze wait. Finishing still gives every new
-	// word a read card and a recall card (no listen here: these words have no clip).
+	// A meaning answer schedules the read card. A right listen_pick on a word
+	// with a clip schedules the listen card. Produce and the cloze reveal wait.
+	// Finishing still gives every new word a read card and a recall card.
 	if scalar(t, dbPath, `SELECT COUNT(*) FROM cards`) != 2 || scalar(t, dbPath, `SELECT COUNT(*) FROM review_log`) != 2 {
 		t.Fatal("only the meaning and listening answers should have scheduled cards")
 	}
@@ -148,7 +156,7 @@ func TestLessonChecksWriteAttempts(t *testing.T) {
 	if scalar(t, dbPath, `SELECT COUNT(*) FROM cards WHERE user_id = ?`, brian.ID) != 5 {
 		t.Fatal("finishing the lesson did not enqueue a read and a recall card for each new word")
 	}
-	if attempts() != 4 {
+	if attempts() != 3 {
 		t.Fatalf("finishing wrote an attempt: %d", attempts())
 	}
 
@@ -164,7 +172,6 @@ func TestLessonChecksWriteAttempts(t *testing.T) {
 		{"read", "recall", morning, false},
 		{"listen", "listen_pick", hello, true},
 		{"recall", "produce", morning, false},
-		{"read", "cloze", hello, true},
 	}
 	if len(rows) != len(wants) {
 		t.Fatalf("attempts for the target word = %d, want %d", len(rows), len(wants))
@@ -273,7 +280,8 @@ func TestLessonRecallIgnoresALongGap(t *testing.T) {
 }
 
 // Ten earlier timed answers make a median. A fast answer on a word that has
-// no card yet stays Good and due within minutes, not weeks.
+// no card yet stays Good. A same-day learning step is due at the next study
+// day, not within minutes (ADR-0033 D10).
 func TestLessonRecallKeepsANewWordClose(t *testing.T) {
 	fx := openRecallTiming(t)
 	fx.seedMedian(t, 2000)
@@ -294,8 +302,13 @@ func TestLessonRecallKeepsANewWordClose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if wait := when.Sub(fx.now); wait <= 0 || wait > 15*time.Minute {
-		t.Fatalf("new card due in %v, want within 15 minutes", wait)
+	loc, err := studyday.AppZone("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := studyday.DueCutoff(fx.now, studyday.Zone{Loc: loc})
+	if !when.Equal(want) {
+		t.Fatalf("new card due %s, want the next study-day cutoff %s", when, want)
 	}
 }
 

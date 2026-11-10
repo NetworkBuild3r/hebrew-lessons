@@ -11,7 +11,9 @@ import (
 // decides what is fair: internal/activity does.
 
 // PoolWord is one dictionary entry as the activity engine sees it.
-// AudioID is empty when the word has no clip. Gloss and POS are empty when the
+// AudioID is the clip the one lookup resolves (INIT-038/SPEC-003): lexemes.audio_id
+// when that is set, otherwise the audio_assets id for the exact pointed text.
+// It is empty when the word has no clip. Gloss and POS are empty when the
 // lexicon has not filled them in. Seen is true when the learner has an attempt or a
 // card for the word, so a match item can prefer words the learner already met.
 type PoolWord struct {
@@ -31,7 +33,7 @@ func (s *Store) ActivityPool(ctx context.Context, userID int64) ([]PoolWord, err
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT l.id, l.text_nfc, l.gloss_en, l.pos, COALESCE(l.audio_id, ''),
+		SELECT l.id, l.text_nfc, l.gloss_en, l.pos, `+lexemeClipIDSQL("l")+`,
 			EXISTS (SELECT 1 FROM attempts AS a WHERE a.user_id = ? AND a.lexeme_id = l.id)
 			OR EXISTS (SELECT 1 FROM cards AS c WHERE c.user_id = ? AND c.lexeme_id = l.id)
 		FROM lexemes AS l

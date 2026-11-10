@@ -73,14 +73,16 @@ func TestHomeFromRealData(t *testing.T) {
 	}
 
 	body := getLearner(t, h, learner, "/")
-	if !strings.Contains(body, `data-due="2"`) || !strings.Contains(body, `data-known="1"`) {
+	// Words you know is Hebrew-from-English proved. The seeded word is known in
+	// reading, which is not that count.
+	if !strings.Contains(body, `data-due="2"`) || !strings.Contains(body, `data-known="0"`) {
 		t.Fatalf("due/known: %s", articleAttrs(body))
 	}
 	if !strings.Contains(body, "Words you know") {
 		t.Fatal("Home missing Words you know label")
 	}
-	if !strings.Contains(body, "Cafe") || !strings.Contains(body, "At the cafe") || strings.Contains(body, ">Draft<") || strings.Contains(body, ">Done<") {
-		t.Fatal("next unit is not the first unfinished published unit")
+	if !strings.Contains(body, "session, about ") || strings.Contains(body, ">Draft<") || strings.Contains(body, ">Done<") || strings.Contains(body, ">Cafe<") {
+		t.Fatal("Today should offer the session and not a lesson title")
 	}
 	if strings.Contains(body, "data-placement=") {
 		t.Fatal("a learner with no run rendered a placement")
@@ -1059,8 +1061,8 @@ func cardAttrs(body string) string {
 	return m
 }
 
-// TestHomeAndProgressShareKnownAnySkill is INIT-032/SPEC-006 AC1: Home's
-// "Words you know" equals the Progress headline equals Summary.KnownAnySkill.
+// TestHomeAndProgressShareKnownAnySkill: Today's "Words you know" equals
+// Progress's Hebrew-from-English proved count (ADR-0033 D6).
 func TestHomeAndProgressShareKnownAnySkill(t *testing.T) {
 	clk := fixedClock(progNow)
 	store, h := openShell(t, clk, nil, nil)
@@ -1086,10 +1088,14 @@ func TestHomeAndProgressShareKnownAnySkill(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	wantN := skillSummary(sum, "recall").Ladder.Proved
+	want := strconv.Itoa(wantN)
 	if sum.KnownAnySkill == 0 {
-		t.Fatal("KnownAnySkill is 0")
+		t.Fatal("fixture KnownAnySkill is 0; the page must not need it")
 	}
-	want := strconv.Itoa(sum.KnownAnySkill)
+	if wantN == sum.KnownAnySkill {
+		t.Fatal("fixture proved equals KnownAnySkill; the test would not tell them apart")
+	}
 
 	home := getLearner(t, h, l, "/")
 	if !strings.Contains(home, `data-known="`+want+`"`) {
@@ -1104,10 +1110,14 @@ func TestHomeAndProgressShareKnownAnySkill(t *testing.T) {
 	}
 
 	progress := getLearner(t, h, l, "/progress")
-	if m := regexp.MustCompile(`class="count"><bdi lang="en" dir="ltr">([0-9]+)</bdi>`).FindStringSubmatch(progress); m == nil || m[1] != want {
-		t.Fatalf("Progress headline %v, want %s", m, want)
+	recall := overviewRow(t, progress, "recall")
+	if !strings.Contains(recall, "Hebrew from English") {
+		t.Fatalf("Progress recall row:\n%s", recall)
 	}
-	if !strings.Contains(progress, "Words you know") {
-		t.Fatal("Progress missing Words you know")
+	if got := rungCount(t, recall, "proved"); got != wantN {
+		t.Fatalf("Progress proved = %d, want %d", got, wantN)
+	}
+	if strings.Contains(progress, "Words you know") || strings.Contains(progress, "Say it from English") {
+		t.Fatal("Progress still leads with the old name")
 	}
 }

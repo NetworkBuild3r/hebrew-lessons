@@ -26,6 +26,8 @@ func TestConfigFromEnv(t *testing.T) {
 		"MCP_AUTH_TOKEN", "MCP_READONLY_TOKEN", "MCP_READONLY_LEARNER_ID",
 		"MCP_PUBLIC_URL", "MCP_ALLOWED_ORIGINS",
 		"ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID", "ELEVENLABS_MODEL",
+		"LEARNER_AUTO_PUBLISH",
+		"SHOW_ROOTS", "SHOW_ISAIAH", "SHOW_PLACEMENT", "SHOW_CHECKIN",
 	} {
 		t.Setenv(key, "")
 	}
@@ -55,6 +57,12 @@ func TestConfigFromEnv(t *testing.T) {
 	if cfg.Clock == nil {
 		t.Fatal("clock is nil")
 	}
+	if cfg.LearnerAutoPublish {
+		t.Fatal("LEARNER_AUTO_PUBLISH default is on")
+	}
+	if cfg.ShowRoots || cfg.ShowIsaiah || cfg.ShowPlacement || cfg.ShowCheckIn {
+		t.Fatal("a side-feature switch defaults on")
+	}
 
 	t.Setenv("DATA_DIR", "/tmp/hebrew-data")
 	t.Setenv("HTTP_ADDR", ":9090")
@@ -77,6 +85,7 @@ func TestConfigFromEnv(t *testing.T) {
 	t.Setenv("ELEVENLABS_API_KEY", "secret")
 	t.Setenv("ELEVENLABS_VOICE_ID", " voice-x ")
 	t.Setenv("ELEVENLABS_MODEL", "eleven_multilingual_v2")
+	t.Setenv("LEARNER_AUTO_PUBLISH", "on")
 	cfg, err = configFromEnv()
 	if err != nil {
 		t.Fatal(err)
@@ -116,6 +125,93 @@ func TestConfigFromEnv(t *testing.T) {
 	}
 	if cfg.GoogleAuthURL != "https://accounts.google.com/o/oauth2/v2/auth" {
 		t.Fatalf("unset google url was not defaulted: %s", cfg.GoogleAuthURL)
+	}
+	if !cfg.LearnerAutoPublish {
+		t.Fatal("LEARNER_AUTO_PUBLISH=on was lost")
+	}
+}
+
+func TestLearnerAutoPublishEnv(t *testing.T) {
+	for _, key := range []string{"DATA_DIR", "DEV", "LEARNER_AUTO_PUBLISH"} {
+		t.Setenv(key, "")
+	}
+	t.Setenv("DATA_DIR", "/data")
+	for _, off := range []string{"", "off", "0", "false", "no"} {
+		t.Setenv("LEARNER_AUTO_PUBLISH", off)
+		cfg, err := configFromEnv()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.LearnerAutoPublish {
+			t.Fatalf("%q turned auto-publish on", off)
+		}
+	}
+	for _, on := range []string{"on", "1", "true", "yes", " ON "} {
+		t.Setenv("LEARNER_AUTO_PUBLISH", on)
+		cfg, err := configFromEnv()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !cfg.LearnerAutoPublish {
+			t.Fatalf("%q left auto-publish off", on)
+		}
+	}
+	t.Setenv("LEARNER_AUTO_PUBLISH", "maybe")
+	if _, err := configFromEnv(); err == nil || !strings.Contains(err.Error(), "LEARNER_AUTO_PUBLISH") {
+		t.Fatalf("invalid: %v", err)
+	}
+}
+
+func TestSideFeatureSwitchesEnv(t *testing.T) {
+	for _, key := range []string{"DATA_DIR", "DEV", "SHOW_ROOTS", "SHOW_ISAIAH", "SHOW_PLACEMENT", "SHOW_CHECKIN"} {
+		t.Setenv(key, "")
+	}
+	t.Setenv("DATA_DIR", "/data")
+	cfg, err := configFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ShowRoots || cfg.ShowIsaiah || cfg.ShowPlacement || cfg.ShowCheckIn {
+		t.Fatal("a side-feature switch defaults on")
+	}
+	t.Setenv("SHOW_ROOTS", "on")
+	cfg, err = configFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ShowRoots || cfg.ShowIsaiah || cfg.ShowPlacement || cfg.ShowCheckIn {
+		t.Fatalf("SHOW_ROOTS did not change only Roots: %+v", cfg)
+	}
+	t.Setenv("SHOW_ROOTS", "")
+	t.Setenv("SHOW_ISAIAH", "1")
+	cfg, err = configFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ShowRoots || !cfg.ShowIsaiah || cfg.ShowPlacement || cfg.ShowCheckIn {
+		t.Fatalf("SHOW_ISAIAH did not change only Isaiah: %+v", cfg)
+	}
+	t.Setenv("SHOW_ISAIAH", "off")
+	t.Setenv("SHOW_PLACEMENT", "true")
+	cfg, err = configFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ShowRoots || cfg.ShowIsaiah || !cfg.ShowPlacement || cfg.ShowCheckIn {
+		t.Fatalf("SHOW_PLACEMENT did not change only placement: %+v", cfg)
+	}
+	t.Setenv("SHOW_PLACEMENT", "no")
+	t.Setenv("SHOW_CHECKIN", "yes")
+	cfg, err = configFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ShowRoots || cfg.ShowIsaiah || cfg.ShowPlacement || !cfg.ShowCheckIn {
+		t.Fatalf("SHOW_CHECKIN did not change only the check-in: %+v", cfg)
+	}
+	t.Setenv("SHOW_CHECKIN", "maybe")
+	if _, err := configFromEnv(); err == nil || !strings.Contains(err.Error(), "SHOW_CHECKIN") {
+		t.Fatalf("invalid: %v", err)
 	}
 }
 

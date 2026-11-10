@@ -1,6 +1,8 @@
 ---
 name: hebrew-lesson-reviser
 description: >-
+  PAUSED for INIT-038 Stage 1 (ADR-0033 D11): do not run this skill, and do not
+  rewrite or publish a learner unit, until Brian lifts the pause.
   Revises untouched Hebrew learner units over MCP in position order: read
   progress, load the earliest untouched unit, get a revision brief for that
   unitId, rewrite against the brief and earlier units, validate, generate audio,

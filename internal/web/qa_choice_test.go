@@ -80,6 +80,16 @@ func TestQAChoiceButtons(t *testing.T) {
 		if ask.runID == otherAsk.runID {
 			t.Fatalf("step %d both learners share run %s", step, ask.runID)
 		}
+		if act.Type == units.ActivityCloze {
+			for _, body := range []string{first, otherFirst} {
+				if strings.Contains(body, `<div class="choices">`) {
+					t.Fatalf("step %d cloze rendered buttons", step)
+				}
+			}
+			advanceChoice(t, primary, path, ask.runID)
+			advanceChoice(t, other, path, otherAsk.runID)
+			continue
+		}
 		assertSameButtons(t, "reload", step, ask, againAsk)
 		assertSameButtons(t, "other reload", step, otherAsk, otherAgainAsk)
 		assertChoiceInvariants(t, step, act.Type, otherAsk)
@@ -117,6 +127,13 @@ func TestQAChoiceButtons(t *testing.T) {
 		againAsk := qaReadAsk(t, again, act, byText)
 		if ask.runID != againAsk.runID {
 			t.Fatalf("checkpoint step %d run id changed on re-render: %s then %s", step, ask.runID, againAsk.runID)
+		}
+		if act.Type == units.ActivityCloze {
+			if strings.Contains(first, `<div class="choices">`) {
+				t.Fatalf("checkpoint step %d cloze rendered buttons", step)
+			}
+			advanceChoice(t, primary, checkPath, ask.runID)
+			continue
 		}
 		assertSameButtons(t, "checkpoint reload", step, ask, againAsk)
 		assertChoiceInvariants(t, step, act.Type, ask)
@@ -416,7 +433,7 @@ func assertChoiceInvariants(t *testing.T, step int, typ string, ask qaAsk) {
 
 func assertChoiceSpread(t *testing.T, label string, asks []qaAsk) {
 	t.Helper()
-	if len(asks) < 5 {
+	if len(asks) < 4 {
 		t.Fatalf("%s rendered %d targets", label, len(asks))
 	}
 	posCount := map[int]int{}
@@ -722,6 +739,13 @@ func TestQAChoicePromptGlosses(t *testing.T) {
 				runs[ask.runID] = true
 			}
 			seen[act.Type]++
+			if act.Type == units.ActivityCloze {
+				if strings.Contains(body, `<div class="choices">`) {
+					t.Fatalf("cloze step %d rendered buttons", step)
+				}
+				advanceChoice(t, client, path, ask.runID)
+				continue
+			}
 			assertChoiceInvariants(t, step, act.Type, ask)
 			assertPromptGlosses(t, step, act, body, ask, byText, byID, fx)
 			gradeChoice(t, client, path, ask.runID, ask.targetID, "feedback--right")

@@ -19,10 +19,11 @@ const studyDigestDescription = "Read one learner's study digest for a tutor conv
 	"A learner account reads its own digest, and omitting learnerId uses its own id. Another id is forbidden. " +
 	"An admin, including the static token, must pass learnerId and may read any learner. A learner id that does not exist is an error. " +
 	"zone and zoneSource name the IANA zone used for today and every day in the reply (learner when stored, otherwise app). There is no UTC invent-today. " +
-	"asOf is the request instant for the live counts. knownAnySkill is words known or solid in at least one skill (Progress \"Words you know\"). " +
-	"waitingForSecondDay is the Progress/Today \"learned today, check tomorrow\" count: words that pass the old same-day known rule but have only one checked-success study day (ADR-0031 D5). " +
+	"asOf is the request instant for the live counts. knownAnySkill is the Progress \"Words you know\" count. The rule that produced it is ruleVersion on each history point. " +
+	"waitingForSecondDay is the Progress/Today \"learned today, check tomorrow\" count. Its meaning is the rule named by ruleVersion. " +
 	"skills holds, per skill, direction (ADR-0028 D4 label), knownSolidNow and strugglingNow from the live learner model, knownSolid7dAgo from the snapshot on agoDay (seven learner days back), and agoDay names that day. Skill keys stay listen, read, recall, spell. " +
-	"history is the last 14 daily_totals days plus today's live knownAnySkill point, each with ruleVersion (4 under current rules; today's live point uses the current RuleVersion). The last point equals knownAnySkill. " +
+	"skills[].ladder counts proved, recalledLater, slipping, and notYetAsked out of taught words. The rule is ruleVersion. This description does not define it. " +
+	"history is the last 14 daily_totals days plus today's live knownAnySkill point, each with ruleVersion. Read ruleVersion. Do not assume a version from this description. The last point equals knownAnySkill. " +
 	"retention holds, per skill, the last seven learner days against the 85–90% band; each day value has window 30d due reviews and asOf for that day. " +
 	"minutesInApp is the last seven learner days of answering time, using the same idle-gap rule as the weekly job. " +
 	"struggle is at most ten struggling words with cause and confusedWith. " +
@@ -52,9 +53,9 @@ type StudyDigest struct {
 	// AsOf is the request instant for knownSolidNow, strugglingNow, and knownAnySkill (ADR-0027 D4).
 	AsOf time.Time `json:"asOf" jsonschema:"UTC RFC3339 instant when the live skill counts were read."`
 	// KnownAnySkill is words known or solid in at least one skill (ADR-0027 D1). Same as Progress "Words you know".
-	KnownAnySkill int `json:"knownAnySkill" jsonschema:"Words known or solid in at least one skill. Same as Progress \"Words you know\"."`
+	KnownAnySkill int `json:"knownAnySkill" jsonschema:"The Progress \"Words you know\" count. The rule is ruleVersion on each history point."`
 	// WaitingForSecondDay is Summary.WaitingForSecondDay (ADR-0031 D5). Same as Progress/Today "learned today, check tomorrow".
-	WaitingForSecondDay int                  `json:"waitingForSecondDay" jsonschema:"Same as Progress/Today \"learned today, check tomorrow\": words that pass the old same-day known rule but have only one checked-success study day."`
+	WaitingForSecondDay int                  `json:"waitingForSecondDay" jsonschema:"The Progress/Today \"learned today, check tomorrow\" count. The rule is ruleVersion."`
 	Skills              []DigestSkill        `json:"skills"`
 	History             []DigestHistoryPoint `json:"history" jsonschema:"Last 14 daily_totals days plus today's live knownAnySkill point, each with ruleVersion."`
 	Retention           DigestRetention      `json:"retention"`
@@ -71,12 +72,13 @@ type StudyDigest struct {
 // DigestSkill is known+solid and struggling counts for one skill.
 // knownSolidNow and strugglingNow are live; knownSolid7dAgo is from the agoDay snapshot.
 type DigestSkill struct {
-	Skill           string `json:"skill"`
-	Direction       string `json:"direction,omitempty" jsonschema:"ADR-0028 D4 label for the skill."`
-	KnownSolidNow   int    `json:"knownSolidNow" jsonschema:"Live known plus solid for this skill from the learner model."`
-	KnownSolid7dAgo int    `json:"knownSolid7dAgo" jsonschema:"Known plus solid on agoDay from the daily snapshot."`
-	StrugglingNow   int    `json:"strugglingNow" jsonschema:"Live struggling count for this skill from the learner model."`
-	AgoDay          string `json:"agoDay" jsonschema:"The learner civil day seven days before today that knownSolid7dAgo is from."`
+	Skill           string       `json:"skill"`
+	Direction       string       `json:"direction,omitempty" jsonschema:"ADR-0028 D4 label for the skill."`
+	KnownSolidNow   int          `json:"knownSolidNow" jsonschema:"Live count for this skill from the learner model. The rule is ruleVersion."`
+	KnownSolid7dAgo int          `json:"knownSolid7dAgo" jsonschema:"The count on agoDay from the daily snapshot. The rule is that day's ruleVersion."`
+	StrugglingNow   int          `json:"strugglingNow" jsonschema:"Live struggling count for this skill from the learner model."`
+	AgoDay          string       `json:"agoDay" jsonschema:"The learner civil day seven days before today that knownSolid7dAgo is from."`
+	Ladder          LadderCounts `json:"ladder" jsonschema:"proved, recalledLater, slipping, and notYetAsked out of taught words. The rule is ruleVersion."`
 }
 
 // DigestRetention is per-skill retention over the last seven learner days against 85–90%.

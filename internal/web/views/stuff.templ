@@ -14,6 +14,9 @@ templ WordsPage(v WordsView) {
 			if v.SkillLabel != "" {
 				<p class="stuff__skill" lang="en" data-skill-filter>{ v.SkillLabel }</p>
 			}
+			if v.LadderLabel != "" {
+				<p class="stuff__ladder" lang="en" data-ladder={ v.Ladder }>{ v.LadderLabel }</p>
+			}
 			if len(v.Words) == 0 {
 				<p class="stuff__empty" lang="en">{ v.Empty }</p>
 			} else {

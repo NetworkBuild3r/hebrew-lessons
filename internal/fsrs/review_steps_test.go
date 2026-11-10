@@ -3,10 +3,12 @@ package fsrs
 import (
 	"context"
 	"math"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 
 	gofsrs "github.com/open-spaced-repetition/go-fsrs/v3"
 )
@@ -138,14 +140,20 @@ func assertFSRSStep(t *testing.T, n int, got Card, live gofsrs.Card, want fsrsRe
 	if math.Abs(got.Difficulty-want.difficulty) > 1e-6 || math.Abs(live.Difficulty-want.difficulty) > 1e-6 {
 		t.Fatalf("step %d difficulty: db=%v go-fsrs=%v want=%v", n, got.Difficulty, live.Difficulty, want.difficulty)
 	}
-	if !got.Due.Equal(want.due) || !live.Due.Equal(want.due) {
-		t.Fatalf("step %d due: db=%s go-fsrs=%s want=%s", n, got.Due.UTC(), live.Due.UTC(), want.due.UTC())
+	loc, err := studyday.AppZone(os.Getenv("TZ"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	zone := studyday.Zone{Name: loc.String(), Loc: loc, Source: studyday.SourceApp}
+	wantDue := SameDayDue(want.due, got.LastReview, zone)
+	if !got.Due.Equal(wantDue) || !live.Due.Equal(want.due) {
+		t.Fatalf("step %d due: db=%s cutoff=%s go-fsrs=%s want=%s", n, got.Due.UTC(), wantDue.UTC(), live.Due.UTC(), want.due.UTC())
 	}
 	if got.Reps != want.reps || int(live.Reps) != want.reps || got.Lapses != want.lapses || int(live.Lapses) != want.lapses {
 		t.Fatalf("step %d reps/lapses: db=%d/%d go-fsrs=%d/%d want=%d/%d",
 			n, got.Reps, got.Lapses, live.Reps, live.Lapses, want.reps, want.lapses)
 	}
-	if got.Stability != live.Stability || got.Difficulty != live.Difficulty || !got.Due.Equal(live.Due) || !got.LastReview.Equal(live.LastReview) {
+	if got.Stability != live.Stability || got.Difficulty != live.Difficulty || !got.Due.Equal(wantDue) || !got.LastReview.Equal(live.LastReview) {
 		t.Fatalf("step %d db drifted from go-fsrs: db=%+v fsrs due=%s stab=%v diff=%v last=%s",
 			n, got, live.Due, live.Stability, live.Difficulty, live.LastReview)
 	}

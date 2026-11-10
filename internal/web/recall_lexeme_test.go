@@ -734,6 +734,24 @@ func TestGradedRecallAndClozeNeedThreeChoices(t *testing.T) {
 		body := getAuthed(t, fx.h, cookie, path)
 		for step, typ := range []string{units.ActivityRecall, units.ActivityCloze} {
 			ask := activityHTML(t, body)
+			if typ == units.ActivityCloze {
+				if ids := gradedChoiceValues(ask); len(ids) != 0 {
+					t.Fatalf("cloze learner %d rendered buttons %v", i, ids)
+				}
+				posted := postLesson(t, fx.h, cookie, path, runValue(t, body), itoa(fx.targetID), true, csrf)
+				if posted.Code != http.StatusOK || strings.Contains(posted.Body.String(), "feedback--") {
+					t.Fatalf("cloze learner %d graded a reveal: %d\n%s", i, posted.Code, posted.Body.String())
+				}
+				if n := countRows(t, fx.store, `SELECT COUNT(*) FROM attempts WHERE user_id = ?`, user.ID); n != 1 {
+					t.Fatalf("cloze learner %d attempts = %d, want the recall only", i, n)
+				}
+				next := postLesson(t, fx.h, cookie, path, runValue(t, body), "continue", true, csrf)
+				if next.Code != http.StatusOK {
+					t.Fatalf("cloze learner %d continue: %d", i, next.Code)
+				}
+				body = next.Body.String()
+				continue
+			}
 			ids := gradedChoiceValues(ask)
 			if len(ids) < 3 {
 				t.Fatalf("%s learner %d step %d has %d buttons, 3 eligible options must be a graded ask with at least 3:\n%s", typ, i, step, len(ids), ask)

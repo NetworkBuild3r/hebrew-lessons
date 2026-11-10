@@ -50,6 +50,30 @@ func TestSpecTable(t *testing.T) {
 	}
 }
 
+// TestReviewHasNoSentenceBlank pins the review list. A sentence blank is not
+// a meaning pick, a typed answer, or dictation. Adding one fails this test.
+// INIT-038/SPEC-008.
+func TestReviewHasNoSentenceBlank(t *testing.T) {
+	want := []Kind{ListenPick, ReadPick, WordMatch, AudioMatch, TypeIt, Dictation, Flashcard}
+	got := map[Kind]int{}
+	for _, s := range Specs() {
+		got[s.Kind]++
+	}
+	if len(got) != len(want) {
+		t.Fatalf("review kinds = %v, want %v", got, want)
+	}
+	for _, kind := range want {
+		if got[kind] == 0 {
+			t.Errorf("review missing %s", kind)
+		}
+	}
+	for _, kind := range []Kind{"cloze", "blank", "sentence_blank", "gap", "order"} {
+		if _, ok := SpecOf(kind); ok {
+			t.Errorf("sentence-blank kind %q is in review", kind)
+		}
+	}
+}
+
 func TestFits(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

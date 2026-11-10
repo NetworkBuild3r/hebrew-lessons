@@ -11,7 +11,7 @@ import (
 )
 
 func (s *server) serveIsaiah(w http.ResponseWriter, r *http.Request, lang, csrf string) {
-	if s == nil || s.store == nil || !s.isaiahOpen(r) {
+	if s == nil || !s.showIsaiah || s.store == nil || !s.isaiahOpen(r) {
 		http.NotFound(w, r)
 		return
 	}
@@ -45,7 +45,7 @@ func (s *server) serveIsaiah(w http.ResponseWriter, r *http.Request, lang, csrf 
 }
 
 func (s *server) serveIsaiahVerse(w http.ResponseWriter, r *http.Request, lang, csrf string) {
-	if s == nil || s.store == nil || !s.isaiahOpen(r) {
+	if s == nil || !s.showIsaiah || s.store == nil || !s.isaiahOpen(r) {
 		http.NotFound(w, r)
 		return
 	}
@@ -109,7 +109,7 @@ func (s *server) isaiahVerse(r *http.Request, page views.Page, row db.TanakhVers
 			if err != nil {
 				return nil, err
 			}
-			if visible {
+			if visible && s.showRoots {
 				word.RootHref = page.Href("/roots/" + g.Root)
 			}
 		}

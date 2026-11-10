@@ -71,7 +71,7 @@ func (s *server) serveWord(w http.ResponseWriter, r *http.Request, lang, csrf st
 			serverError(w)
 			return
 		}
-		if vis {
+		if vis && s.showRoots {
 			view.Word.RootHref = page.Href("/roots/" + lx.Root)
 		}
 	}

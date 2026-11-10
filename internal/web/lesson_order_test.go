@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -182,189 +181,91 @@ func wrongPermutation(served []string) []int {
 	return out
 }
 
-// TestOrderServedStableAndNotAnswer: same step, same run, same served order,
-// and that order is not the answer. INIT-029/SPEC-003 AC1.
-func TestOrderServedStableAndNotAnswer(t *testing.T) {
+// TestOrderIsUngradedReveal: the step shows the sentence, the English, and
+// the clip, with no chip bank. askChoiceCount agrees at zero.
+// INIT-038/SPEC-008.
+func TestOrderIsUngradedReveal(t *testing.T) {
 	f := setupOrderLesson(t, []string{orderAcceptLine()})
 	run, ask := f.openAsk(t)
-	if len(ask.OrderChips) != 3 {
-		t.Fatalf("chips = %v", ask.OrderChips)
-	}
-	if ask.Prompt != "Put the words in order." {
-		t.Fatalf("prompt = %q", ask.Prompt)
+	if len(ask.OrderChips) != 0 || ask.Asking {
+		t.Fatalf("order reveal still asks: chips %v asking %v", ask.OrderChips, ask.Asking)
 	}
 	if ask.Cue != "hello morning thanks" {
 		t.Fatalf("cue = %q", ask.Cue)
 	}
-	for _, chip := range ask.OrderChips {
-		if chip != orderHello && chip != orderMorning && chip != orderThanks {
-			t.Fatalf("unexpected chip %q in %v", chip, ask.OrderChips)
+	if ask.Audio == "" {
+		t.Fatal("order reveal hid the clip")
+	}
+	got := map[string]bool{}
+	for _, w := range ask.Words {
+		got[w.Text] = true
+		if !w.ShowTranslit || w.Translit == "" {
+			t.Fatalf("word %q missing reading: %+v", w.Text, w)
 		}
 	}
-	act := f.lesson.Activities[0]
-	if orderMatchesAnswer(ask.OrderChips, act) {
-		t.Fatalf("served order is the answer: %v", ask.OrderChips)
-	}
-	again := orderServed(run, act)
-	if !slices.Equal(again, ask.OrderChips) {
-		t.Fatalf("reload order %v != first %v", again, ask.OrderChips)
+	for _, tok := range units.Tokenize(orderLine()) {
+		if !got[tok] {
+			t.Fatalf("reveal missing %q", tok)
+		}
 	}
 	p := player{store: f.store}
-	screen, err := p.screenFor(context.Background(), views.NewPage("en", "brian-csrf", "lesson"), f.lesson, run, lessonQuery{})
+	target, err := p.targetOf(context.Background(), f.lesson, f.lesson.Activities[0])
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(screen.Activity.OrderChips, ask.OrderChips) {
-		t.Fatalf("screen chips %v != %v", screen.Activity.OrderChips, ask.OrderChips)
+	n, err := p.askChoiceCount(context.Background(), f.userID, f.lesson, run, f.lesson.Activities[0], target)
+	if err != nil || n != 0 {
+		t.Fatalf("askChoiceCount = %d, %v", n, err)
 	}
-	if screen.Activity.Words != nil {
-		t.Fatalf("ask leaked answer-order words: %+v", screen.Activity.Words)
-	}
-	if screen.Activity.Audio != "" {
-		t.Fatalf("ask leaked the clip: %q", screen.Activity.Audio)
+	if scalar(t, f.dbPath, `SELECT COUNT(*) FROM attempts`) != 0 {
+		t.Fatal("opening an order step wrote an attempt")
 	}
 }
 
-// TestOrderRightAndAcceptRecordRight: a post of the right order, and of an
-// accept order, records a right attempt. INIT-029/SPEC-003 AC2.
-func TestOrderRightAndAcceptRecordRight(t *testing.T) {
-	for _, name := range []string{"text", "accept"} {
+// TestOrderPostsWriteNoAttempt: a chip post, right or wrong, records nothing.
+// INIT-038/SPEC-008.
+func TestOrderPostsWriteNoAttempt(t *testing.T) {
+	for _, name := range []string{"positions", "empty"} {
 		t.Run(name, func(t *testing.T) {
 			f := setupOrderLesson(t, []string{orderAcceptLine()})
-			run, ask := f.openAsk(t)
-			want := units.Tokenize(orderLine())
-			if name == "accept" {
-				want = units.Tokenize(orderAcceptLine())
+			run, _ := f.openAsk(t)
+			var rec *httptest.ResponseRecorder
+			if name == "empty" {
+				rec = postOrder(t, f, strconv.FormatInt(run.ID, 10), nil)
+			} else {
+				rec = postOrder(t, f, strconv.FormatInt(run.ID, 10), []int{0, 1, 2})
 			}
-			pos := positionsForTokens(ask.OrderChips, want)
-			rec := postOrder(t, f, strconv.FormatInt(run.ID, 10), pos)
 			if rec.Code != http.StatusOK {
 				t.Fatalf("POST = %d\n%s", rec.Code, rec.Body.String())
 			}
-			if n := scalar(t, f.dbPath, `SELECT COUNT(*) FROM attempts WHERE activity = 'order' AND correct = 1`); n != 1 {
-				t.Fatalf("right attempts = %d", n)
+			if n := scalar(t, f.dbPath, `SELECT COUNT(*) FROM attempts`); n != 0 {
+				t.Fatalf("order attempts = %d", n)
 			}
 			if n := scalar(t, f.dbPath, `SELECT COUNT(*) FROM cards`); n != 0 {
 				t.Fatalf("order scheduled a card: %d", n)
 			}
-			skill := scalarString(t, f.dbPath, `SELECT skill FROM attempts WHERE activity = 'order'`)
-			if skill != "recall" {
-				t.Fatalf("skill = %q", skill)
-			}
 		})
 	}
 }
 
-// TestOrderWrongPermutationRecordsWrong: any other permutation records a
-// wrong attempt. INIT-029/SPEC-003 AC3.
-func TestOrderWrongPermutationRecordsWrong(t *testing.T) {
-	f := setupOrderLesson(t, []string{orderAcceptLine()})
-	run, ask := f.openAsk(t)
-	pos := wrongPermutation(ask.OrderChips)
-	act := f.lesson.Activities[0]
-	if _, correct, ok := orderGrade(ask.OrderChips, pos, act); !ok || correct {
-		t.Fatalf("fixture positions are not a wrong permutation: %v → %v", ask.OrderChips, pos)
-	}
-	rec := postOrder(t, f, strconv.FormatInt(run.ID, 10), pos)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("POST = %d\n%s", rec.Code, rec.Body.String())
-	}
-	if n := scalar(t, f.dbPath, `SELECT COUNT(*) FROM attempts WHERE activity = 'order' AND correct = 0`); n != 1 {
-		t.Fatalf("wrong attempts = %d", n)
-	}
-	if n := scalar(t, f.dbPath, `SELECT COUNT(*) FROM cards`); n != 0 {
-		t.Fatalf("wrong order scheduled a card: %d", n)
-	}
-}
-
-// TestOrderBadPositionsAre400: missing, repeated, or unknown position is 400
-// and writes nothing. INIT-029/SPEC-003 AC4.
-func TestOrderBadPositionsAre400(t *testing.T) {
-	cases := []struct {
-		name string
-		pos  []int
-	}{
-		{"missing", []int{0, 1}},
-		{"repeated", []int{0, 0, 1}},
-		{"unknown", []int{0, 1, 9}},
-		{"empty", nil},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			f := setupOrderLesson(t, nil)
-			run, _ := f.openAsk(t)
-			before := scalar(t, f.dbPath, `SELECT COUNT(*) FROM attempts`)
-			var rec *httptest.ResponseRecorder
-			if c.pos == nil {
-				form := url.Values{"run": {strconv.FormatInt(run.ID, 10)}, "_csrf": {"brian-csrf"}}
-				req := httptest.NewRequest(http.MethodPost, f.path, strings.NewReader(form.Encode()))
-				req.Host = "learn.example"
-				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-				req.Header.Set("HX-Request", "true")
-				req.Header.Set("Origin", "https://learn.example")
-				req.Header.Set("X-CSRF-Token", "brian-csrf")
-				req.AddCookie(f.cookie)
-				rec = httptest.NewRecorder()
-				f.h.ServeHTTP(rec, req)
-			} else {
-				rec = postOrder(t, f, strconv.FormatInt(run.ID, 10), c.pos)
-			}
-			if rec.Code != http.StatusBadRequest {
-				t.Fatalf("POST = %d, want 400\n%s", rec.Code, rec.Body.String())
-			}
-			if got := scalar(t, f.dbPath, `SELECT COUNT(*) FROM attempts`); got != before {
-				t.Fatalf("attempts wrote %d → %d", before, got)
-			}
-		})
-	}
-}
-
-// TestOrderRevealHasReadingEnglishAndClip: reveal carries reading, English,
-// and clip. INIT-029/SPEC-003 AC5.
-func TestOrderRevealHasReadingEnglishAndClip(t *testing.T) {
+// TestOrderContinueWritesNothing: Continue moves on and records no attempt.
+// INIT-038/SPEC-008.
+func TestOrderContinueWritesNothing(t *testing.T) {
 	f := setupOrderLesson(t, nil)
-	run, ask := f.openAsk(t)
-	pos := positionsForTokens(ask.OrderChips, units.Tokenize(orderLine()))
-	rec := postOrder(t, f, strconv.FormatInt(run.ID, 10), pos)
+	run, _ := f.openAsk(t)
+	rec := postLesson(t, f.h, f.cookie, f.path, strconv.FormatInt(run.ID, 10), "continue", true, "brian-csrf")
 	if rec.Code != http.StatusOK {
-		t.Fatalf("POST = %d\n%s", rec.Code, rec.Body.String())
+		t.Fatalf("continue = %d\n%s", rec.Code, rec.Body.String())
 	}
-	run, err := f.store.PlayerRunFor(context.Background(), f.userID, run.ID)
+	if n := scalar(t, f.dbPath, `SELECT COUNT(*) FROM attempts`); n != 0 {
+		t.Fatalf("continue wrote %d attempts", n)
+	}
+	after, err := f.store.PlayerRunFor(context.Background(), f.userID, run.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if run.Phase != "reveal" {
-		t.Fatalf("phase = %q", run.Phase)
-	}
-	p := player{store: f.store}
-	screen, err := p.screenFor(context.Background(), views.NewPage("en", "brian-csrf", "lesson"), f.lesson, run, lessonQuery{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	a := screen.Activity
-	if a.Cue != "hello morning thanks" {
-		t.Fatalf("reveal English = %q", a.Cue)
-	}
-	if a.Audio == "" || !strings.Contains(a.Audio, "/audio/") {
-		t.Fatalf("reveal clip = %q", a.Audio)
-	}
-	if len(a.OrderChips) != 0 {
-		t.Fatalf("reveal still has chips: %v", a.OrderChips)
-	}
-	gotReading := map[string]string{}
-	for _, w := range a.Words {
-		if w.Plain || w.Gap {
-			continue
-		}
-		if !w.ShowTranslit || w.Translit == "" {
-			t.Fatalf("word %q missing reading: %+v", w.Text, w)
-		}
-		gotReading[w.Text] = w.Translit
-	}
-	for _, tok := range units.Tokenize(orderLine()) {
-		if gotReading[tok] == "" {
-			t.Fatalf("no reading for %q in %+v", tok, a.Words)
-		}
+	if !after.Finished && after.ActivityIx == run.ActivityIx && after.Phase == run.Phase {
+		t.Fatal("continue did not leave the order step")
 	}
 }
 

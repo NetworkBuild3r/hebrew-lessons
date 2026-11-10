@@ -100,6 +100,15 @@
 .today-place .btn-primary:hover { background: color-mix(in srgb, var(--lamp) 88%, var(--on-lamp)); }
 
 .today-hero { gap: var(--space-3); }
+/* The session button is the one action. On a phone it fills the column and the label wraps. */
+.today-session .btn {
+  flex-wrap: wrap;
+  white-space: normal;
+  text-align: center;
+  block-size: auto;
+  min-block-size: var(--size-cta);
+}
+.today-empty { margin: 0; font-size: var(--fs-body); line-height: var(--lh-he-body); }
 .today-hero__title {
   display: grid;
   gap: var(--space-1);

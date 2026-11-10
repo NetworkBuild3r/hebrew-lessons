@@ -31,15 +31,13 @@ func (s *Store) SearchLexemes(ctx context.Context, query string, limit int) ([]m
 	pointed := normalize(query)
 	bare := stripNiqqud(pointed)
 	glossQ := strings.ToLower(pointed)
-	// Clip texts are joined once. audio_assets has no index on text_nfc,
-	// voice, or model; adding one needs a migration.
+	// AudioPresent uses the one clip lookup (INIT-038/SPEC-003): lexemes.audio_id
+	// or an audio_assets row for the exact pointed text. audio_assets has no
+	// index on text_nfc; adding one needs a migration.
 	rows, err := conn.QueryContext(ctx, `
 		SELECT l.id, l.text_nfc, l.bare, l.gloss_en, l.pos, l.gender, l.plural, l.translit, l.root, l.binyan,
-		       CASE WHEN a.text_nfc IS NOT NULL THEN 1 ELSE 0 END
-		FROM lexemes AS l
-		LEFT JOIN (
-			SELECT DISTINCT text_nfc FROM audio_assets
-		) AS a ON a.text_nfc = l.text_nfc`)
+		       CASE WHEN `+db.LexemeHasClipSQL("l")+` THEN 1 ELSE 0 END
+		FROM lexemes AS l`)
 	if err != nil {
 		return nil, nil, fmt.Errorf("mcpstore: search: %w", err)
 	}

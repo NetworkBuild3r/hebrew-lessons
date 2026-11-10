@@ -37,17 +37,21 @@ const maxStudyQueues = 128
 // rebuilt when it is Done, and when the store clock passes the study-day
 // rollover (4:00 in the learner's zone).
 type server struct {
-	store    *db.Store
-	audioDir string
-	voices   audio.Voices
-	study    *session.Service
-	engine   *activity.Engine
-	deck     placementDeck
-	runs     placementRuns
-	recheck  PlacementEngine
-	bands    learner.BandSource
-	zones    *studyday.Resolver
-	speech   *audio.Generator
+	store         *db.Store
+	audioDir      string
+	voices        audio.Voices
+	study         *session.Service
+	engine        *activity.Engine
+	deck          placementDeck
+	runs          placementRuns
+	recheck       PlacementEngine
+	bands         learner.BandSource
+	showRoots     bool
+	showIsaiah    bool
+	showPlacement bool
+	showCheckIn   bool
+	zones         *studyday.Resolver
+	speech        *audio.Generator
 
 	mu     sync.Mutex
 	queues map[string]*studyQueue
@@ -172,14 +176,13 @@ func (s *server) learnerHome(ctx context.Context, userID int64, name string) (Ho
 	}
 	vm.DueCount = len(due)
 
-	// Headline is KnownAnySkill (ADR-0027 D1 / INIT-032/SPEC-006). WaitingWords is
-	// WaitingForSecondDay (ADR-0031 D5). KnownLexemeIDs stays the reading set for
-	// the lesson brief and get_context.knownLexemes.
+	// Today's "Words you know" is Hebrew-from-English proved (ADR-0033 D6).
+	// WaitingWords stays WaitingForSecondDay. KnownLexemeIDs stays the reading set.
 	sum, err := s.model().Summary(ctx, userID)
 	if err != nil {
 		return HomeVM{}, "", err
 	}
-	vm.KnownWords = sum.KnownAnySkill
+	vm.KnownWords = recallProved(sum)
 	vm.WaitingWords = sum.WaitingForSecondDay
 
 	next, situation, _, _, _, _, err := s.unitProgress(ctx, userID)

@@ -9,7 +9,7 @@ import (
 )
 
 func (s *server) serveAdminIsaiah(w http.ResponseWriter, r *http.Request, lang, csrf string) {
-	if s == nil || s.store == nil {
+	if s == nil || !s.showIsaiah || s.store == nil {
 		http.NotFound(w, r)
 		return
 	}

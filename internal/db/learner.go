@@ -7,12 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner/rule"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
-	gofsrs "github.com/open-spaced-repetition/go-fsrs/v3"
 )
 
 // This file is the query layer of internal/learner (INIT-015/SPEC-013). It reads
@@ -37,6 +36,9 @@ type LearnerQuery struct {
 	// AsOf, when non-zero, keeps only attempts with created_at <= AsOf and review_log
 	// rows with reviewed_at <= AsOf. A zero AsOf leaves the live query text unchanged.
 	AsOf time.Time
+	// IncludeVoided counts answers an active void covers. The zero value skips
+	// them. A void with undone_at set always counts. INIT-038/SPEC-002.
+	IncludeVoided bool
 }
 
 // LearnerSkill is what one learner has for one word in one skill.
@@ -57,7 +59,10 @@ type LearnerSkill struct {
 	Agains        int // Of those, the ones that were not right.
 	Recent        int // Outcomes among the newest RecentWindow.
 	RecentRight   int
-	LastOutcome   time.Time // Zero when there are no outcomes.
+	// LatestRight is true when the newest checked outcome was right.
+	// Meaningful when Outcomes > 0. A voided answer is not an outcome.
+	LatestRight bool
+	LastOutcome time.Time // Zero when there are no outcomes.
 
 	HasCard         bool
 	CardState       string
@@ -71,7 +76,16 @@ type LearnerSkill struct {
 	// SuccessDays is how many distinct study days carry a checked success.
 	// Day = studyDay of reviewed_at in the learner's stored zone (4:00 rollover).
 	// INIT-036/SPEC-002; ADR-0031 D1.
-	SuccessDays   int
+	SuccessDays int
+	// FirstSuccessDay and LastSuccessDay are the earliest and latest of those
+	// study days, YYYY-MM-DD. Both are empty when SuccessDays is 0.
+	// INIT-038/SPEC-002.
+	FirstSuccessDay string
+	LastSuccessDay  string
+	// Taught is true when the word counts as taught (ADR-0033 D5).
+	// TaughtDay is that study day, YYYY-MM-DD.
+	Taught        bool
+	TaughtDay     string
 	RecentAgains  int       // Again rows at or after MissSince.
 	LastReviewLog time.Time // Newest review_log row. Zero when none.
 }
@@ -99,6 +113,9 @@ type LearnerEvidence struct {
 	// known rule but have only one checked-success study day (ADR-0031 D5).
 	// INIT-036/SPEC-002.
 	WaitingForSecondDay int
+	// Taught maps a taught lexeme to its taught study day (ADR-0033 D5).
+	// A word absent here is not counted on the ladder.
+	Taught map[int64]string
 }
 
 // CardReview is one review_log row of a card, in replay order.
@@ -149,7 +166,7 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 	if q.AgainWindow <= 0 || q.AccuracyWindow <= 0 || q.RecentWindow <= 0 {
 		return LearnerEvidence{}, errors.New("db: learner evidence needs positive windows")
 	}
-	out := LearnerEvidence{Exposures: map[int64]LearnerExposure{}}
+	out := LearnerEvidence{Exposures: map[int64]LearnerExposure{}, Taught: map[int64]string{}}
 	byKey := map[skillKey]*LearnerSkill{}
 	var order []skillKey
 	get := func(lexeme int64, skill string) *LearnerSkill {
@@ -173,13 +190,15 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 			var lexeme int64
 			var skill, last string
 			var r LearnerSkill
+			var latest int
 			if err := rows.Scan(&lexeme, &skill, &r.Outcomes, &r.Window, &r.WindowCorrect,
-				&r.AgainOf, &r.Agains, &r.Recent, &r.RecentRight, &last); err != nil {
+				&r.AgainOf, &r.Agains, &r.Recent, &r.RecentRight, &latest, &last); err != nil {
 				return fmt.Errorf("db: learner outcomes: %w", err)
 			}
 			p := get(lexeme, skill)
 			p.Outcomes, p.Window, p.WindowCorrect = r.Outcomes, r.Window, r.WindowCorrect
 			p.AgainOf, p.Agains, p.Recent, p.RecentRight = r.AgainOf, r.Agains, r.Recent, r.RecentRight
+			p.LatestRight = latest > 0
 			if p.LastOutcome, err = ParseTime(last); err != nil {
 				return fmt.Errorf("db: learner outcomes: %w", err)
 			}
@@ -223,6 +242,7 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 			SUM(rn <= %[1]d), SUM(rn <= %[1]d AND ok = 1),
 			SUM(rn <= %[2]d), SUM(rn <= %[2]d AND ok = 0),
 			SUM(rn <= %[3]d), SUM(rn <= %[3]d AND ok = 1),
+			SUM(rn = 1 AND ok = 1),
 			MAX(at)
 		FROM r
 		GROUP BY lexeme_id, skill`, q.AccuracyWindow, q.AgainWindow, q.RecentWindow)
@@ -238,7 +258,7 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 		rows, err := conn.QueryContext(ctx, `
 			SELECT lexeme_id, skill, correct, created_at, activity
 			FROM attempts INDEXED BY attempts_user_lexeme_skill_id
-			WHERE user_id = ?`+attemptWhere+attemptAsOf+`
+			WHERE user_id = ?`+attemptWhere+attemptAsOf+skipVoid(q.IncludeVoided, "attempt_id", "attempts.id")+`
 			ORDER BY lexeme_id DESC, skill DESC, created_at DESC, id DESC`,
 			withAsOf(lexemeArg([]any{userID}), 1)...)
 		if err != nil {
@@ -271,6 +291,9 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 			}
 			rank++
 			cur.Outcomes++
+			if rank == 1 {
+				cur.LatestRight = correct == 1
+			}
 			if rank <= q.AccuracyWindow {
 				cur.Window++
 				cur.WindowCorrect += correct
@@ -300,11 +323,11 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 			FROM cards AS c
 			JOIN review_log AS rl ON rl.card_id = c.id
 			WHERE c.user_id = ?`+cardWhere+`
-			  AND rl.implied = 0 AND rl.peeked = 0`+reviewAsOf+`
+			  AND rl.implied = 0 AND rl.peeked = 0`+reviewAsOf+skipVoid(q.IncludeVoided, "review_log_id", "rl.id")+`
 			  AND NOT EXISTS (
 				SELECT 1 FROM attempts AS a
 				WHERE a.user_id = c.user_id AND a.lexeme_id = c.lexeme_id AND a.skill = c.skill
-				  AND a.activity NOT IN ('say', 'flashcard')`+attemptExistsAsOf+`
+				  AND a.activity NOT IN ('say', 'flashcard')`+attemptExistsAsOf+skipVoid(q.IncludeVoided, "attempt_id", "a.id")+`
 			  )
 		)`+aggregate, withAsOf(lexemeArg([]any{userID}), 2)); err != nil {
 		return LearnerEvidence{}, err
@@ -341,7 +364,7 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 				COALESCE(SUM(rl.implied = 0 AND rl.rating = 1 AND rl.reviewed_at >= ?), 0),
 				MAX(CASE WHEN rl.implied = 0 THEN rl.reviewed_at END)
 			FROM cards AS c
-			LEFT JOIN review_log AS rl ON rl.card_id = c.id`+reviewAsOf+`
+			LEFT JOIN review_log AS rl ON rl.card_id = c.id`+reviewAsOf+skipVoid(q.IncludeVoided, "review_log_id", "rl.id")+`
 			WHERE c.user_id = ?`+cardExist+cardWhere+`
 			GROUP BY c.id`, lexemeArg(cardArgs)...)
 		if err != nil {
@@ -377,8 +400,8 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 		return LearnerEvidence{}, err
 	}
 
-	// Distinct study days that carry a checked success, in the learner's zone.
-	// INIT-036/SPEC-002; ADR-0031 D1.
+	// Distinct study days that carry a checked success, in the learner's zone,
+	// and the first and last of those days. INIT-036/SPEC-002; INIT-038/SPEC-002.
 	zone, err := s.learnerStudyZone(ctx, userID)
 	if err != nil {
 		return LearnerEvidence{}, err
@@ -388,7 +411,7 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 			SELECT c.lexeme_id, c.skill, rl.reviewed_at
 			FROM cards AS c
 			JOIN review_log AS rl ON rl.card_id = c.id
-			WHERE c.user_id = ?`+cardWhere+reviewAsOf+`
+			WHERE c.user_id = ?`+cardWhere+reviewAsOf+skipVoid(q.IncludeVoided, "review_log_id", "rl.id")+`
 			  AND rl.rating > 1 AND rl.peeked = 0
 			  AND (rl.implied = 0 OR c.skill = 'spell')`,
 			withAsOf(lexemeArg([]any{userID}), 1)...)
@@ -396,7 +419,7 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 			return fmt.Errorf("db: learner success days: %w", err)
 		}
 		defer rows.Close()
-		days := map[skillKey]map[string]struct{}{}
+		spans := map[skillKey]*successSpan{}
 		for rows.Next() {
 			var lexeme int64
 			var skill, atStr string
@@ -408,17 +431,28 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 				return fmt.Errorf("db: learner success days: %w", err)
 			}
 			k := skillKey{lexeme, skill}
-			if days[k] == nil {
-				days[k] = map[string]struct{}{}
+			sp := spans[k]
+			if sp == nil {
+				sp = &successSpan{days: map[string]struct{}{}}
+				spans[k] = sp
 			}
-			days[k][studyDay(at, zone)] = struct{}{}
+			day := studyDay(at, zone)
+			sp.days[day] = struct{}{}
+			if sp.first == "" || day < sp.first {
+				sp.first = day
+			}
+			if day > sp.last {
+				sp.last = day
+			}
 		}
 		if err := rows.Err(); err != nil {
 			return fmt.Errorf("db: learner success days: %w", err)
 		}
-		for k, set := range days {
+		for k, sp := range spans {
 			p := get(k.lexeme, k.skill)
-			p.SuccessDays = len(set)
+			p.SuccessDays = len(sp.days)
+			p.FirstSuccessDay = sp.first
+			p.LastSuccessDay = sp.last
 		}
 		return nil
 	}(); err != nil {
@@ -473,7 +507,7 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 		rows, err := conn.QueryContext(ctx, `
 			SELECT lexeme_id, kind, key, at
 			FROM confusion_misses
-			WHERE learner_id = ? AND lexeme_id IS NOT NULL AND at >= ?`+where+`
+			WHERE learner_id = ? AND lexeme_id IS NOT NULL AND at >= ?`+where+skipVoid(q.IncludeVoided, "confusion_id", "confusion_misses.id")+`
 			ORDER BY at, id`, lexemeArg([]any{userID, FormatTime(q.ConfusionSince)})...)
 		if err != nil {
 			return fmt.Errorf("db: learner confusions: %w", err)
@@ -498,6 +532,12 @@ func (s *Store) LearnerEvidence(ctx context.Context, userID int64, q LearnerQuer
 		return LearnerEvidence{}, err
 	}
 
+	taught, err := s.markTaught(ctx, conn, userID, q, zone, byKey)
+	if err != nil {
+		return LearnerEvidence{}, err
+	}
+	out.Taught = taught
+
 	out.Skills = make([]LearnerSkill, 0, len(order))
 	for _, k := range order {
 		out.Skills = append(out.Skills, *byKey[k])
@@ -515,15 +555,14 @@ type skillKey struct {
 	skill  string
 }
 
-// Thresholds mirrored from internal/learner so db can build the known set
-// without importing that package (fsrs → db cycle). INIT-036/SPEC-002.
-const (
-	knownLearningSuccesses = 3
-	knownRecentRight       = 3
-	knownRetrievability    = 0.85
-	knownStudyDays         = 2
-	studyRolloverHour      = 4
-)
+// successSpan is the checked-success study days of one word and skill.
+type successSpan struct {
+	days        map[string]struct{}
+	first, last string
+}
+
+// studyRolloverHour is when the learner's study day rolls, local time (ADR-0022).
+const studyRolloverHour = 4
 
 // studyDay is the learner's study day YYYY-MM-DD for at in z.
 // The study day rolls at 04:00 local (ADR-0022); before then it is the previous
@@ -559,27 +598,33 @@ func (s *Store) learnerStudyZone(ctx context.Context, userID int64) (studyday.Zo
 	return studyday.Zone{Name: name, Loc: loc, Source: studyday.SourceLearner}, nil
 }
 
-// skillOldKnown is the same-day known rule: enough checked successes, newest
-// three right, and recall chance at least 0.85. It does not require a second
-// study day (ADR-0031 D5 "old rule").
+// skillOldKnown is the same-day half of rule version 4. The thresholds live in
+// internal/learner/rule; this calls that rule (INIT-038/SPEC-005).
 func skillOldKnown(sk LearnerSkill, now time.Time) bool {
-	if !sk.HasCard || sk.ReviewSuccesses < knownLearningSuccesses {
-		return false
-	}
-	if sk.Recent < knownRecentRight || sk.RecentRight < knownRecentRight {
-		return false
-	}
-	elapsed := 0.0
-	if !sk.LastReview.IsZero() {
-		elapsed = now.Sub(sk.LastReview).Hours() / 24
-	}
-	return cardRetrievability(sk.Stability, elapsed) >= knownRetrievability
+	return rule.SameDayKnown(skillInput(sk, now))
 }
 
-// skillStrictKnown is ADR-0031 known: old known plus checked successes on at
-// least two study days.
+// skillStrictKnown is rule version 4, including the second study day.
 func skillStrictKnown(sk LearnerSkill, now time.Time) bool {
-	return skillOldKnown(sk, now) && sk.SuccessDays >= knownStudyDays
+	return rule.Rule4(skillInput(sk, now))
+}
+
+func skillInput(sk LearnerSkill, now time.Time) rule.Input {
+	in := rule.Input{
+		Outcomes: sk.Outcomes, Recent: sk.Recent, RecentRight: sk.RecentRight,
+		Successes: sk.ReviewSuccesses, SuccessDays: sk.SuccessDays, HasCard: sk.HasCard,
+		LatestRight: sk.LatestRight, Taught: sk.Taught, Stability: sk.Stability,
+		First: sk.FirstSuccessDay, Last: sk.LastSuccessDay, TaughtDay: sk.TaughtDay,
+	}
+	if sk.HasCard && !sk.LastReview.IsZero() {
+		in.ElapsedDays = now.Sub(sk.LastReview).Hours() / 24
+	}
+	in.Retrievability = rule.Chance(in.Stability, in.ElapsedDays)
+	return in
+}
+
+func recalledOrProved(sk LearnerSkill, now time.Time) bool {
+	return rule.RecalledOrProved(skillInput(sk, now))
 }
 
 // waitingForSecondDay counts words that pass the old known rule on some skill
@@ -608,19 +653,6 @@ func waitingForSecondDay(skills []LearnerSkill, now time.Time) int {
 		}
 	}
 	return n
-}
-
-// cardRetrievability mirrors fsrs.Retrievability without importing fsrs
-// (fsrs imports db). Same DefaultParam curve.
-func cardRetrievability(stability, elapsedDays float64) float64 {
-	if stability <= 0 || math.IsNaN(stability) || math.IsNaN(elapsedDays) {
-		return 0
-	}
-	if elapsedDays < 0 {
-		elapsedDays = 0
-	}
-	p := gofsrs.DefaultParam()
-	return math.Pow(1+p.Factor*elapsedDays/stability, p.Decay)
 }
 
 // LexemeText is the part of a lexeme the learner model shows.
@@ -700,14 +732,24 @@ func (s *Store) LexemeTexts(ctx context.Context, ids []int64) (map[int64]LexemeT
 
 // RecallLearnedAt returns, for one learner, the time of the earliest recall review of each
 // word that has one. It is the closest record of when the word moved into known.
+// An active void on the review_log row leaves that review out. INIT-038/SPEC-002.
 func (s *Store) RecallLearnedAt(ctx context.Context, userID int64) (map[int64]time.Time, error) {
+	return s.recallLearnedAt(ctx, userID, EvidenceOpts{})
+}
+
+// RecallLearnedAtOpts is RecallLearnedAt with EvidenceOpts.
+func (s *Store) RecallLearnedAtOpts(ctx context.Context, userID int64, opts EvidenceOpts) (map[int64]time.Time, error) {
+	return s.recallLearnedAt(ctx, userID, opts)
+}
+
+func (s *Store) recallLearnedAt(ctx context.Context, userID int64, opts EvidenceOpts) (map[int64]time.Time, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
 		SELECT c.lexeme_id, MIN(r.reviewed_at)
-		FROM cards AS c JOIN review_log AS r ON r.card_id = c.id
+		FROM cards AS c JOIN review_log AS r ON r.card_id = c.id`+skipVoid(opts.IncludeVoided, "review_log_id", "r.id")+`
 		WHERE c.user_id = ? AND c.skill = 'recall'
 		GROUP BY c.lexeme_id`, userID)
 	if err != nil {
@@ -734,8 +776,17 @@ func (s *Store) RecallLearnedAt(ctx context.Context, userID int64) (map[int64]ti
 }
 
 // RecentChecked counts the newest n attempts of one learner: how many there are, and how many
-// were right. n under 1 reads nothing.
+// were right. n under 1 reads nothing. An active void leaves that attempt out. INIT-038/SPEC-002.
 func (s *Store) RecentChecked(ctx context.Context, userID int64, n int) (correct, total int, err error) {
+	return s.recentChecked(ctx, userID, n, EvidenceOpts{})
+}
+
+// RecentCheckedOpts is RecentChecked with EvidenceOpts.
+func (s *Store) RecentCheckedOpts(ctx context.Context, userID int64, n int, opts EvidenceOpts) (correct, total int, err error) {
+	return s.recentChecked(ctx, userID, n, opts)
+}
+
+func (s *Store) recentChecked(ctx context.Context, userID int64, n int, opts EvidenceOpts) (correct, total int, err error) {
 	if n < 1 {
 		return 0, 0, nil
 	}
@@ -744,7 +795,8 @@ func (s *Store) RecentChecked(ctx context.Context, userID int64, n int) (correct
 		return 0, 0, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT correct FROM attempts WHERE user_id = ? ORDER BY id DESC LIMIT ?`, userID, n)
+		SELECT correct FROM attempts WHERE user_id = ?`+skipVoid(opts.IncludeVoided, "attempt_id", "attempts.id")+`
+		ORDER BY id DESC LIMIT ?`, userID, n)
 	if err != nil {
 		return 0, 0, fmt.Errorf("db: recent checked: %w", err)
 	}
@@ -824,8 +876,18 @@ func (s *Store) PlacementBands(ctx context.Context, userID int64) (bands []BandS
 // When asOf is non-zero, only review_log rows with reviewed_at <= asOf are joined,
 // and cards that did not exist yet are omitted: created_at > asOf, or created_at
 // IS NULL with no review at or before asOf. A zero asOf returns every card and
-// its full history.
+// its full history. An active void leaves that review_log row out of the history.
+// INIT-038/SPEC-002.
 func (s *Store) CardHistories(ctx context.Context, userID int64, asOf time.Time) ([]CardHistory, error) {
+	return s.cardHistories(ctx, userID, asOf, EvidenceOpts{})
+}
+
+// CardHistoriesOpts is CardHistories with EvidenceOpts.
+func (s *Store) CardHistoriesOpts(ctx context.Context, userID int64, asOf time.Time, opts EvidenceOpts) ([]CardHistory, error) {
+	return s.cardHistories(ctx, userID, asOf, opts)
+}
+
+func (s *Store) cardHistories(ctx context.Context, userID int64, asOf time.Time, opts EvidenceOpts) ([]CardHistory, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return nil, err
@@ -838,7 +900,7 @@ func (s *Store) CardHistories(ctx context.Context, userID int64, asOf time.Time)
 			c.last_review, c.created_at,
 			rl.rating, rl.reviewed_at, rl.elapsed_days, rl.scheduled_days, rl.implied
 		FROM cards AS c
-		LEFT JOIN review_log AS rl ON rl.card_id = c.id`
+		LEFT JOIN review_log AS rl ON rl.card_id = c.id` + skipVoid(opts.IncludeVoided, "review_log_id", "rl.id")
 	args := []any{}
 	if !asOf.IsZero() {
 		query += ` AND rl.reviewed_at <= ?`
@@ -932,8 +994,18 @@ type RetentionRow struct {
 // DueRetention counts the learner's due reviews since a time, per skill. A due review is
 // a review_log row with elapsed_days of 1 or more: the card was reviewed after waiting,
 // not again in the same sitting. When asOf is non-zero, only rows with reviewed_at <= asOf
-// are counted. A zero asOf leaves the unbound query unchanged.
+// are counted. A zero asOf leaves the unbound query unchanged. An active void leaves
+// that review out. INIT-038/SPEC-002.
 func (s *Store) DueRetention(ctx context.Context, userID int64, since, asOf time.Time) ([]RetentionRow, error) {
+	return s.dueRetention(ctx, userID, since, asOf, EvidenceOpts{})
+}
+
+// DueRetentionOpts is DueRetention with EvidenceOpts.
+func (s *Store) DueRetentionOpts(ctx context.Context, userID int64, since, asOf time.Time, opts EvidenceOpts) ([]RetentionRow, error) {
+	return s.dueRetention(ctx, userID, since, asOf, opts)
+}
+
+func (s *Store) dueRetention(ctx context.Context, userID int64, since, asOf time.Time, opts EvidenceOpts) ([]RetentionRow, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return nil, err
@@ -942,7 +1014,7 @@ func (s *Store) DueRetention(ctx context.Context, userID int64, since, asOf time
 		SELECT c.skill, COUNT(*), COALESCE(SUM(rl.rating > 1), 0)
 		FROM review_log AS rl
 		JOIN cards AS c ON c.id = rl.card_id
-		WHERE c.user_id = ? AND rl.reviewed_at >= ? AND rl.elapsed_days >= 1 AND rl.implied = 0`
+		WHERE c.user_id = ? AND rl.reviewed_at >= ? AND rl.elapsed_days >= 1 AND rl.implied = 0` + skipVoid(opts.IncludeVoided, "review_log_id", "rl.id")
 	args := []any{userID, FormatTime(since)}
 	if !asOf.IsZero() {
 		query += ` AND rl.reviewed_at <= ?`
@@ -971,6 +1043,12 @@ func (s *Store) DueRetention(ctx context.Context, userID int64, since, asOf time
 
 // RecentConfusionPairs returns the learner's confusions since a time, grouped by kind and
 // key, most frequent first. It is the confusion list of StruggleStats with the window given.
+// An active void on the confusion row leaves it out. INIT-038/SPEC-002.
 func (s *Store) RecentConfusionPairs(ctx context.Context, userID int64, since time.Time) ([]ConfusionPair, error) {
-	return s.confusionPairs(ctx, userID, FormatTime(since))
+	return s.confusionPairs(ctx, userID, FormatTime(since), false)
+}
+
+// RecentConfusionPairsOpts is RecentConfusionPairs with EvidenceOpts.
+func (s *Store) RecentConfusionPairsOpts(ctx context.Context, userID int64, since time.Time, opts EvidenceOpts) ([]ConfusionPair, error) {
+	return s.confusionPairs(ctx, userID, FormatTime(since), opts.IncludeVoided)
 }

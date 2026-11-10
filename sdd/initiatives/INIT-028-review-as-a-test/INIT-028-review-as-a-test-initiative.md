@@ -1,6 +1,6 @@
 # INIT-028: Review is a test of what you know
 
-**Initiative ID:** INIT-028 · **Status:** on_track · **Created:** 2026-11-02 · **Owner:** Brian Nelson
+**Initiative ID:** INIT-028 · **Status:** complete. All three specs are complete; the status line was updated 2026-11-09 · **Created:** 2026-11-02 · **Owner:** Brian Nelson
 **Discipline Profile:** `software` · **Ticket:** none · **Branch:** `main`
 **Source:** Brian, 2026-11-02, from a live review sitting. The open word card for אֵת showed the Hebrew, "at", "you", and Word details, and did not say what kind of word it is. The same sitting asked for a missing letter while the word on screen was complete. Picking a consonant that was visibly in that word was marked wrong. The same question came back two cards later. The grade buttons were Forgot, Hard, Got it, and Easy. He wants review to be a test, and the self-grade buttons to stay on flashcards only. Evidence: [RSCH-003](../../research/RSCH-003-language-learning-science/RSCH-003-language-learning-science-report.md) — retrieval beats rereading (Moderate), spacing beats massing (High), a same-session repeat is practice and not the review (checklist line 173, already used by INIT-027), and recognition versus recall is an open question (Low). The format of a review sitting is his decision, not a research finding.
 

@@ -50,6 +50,8 @@ type apEnv struct {
 	a, b       int64
 	ids        map[string]int64
 	taughtOpts mcp.Options // set by taughtAP for StudyDay + Now
+	// learnerAutoPublish is today's publish path when true. SPEC-007 tests set it false.
+	learnerAutoPublish bool
 }
 
 type apPut struct {
@@ -69,7 +71,7 @@ func newAP(t *testing.T) *apEnv {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	e := &apEnv{t: t, store: store, adapter: mcpstore.New(store), ids: map[string]int64{}}
+	e := &apEnv{t: t, store: store, adapter: mcpstore.New(store), ids: map[string]int64{}, learnerAutoPublish: true}
 	if e.a, err = store.InsertUser(ctx, "a@example.com", "sub-a", "learner"); err != nil {
 		t.Fatal(err)
 	}
@@ -89,6 +91,10 @@ func newAP(t *testing.T) *apEnv {
 
 func (e *apEnv) connect(opts mcp.Options, token string) *sdkmcp.ClientSession {
 	e.t.Helper()
+	opts.LearnerAutoPublish = e.learnerAutoPublish
+	if e.adapter != nil {
+		e.adapter.WithLearnerAutoPublish(e.learnerAutoPublish)
+	}
 	srv := httptest.NewServer(mcp.Handler(opts))
 	e.t.Cleanup(srv.Close)
 	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "author-test", Version: "0"}, nil)
@@ -718,5 +724,80 @@ func TestAutoPublishCannotBypassBriefViaPublishUnitTool(t *testing.T) {
 	}
 	if !res.IsError || !strings.Contains(apText(res), "put_unit") || e.status(draft.UnitID) != "draft" || e.audits() != 0 {
 		t.Fatalf("publish_unit on a learner unit: error %v %q status %s", res.IsError, apText(res), e.status(draft.UnitID))
+	}
+	if strings.Contains(apText(res), "ADR-0033") {
+		t.Fatalf("switch on used the off note: %q", apText(res))
+	}
+}
+
+// TestLearnerAutoPublishSwitch is INIT-038/SPEC-007. Off: a valid learner:1
+// publish stays a draft and both tools name ADR-0033, while a shared unit still
+// publishes. On: the same learner publish reaches Today, and publish_unit still
+// refuses a learner unit the way it does today.
+func TestLearnerAutoPublishSwitch(t *testing.T) {
+	e := newAP(t)
+	if e.a != 1 {
+		t.Fatalf("learner id %d, want 1", e.a)
+	}
+	e.learnerAutoPublish = false
+	e.session = e.connect(mcp.Options{
+		AuthToken: "secret", Course: e.adapter, Lexicon: e.adapter, Lexemes: e.adapter, Lookup: e.adapter, Units: e.adapter,
+	}, "secret")
+	doc := apDoc("Cafe")
+	e.audio(doc)
+	e.goodBrief(apBriefA, 1)
+	out := e.put("learner:1", nil, doc, apBriefA, true)
+	if out.Published || e.status(out.UnitID) != "draft" || out.PublishReason != mcp.LearnerAutoPublishNote {
+		t.Fatalf("off put %+v status %s", out, e.status(out.UnitID))
+	}
+	if e.audits() != 0 || e.briefUsed(apBriefA) != 0 {
+		t.Fatalf("off published: audits %d brief %d", e.audits(), e.briefUsed(apBriefA))
+	}
+	refused, err := e.session.CallTool(t.Context(), &sdkmcp.CallToolParams{Name: "publish_unit", Arguments: map[string]any{"unitId": out.UnitID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !refused.IsError || !strings.Contains(apText(refused), mcp.LearnerAutoPublishNote) || e.status(out.UnitID) != "draft" {
+		t.Fatalf("off publish_unit %v %q", refused.IsError, apText(refused))
+	}
+	sharedDoc := apDoc("SharedOff")
+	// The checkpoint's struggle-word listens are a brief coverage case. A shared
+	// publish has no brief, so those listens are recalls of a new word instead.
+	for i := range sharedDoc.Lessons[1].Activities {
+		if sharedDoc.Lessons[1].Activities[i].Type == units.ActivityListenPick {
+			sharedDoc.Lessons[1].Activities[i] = units.Activity{Type: units.ActivityRecall, Text: apShalom}
+		}
+	}
+	e.audio(sharedDoc)
+	shared := e.put(mcp.ScopeShared, nil, sharedDoc, "", false)
+	if shared.Published || e.status(shared.UnitID) != "draft" {
+		t.Fatalf("shared draft %+v status %s", shared, e.status(shared.UnitID))
+	}
+	published, err := e.session.CallTool(t.Context(), &sdkmcp.CallToolParams{Name: "publish_unit", Arguments: map[string]any{"unitId": shared.UnitID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if published.IsError || e.status(shared.UnitID) != "published" {
+		t.Fatalf("shared publish %v %q status %s", published.IsError, apText(published), e.status(shared.UnitID))
+	}
+
+	on := newAP(t)
+	onDoc := apDoc("Cafe")
+	on.audio(onDoc)
+	on.goodBrief(apBriefA, on.a)
+	got := on.put(db.LearnerScope(on.a), nil, onDoc, apBriefA, true)
+	if !got.Published || got.PublishReason != "" || on.status(got.UnitID) != "published" {
+		t.Fatalf("on put %+v status %s", got, on.status(got.UnitID))
+	}
+	held := on.put(db.LearnerScope(on.a), nil, apDoc("Held"), "", true)
+	if held.Published {
+		t.Fatalf("on without brief published: %+v", held)
+	}
+	again, err := on.session.CallTool(t.Context(), &sdkmcp.CallToolParams{Name: "publish_unit", Arguments: map[string]any{"unitId": held.UnitID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !again.IsError || strings.Contains(apText(again), "ADR-0033") || !strings.Contains(apText(again), "put_unit") || on.status(held.UnitID) != "draft" {
+		t.Fatalf("on publish_unit %v %q status %s", again.IsError, apText(again), on.status(held.UnitID))
 	}
 }

@@ -8,10 +8,10 @@ import (
 	"time"
 )
 
-// INIT-036/SPEC-003: ReplaceDay stamps rule version 4 and never edits review_log.
-// Literal 4 matches jobs.RuleVersion after the bump (db must not import jobs).
-func TestReplaceDayStampsRuleVersion4LeavesReviewLog(t *testing.T) {
-	const ruleVersion = 4
+// ReplaceDay stores the rule version it is given and never edits review_log.
+// Literal 5 matches jobs.RuleVersion after the bump (db must not import jobs).
+func TestReplaceDayStampsRuleVersion5LeavesReviewLog(t *testing.T) {
+	const ruleVersion = 5
 	when := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
 	s := openStore(t, fixedClock{when})
 	ctx := context.Background()

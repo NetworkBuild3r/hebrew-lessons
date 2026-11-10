@@ -353,12 +353,16 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 			{Type: units.ActivityListenPick, Text: flipHello},
 		}, distractors...)}},
 	}, ">hello<", "shalom")
-	assertNoAnswerLeak("cloze", units.Unit{
+	hh, ck, p, _ := flipLesson(t, units.Unit{
 		Title: "Cloze", Position: 1, NewWords: taughtPool,
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: append([]units.Activity{
 			{Type: units.ActivityCloze, Text: flipHello + " " + flipMorning, Target: flipHello},
 		}, distractors...)}},
-	}, "hello", "shalom")
+	}, false)
+	page := activityHTML(t, getAuthed(t, hh, ck, p))
+	if strings.Contains(page, `class="choices"`) || strings.Contains(page, "___") || !strings.Contains(page, flipHello) {
+		t.Fatalf("cloze is not a filled reveal:\n%s", page)
+	}
 }
 
 func TestFlipCardIsNativeDisclosure(t *testing.T) {

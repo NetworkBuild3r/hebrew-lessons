@@ -104,10 +104,15 @@ func (r *Recorder) spellImplied(ctx context.Context, learnerID, cardID int64, ra
 		return fmt.Errorf("evidence: card %d belongs to another learner", cardID)
 	}
 	now := r.clock.Now()
+	zone, err := r.store.StudyZone(ctx, learnerID)
+	if err != nil {
+		return err
+	}
 	next, log, err := r.review.ScheduleNext(&card, now, rating)
 	if err != nil {
 		return err
 	}
+	next.Due = fsrs.SameDayDue(next.Due, now, zone)
 	log.Implied = true
 	return r.store.ApplyReview(ctx, next, log)
 }

@@ -2,6 +2,7 @@ package learner
 
 import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner/rule"
 )
 
 // State is where a word stands in one skill, or overall.
@@ -53,14 +54,21 @@ const (
 	AccuracyMinOutcomes  = 5
 	AccuracyFloorPercent = 60
 
-	// KnownRetrievability is the recall chance a known word needs, and KnownRecentRight
-	// is how many of the newest outcomes must be right.
-	KnownRetrievability = 0.85
-	KnownRecentRight    = 3
+	// KnownRetrievability is the recall chance rule version 4 required, and
+	// KnownRecentRight is how many of the newest outcomes had to be right.
+	// Counts no longer read them. KnownRule4 still does (ADR-0033 D4).
+	KnownRetrievability = rule.KnownRetrievability
+	KnownRecentRight    = rule.KnownRecentRight
 
-	// KnownStudyDays is how many distinct study days must carry a checked success
-	// before a skill is known (ADR-0031 D1 / INIT-036/SPEC-003).
-	KnownStudyDays = 2
+	// KnownStudyDays is how many distinct study days rule version 4 required
+	// (ADR-0031 D1). Counts no longer read it. KnownRule4 still does.
+	KnownStudyDays = rule.KnownStudyDays
+
+	// ProvedSuccessDays is how many distinct study days must carry a checked
+	// right answer before a skill is proved. ProvedSpanDays is the minimum
+	// gap from the first of those days to the last (ADR-0033 D4).
+	ProvedSuccessDays = rule.ProvedSuccessDays
+	ProvedSpanDays    = rule.ProvedSpanDays
 
 	// SolidStabilityDays is the card stability a solid word needs, on top of being known.
 	SolidStabilityDays = 21.0
@@ -71,7 +79,7 @@ const (
 
 	// LearningSuccesses is how many successful reviews (Hard, Good, or Easy) a card needs
 	// before it is no longer young. A card younger than its third success is learning.
-	LearningSuccesses = 3
+	LearningSuccesses = rule.LearningSuccesses
 )
 
 // Evidence is what the rules read for one word in one skill. It holds counts, so the
@@ -98,8 +106,69 @@ type Evidence struct {
 	// SuccessDays is how many distinct study days carry a checked success
 	// (INIT-036/SPEC-002; filled by the query layer).
 	SuccessDays int
+	// FirstSuccessDay and LastSuccessDay are the earliest and latest of those
+	// study days, YYYY-MM-DD. Both are empty when SuccessDays is 0.
+	// INIT-038/SPEC-002.
+	FirstSuccessDay string
+	LastSuccessDay  string
+	// Taught is true when this word counts as taught (ADR-0033 D5).
+	// TaughtDay is that study day, YYYY-MM-DD.
+	Taught    bool
+	TaughtDay string
+	// LatestRight is true when the newest checked answer was right.
+	// It is meaningful only when Outcomes > 0.
+	LatestRight bool
 
 	Exposed bool // The word was shown with no question asked.
+}
+
+// Ladder is one rung of the proved ladder for a taught word in one skill.
+// An empty ladder means the word is not taught, so it is not counted.
+type Ladder string
+
+// The four rungs (ADR-0033 D4). A taught word is on exactly one of them.
+const (
+	Proved        Ladder = "proved"
+	RecalledLater Ladder = "recalled_later"
+	Slipping      Ladder = "slipping"
+	NotYetAsked   Ladder = "not_yet_asked"
+)
+
+// ValidLadder reports whether s is one of the four rungs.
+func ValidLadder(s string) bool {
+	switch Ladder(s) {
+	case Proved, RecalledLater, Slipping, NotYetAsked:
+		return true
+	default:
+		return false
+	}
+}
+
+// LadderCounts is how many taught words sit on each rung of one skill.
+// The four rung counts add up to Taught.
+type LadderCounts struct {
+	Taught        int
+	Proved        int
+	RecalledLater int
+	Slipping      int
+	NotYetAsked   int
+}
+
+// Add records one word on rung.
+func (c *LadderCounts) Add(rung Ladder) {
+	switch rung {
+	case Proved:
+		c.Proved++
+	case RecalledLater:
+		c.RecalledLater++
+	case Slipping:
+		c.Slipping++
+	case NotYetAsked:
+		c.NotYetAsked++
+	default:
+		return
+	}
+	c.Taught++
 }
 
 // OutcomeCounts builds the outcome counts of Evidence from a list of outcomes,
@@ -152,12 +221,48 @@ func IsStruggling(e Evidence) bool { return StrugglingByAgain(e) || StrugglingBy
 // because no per-word history of states is kept yet.
 func WasLearned(e Evidence) bool { return e.HasCard && e.Successes >= LearningSuccesses }
 
-// IsKnown is the known rule: recall chance at least 85%, the newest 3 outcomes all
-// right, and checked successes on at least KnownStudyDays study days (ADR-0031 D1).
+// IsKnown is rule version 4: recall chance at least 85%, the newest 3 outcomes
+// all right, and checked successes on at least KnownStudyDays study days
+// (ADR-0031 D1). Counts use LadderOf. This stays so StateOf and KnownRule4
+// can still name the old rule (ADR-0033 D4).
 func IsKnown(e Evidence) bool {
 	return e.Retrievability >= KnownRetrievability &&
 		e.Recent >= KnownRecentRight && e.RecentRight >= KnownRecentRight &&
 		e.SuccessDays >= KnownStudyDays
+}
+
+// KnownRule4 is rule version 4. It stays callable so a comparison can show the
+// old count beside the ladder (ADR-0033 D4). It does not decay a ladder rung.
+func KnownRule4(e Evidence) bool { return IsKnown(e) }
+
+// SameDayKnown is the rule-version-4 check without the second study day.
+// The thresholds live in internal/learner/rule. skillOldKnown calls that package.
+func SameDayKnown(e Evidence) bool { return rule.SameDayKnown(ruleInput(e)) }
+
+// LadderOf is the proved ladder for one word in one skill (ADR-0033 D4).
+// ok is false when the word is not taught; that word is not counted.
+// A voided answer is already absent from e. Recall chance is not read.
+//
+//	proved: right on at least 3 study days spanning at least 7 days, newest answer right
+//	recalled later: right on a study day after the taught day, and not proved
+//	slipping: that proved or recalled-later bar was met, and the newest answer is wrong
+//	not yet asked: taught, and neither bar was met
+func LadderOf(e Evidence) (Ladder, bool) {
+	rung, ok := rule.Ladder(ruleInput(e))
+	return Ladder(rung), ok
+}
+
+// RecalledOrProved reports the looser rung: recalled later or proved.
+// Cold-check passes sit here and are not proved (ADR-0033 D6, D7).
+func RecalledOrProved(e Evidence) bool { return rule.RecalledOrProved(ruleInput(e)) }
+
+func ruleInput(e Evidence) rule.Input {
+	return rule.Input{
+		Outcomes: e.Outcomes, Recent: e.Recent, RecentRight: e.RecentRight,
+		Successes: e.Successes, SuccessDays: e.SuccessDays, HasCard: e.HasCard,
+		LatestRight: e.LatestRight, Taught: e.Taught, Retrievability: e.Retrievability,
+		First: e.FirstSuccessDay, Last: e.LastSuccessDay, TaughtDay: e.TaughtDay,
+	}
 }
 
 // StateOf is the state of one word in one skill. The rules are checked in this

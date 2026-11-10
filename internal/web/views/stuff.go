@@ -23,6 +23,8 @@ type WordsView struct {
 	Page           Page
 	State          string
 	SkillLabel     string // direction the list is filtered to, or ""
+	Ladder         string // proved, recalled_later, slipping, not_yet_asked, or ""
+	LadderLabel    string
 	AllHref        string
 	LearningHref   string
 	KnownHref      string

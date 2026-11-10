@@ -2,7 +2,6 @@ package web
 
 import (
 	"regexp"
-	"slices"
 	"strings"
 	"testing"
 
@@ -50,7 +49,7 @@ func listenFixtureAt(t *testing.T, origin string, words ...string) (lessonFixtur
 	sp := func(s string) *string { return &s }
 	inputs := make([]lexicon.Input, len(words))
 	for i, w := range words {
-		inputs[i] = lexicon.Input{TextNFC: w, Gloss: "gloss-" + itoa(int64(i)), Translit: sp("t" + itoa(int64(i))), POS: sp("noun"), Gender: sp("m")}
+		inputs[i] = lexicon.Input{TextNFC: w, Gloss: []string{"hello", "morning", "night", "evening", "thanks", "water", "house", "book"}[i], Translit: sp("t" + itoa(int64(i))), POS: sp("noun"), Gender: sp("m")}
 	}
 	saved, _, err := fx.store.UpsertLexemes(fx.ctx, inputs)
 	if err != nil {
@@ -89,135 +88,46 @@ func listenFixtureAt(t *testing.T, origin string, words ...string) (lessonFixtur
 	return fx, unitID, ids, line
 }
 
-// The listening question asks what was heard, and its answers are Hebrew lines: the line
-// that played, and the same line with the practised word swapped for another.
-func TestListenPickOffersHebrewLines(t *testing.T) {
-	fx, unitID, ids, line := listenFixture(t, lsHello, lsMorning, lsNight, lsEvening, lsThanks)
-	path := "/lesson/" + itoa(unitID) + "/0"
-	body := getAuthed(t, fx.h, fx.cookie, path)
-	ask := activityHTML(t, body)
-
-	if !strings.Contains(ask, "What did you hear?") || strings.Contains(ask, "pick the meaning") {
-		t.Fatalf("the prompt does not ask what was heard:\n%s", ask)
-	}
-	buttons := heardButtons(t, ask)
-	if len(buttons) != 3 {
-		t.Fatalf("buttons = %+v, want the heard line and two wrong lines", buttons)
-	}
-
-	heard := 0
-	shown := map[string]bool{}
-	for _, b := range buttons {
-		if shown[b.line] {
-			t.Fatalf("a line is offered twice: %q", b.line)
-		}
-		shown[b.line] = true
-		if b.line == line {
-			heard++
-			if b.value != itoa(ids[lsHello]) {
-				t.Fatalf("the heard line posts %s, want the target %d", b.value, ids[lsHello])
-			}
-			continue
-		}
-		// A wrong line keeps the rest of the line and changes only the practised word.
-		if !strings.HasSuffix(b.line, " "+lsMorning) || strings.Contains(b.line, lsHello) || strings.Count(b.line, lsMorning) != 1 {
-			t.Fatalf("wrong line %q is not the heard line with one word swapped", b.line)
-		}
-	}
-	if heard != 1 {
-		t.Fatalf("%d buttons are the heard line, want exactly 1: %+v", heard, buttons)
-	}
-
-	// The Hebrew is the label only. Nothing in an attribute names it, so the answer is not in the markup.
-	if containsHebrew(attrValues(ask)) {
-		t.Fatalf("an attribute carries Hebrew:\n%s", attrValues(ask))
-	}
-	// The line is not shown anywhere else before the answer.
-	if strings.Count(ask, line) != 1 {
-		t.Fatalf("the heard line shows %d times before the answer, want once (its button)", strings.Count(ask, line))
-	}
-	for _, want := range []string{`class="listen-stage"`, `id="line-clip"`, `class="orb orb--hero"`} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("the listening step is missing %s:\n%s", want, body)
-		}
-	}
-	if strings.Contains(ask, "spotlight") {
-		t.Fatal("the answer layout shows before the answer")
-	}
-
-	// The same buttons come back on a reload.
-	again := heardButtons(t, activityHTML(t, getAuthed(t, fx.h, fx.cookie, path)))
-	if !slices.Equal(buttons, again) {
-		t.Fatalf("reload changed the buttons: %+v then %+v", buttons, again)
-	}
-}
-
-// A wrong line is graded wrong, and records the word it was taken for. The right line is
-// graded right and shows the words big and centered, with the play control below.
-func TestListenPickGradesAndSpotlightsTheAnswer(t *testing.T) {
-	fx, unitID, ids, line := listenFixture(t, lsHello, lsMorning, lsNight, lsEvening, lsThanks)
+// A multi-word listen_pick is an ungraded reveal: the line is shown, and
+// posting a lexeme id writes no attempt. INIT-038/SPEC-008.
+func TestMultiWordListenPickIsReveal(t *testing.T) {
+	fx, unitID, ids, _ := listenFixture(t, lsHello, lsMorning, lsNight, lsEvening, lsThanks)
 	path := "/lesson/" + itoa(unitID) + "/0"
 	ask := activityHTML(t, getAuthed(t, fx.h, fx.cookie, path))
-	runID := runValue(t, ask)
-	var wrong heardButton
-	for _, b := range heardButtons(t, ask) {
-		if b.line != line {
-			wrong = b
-			break
-		}
+	if strings.Contains(ask, `class="choices"`) {
+		t.Fatalf("multi-word listen_pick rendered buttons:\n%s", ask)
 	}
-
-	missed := activityHTML(t, postLesson(t, fx.h, fx.cookie, path, runID, wrong.value, true, lessonCSRF).Body.String())
-	if !strings.Contains(missed, "feedback--wrong") {
-		t.Fatalf("a wrong line was not graded wrong:\n%s", missed)
+	if !strings.Contains(ask, "This is what you heard.") {
+		t.Fatalf("prompt:\n%s", ask)
+	}
+	if !strings.Contains(ask, lsHello) || !strings.Contains(ask, lsMorning) {
+		t.Fatalf("the line is hidden:\n%s", ask)
+	}
+	runID := runValue(t, ask)
+	posted := postLesson(t, fx.h, fx.cookie, path, runID, itoa(ids[lsHello]), true, lessonCSRF)
+	if strings.Contains(posted.Body.String(), "feedback--") {
+		t.Fatalf("posting an id graded the reveal:\n%s", posted.Body.String())
 	}
 	rows, err := fx.store.ListAttempts(fx.ctx, fx.userID, ids[lsHello])
-	if err != nil || len(rows) != 1 || rows[0].Correct || rows[0].Activity != "listen_pick" {
+	if err != nil || len(rows) != 0 {
 		t.Fatalf("attempts = %+v, %v", rows, err)
 	}
-	if strings.Contains(missed, `class="choices"`) {
-		t.Fatal("the answers are still offered after the step was answered")
-	}
-	_, words, ok := strings.Cut(missed, `class="spotlight spotlight--cards"`)
-	if !ok || !strings.Contains(words, "wcard") {
-		t.Fatalf("the answered step has no spotlight:\n%s", missed)
-	}
-	for _, want := range []string{lsHello, lsMorning} {
-		if !strings.Contains(words, want) {
-			t.Fatalf("the spotlight does not show %s:\n%s", want, words)
-		}
-	}
-	// The play control is below the words, not above them.
-	if strings.Index(words, `id="line-clip"`) < strings.Index(words, "word-blocks--spot") {
-		t.Fatalf("the play control is above the words:\n%s", words)
-	}
-	if strings.Count(missed, `id="line-clip"`) != 1 {
-		t.Fatalf("the step has %d line clips, want 1", strings.Count(missed, `id="line-clip"`))
-	}
-
-	// The next step is a recall: its Hebrew word is big and centered with the play control below.
 	recall := activityHTML(t, postLesson(t, fx.h, fx.cookie, path, runID, "continue", true, lessonCSRF).Body.String())
-	_, words, ok = strings.Cut(recall, `class="spotlight spotlight--cards"`)
-	if !ok || !strings.Contains(words, lsHello) || !strings.Contains(words, "wcard") {
-		t.Fatalf("the recall prompt has no spotlight on its word:\n%s", recall)
-	}
-	if strings.Index(words, `id="line-clip"`) < strings.Index(words, lsHello) {
-		t.Fatalf("the recall play control is above the word:\n%s", words)
+	if !strings.Contains(recall, lsHello) || !strings.Contains(recall, `class="choices"`) {
+		t.Fatalf("continue did not reach the recall:\n%s", recall)
 	}
 }
 
-// With too few other words to make wrong lines, the step asks for the meaning as before.
-func TestListenPickFallsBackToMeaning(t *testing.T) {
-	fx, unitID, ids, _ := listenFixture(t, lsHello, lsMorning)
+// Two lexicon words are still a reveal, even when the unit cannot fill a
+// meaning question. INIT-038/SPEC-008.
+func TestTwoWordListenPickDoesNotAskMeaning(t *testing.T) {
+	fx, unitID, _, _ := listenFixture(t, lsHello, lsMorning)
 	ask := activityHTML(t, getAuthed(t, fx.h, fx.cookie, "/lesson/"+itoa(unitID)+"/0"))
-	if !strings.Contains(ask, "Listen, then pick the meaning.") || strings.Contains(ask, "What did you hear?") {
-		t.Fatalf("the fallback prompt is wrong:\n%s", ask)
+	if strings.Contains(ask, `class="choices"`) || strings.Contains(ask, "Listen, then pick the meaning.") {
+		t.Fatalf("two-word listen_pick is still a question:\n%s", ask)
 	}
-	if containsHebrew(ask) {
-		t.Fatalf("the meaning question shows Hebrew before the answer:\n%s", ask)
-	}
-	if !strings.Contains(ask, `value="`+itoa(ids[lsHello])+`"`) || !strings.Contains(ask, `value="`+itoa(ids[lsMorning])+`"`) {
-		t.Fatalf("the meaning question lost its buttons:\n%s", ask)
+	if !strings.Contains(ask, lsHello) || !strings.Contains(ask, lsMorning) || !strings.Contains(ask, "This is what you heard.") {
+		t.Fatalf("two-word listen_pick hid the line:\n%s", ask)
 	}
 }
 

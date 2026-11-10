@@ -26,7 +26,8 @@ func TestEnqueueNewWordsAddsListenWhenTargetedWithAudio(t *testing.T) {
 	clip := strings.Repeat("ab", 32)
 	mustExec(t, s, `INSERT INTO audio_assets (id, text_nfc, voice, model, bytes, created_at) VALUES (?, ?, 'v', 'm', 4, ?)`,
 		clip, withAudio, FormatTime(now))
-	hello := mustExec(t, s, `INSERT INTO lexemes (text_nfc, gloss_en, audio_id) VALUES (?, 'hello', ?)`, withAudio, clip)
+	// The clip lives only in audio_assets. lexemes.audio_id stays empty.
+	hello := mustExec(t, s, `INSERT INTO lexemes (text_nfc, gloss_en) VALUES (?, 'hello')`, withAudio)
 	helloID, err := hello.LastInsertId()
 	if err != nil {
 		t.Fatal(err)

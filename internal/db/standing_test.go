@@ -57,14 +57,22 @@ func TestCountLexemesWithAudio(t *testing.T) {
 		t.Fatalf("empty = %d, %v", n, err)
 	}
 	clip := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	assetOnly := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	idOnly := "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 	mustExec(t, s, `INSERT INTO audio_assets (id, text_nfc, voice, model, bytes, created_at) VALUES (?, 'בַּיִת', 'v', 'm', 4, ?)`,
 		clip, FormatTime(when))
-	mustExec(t, s, `INSERT INTO lexemes (text_nfc) VALUES ('שָׁלוֹם')`)                   // NULL audio_id
-	mustExec(t, s, `INSERT INTO lexemes (text_nfc, audio_id) VALUES ('בַּיִת', ?)`, clip) // has clip
-	mustExec(t, s, `INSERT INTO lexemes (text_nfc) VALUES ('מַיִם')`)
+	mustExec(t, s, `INSERT INTO audio_assets (id, text_nfc, voice, model, bytes, created_at) VALUES (?, 'שָׁלוֹם', 'v', 'm', 4, ?)`,
+		assetOnly, FormatTime(when))
+	// The id-only clip's text is not the word, so the count comes from audio_id.
+	mustExec(t, s, `INSERT INTO audio_assets (id, text_nfc, voice, model, bytes, created_at) VALUES (?, 'unused-id-clip', 'v', 'm', 4, ?)`,
+		idOnly, FormatTime(when))
+	mustExec(t, s, `INSERT INTO lexemes (text_nfc) VALUES ('שָׁלוֹם')`)                    // clip only in audio_assets
+	mustExec(t, s, `INSERT INTO lexemes (text_nfc, audio_id) VALUES ('בַּיִת', ?)`, clip)  // both
+	mustExec(t, s, `INSERT INTO lexemes (text_nfc, audio_id) VALUES ('מַיִם', ?)`, idOnly) // audio_id only
+	mustExec(t, s, `INSERT INTO lexemes (text_nfc) VALUES ('אֵין')`)                       // neither
 	n, err = s.CountLexemesWithAudio(ctx)
-	if err != nil || n != 1 {
-		t.Fatalf("count = %d, %v; want 1", n, err)
+	if err != nil || n != 3 {
+		t.Fatalf("count = %d, %v; want 3", n, err)
 	}
 }
 

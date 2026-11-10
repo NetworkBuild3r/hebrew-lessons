@@ -36,8 +36,9 @@ const (
 	UnknownCause = "unexplained"
 
 	// RuleVersion is the learner-model stamp on daily_snapshots and daily_totals written
-	// by the daily job and by hebrew history rebuild (ADR-0031 D5 / INIT-036/SPEC-003).
-	RuleVersion = 4
+	// by the daily job and by hebrew history rebuild (ADR-0033 D4).
+	// Rule version 4 stays callable as learner.KnownRule4.
+	RuleVersion = 5
 
 	// DailyLockKey is the job_state key for the daily job and history rebuild lock.
 	DailyLockKey = "daily.lock"

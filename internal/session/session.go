@@ -14,6 +14,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
 
 // Service loads a learner's cards and grades the answers.
@@ -171,9 +172,20 @@ type Session struct {
 	clock    clock.Clock
 	record   *evidence.Recorder
 	tally    Tally
+	minutes  int
 	// SkippedNoAudio is how many due listening cards this sitting left out
 	// because the word has no clip (ADR-0028 D6). They stay due.
 	SkippedNoAudio int
+}
+
+// Minutes is the session's planned length. SPEC-011 shows it on Today.
+func (s *Session) Minutes() int {
+	if s == nil {
+		return 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.minutes
 }
 
 // UserID is the learner this queue was built for.
@@ -220,6 +232,14 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 		return nil, err
 	}
 	now := s.clock.Now()
+	cardsN, minutes, err := s.sessionBudget(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	zone, err := s.store.StudyZone(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	ratings, err := s.store.RecentReviewRatings(ctx, userID, now, RecentReviews)
 	if err != nil {
 		return nil, err
@@ -295,7 +315,7 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 			ID:                        card.ID,
 			LexemeID:                  card.LexemeID,
 			Skill:                     card.Skill,
-			Due:                       card.Due,
+			Due:                       studyday.EffectiveDue(card.Due, card.LastReview, zone),
 			Lapses:                    card.Lapses,
 			Latest:                    card.LatestRating,
 			HasRating:                 card.HasRating,
@@ -316,7 +336,7 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 		cands = append(cands, drillCandidates(pairs)...)
 	}
 	record := s.record
-	queue, skippedNoAudio := mixGate(cands, accuracy, now, seed, gate)
+	queue, skippedNoAudio := mixGateCap(cands, accuracy, now, seed, gate, cardsN)
 	sess := &Session{
 		userID:         userID,
 		cards:          queue,
@@ -324,6 +344,7 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 		store:          s.store,
 		clock:          s.clock,
 		record:         record,
+		minutes:        minutes,
 		SkippedNoAudio: skippedNoAudio,
 	}
 	sess.grade = func(ctx context.Context, cardID int64, rating fsrs.Rating, _ bool) error {

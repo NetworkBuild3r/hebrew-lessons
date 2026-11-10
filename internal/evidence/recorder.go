@@ -160,6 +160,10 @@ func (r *Recorder) Attempt(ctx context.Context, a Attempt) (fsrs.Rating, error) 
 		return 0, err
 	}
 	now := r.clock.Now()
+	zone, err := r.store.StudyZone(ctx, a.UserID)
+	if err != nil {
+		return 0, err
+	}
 
 	latencies, err := r.store.CorrectLatencies(ctx, a.UserID, a.Activity, MedianWindow)
 	if err != nil {
@@ -191,14 +195,22 @@ func (r *Recorder) Attempt(ctx context.Context, a Attempt) (fsrs.Rating, error) 
 				return db.Card{}, db.ReviewLog{}, false, nil
 			}
 			card, log, err := r.review.ScheduleNext(nil, now, rating)
-			return card, log, err == nil, err
+			if err != nil {
+				return card, log, false, err
+			}
+			card.Due = fsrs.SameDayDue(card.Due, now, zone)
+			return card, log, true, nil
 		}
 	default:
 		step = func(prev *db.Card) (db.Card, db.ReviewLog, bool, error) {
 			rating = holdEasyUntilReview(prev, rating)
 			card, log, err := r.review.ScheduleNext(prev, now, rating)
+			if err != nil {
+				return card, log, false, err
+			}
+			card.Due = fsrs.SameDayDue(card.Due, now, zone)
 			log.Chosen = chosenText
-			return card, log, err == nil, err
+			return card, log, true, nil
 		}
 	}
 
@@ -252,6 +264,10 @@ func (r *Recorder) SelfGrade(ctx context.Context, cardID int64, rating fsrs.Rati
 		return err
 	}
 	now := r.clock.Now()
+	zone, err := r.store.StudyZone(ctx, card.UserID)
+	if err != nil {
+		return err
+	}
 	prompt := ""
 	face, ok, err := r.store.LexemeByID(ctx, card.LexemeID)
 	if err != nil {
@@ -277,8 +293,12 @@ func (r *Recorder) SelfGrade(ctx context.Context, cardID int64, rating fsrs.Rati
 		Attempt: a.row(now),
 		Step: func(prev *db.Card) (db.Card, db.ReviewLog, bool, error) {
 			next, log, err := r.review.ScheduleNext(prev, now, rating)
+			if err != nil {
+				return next, log, false, err
+			}
+			next.Due = fsrs.SameDayDue(next.Due, now, zone)
 			log.Peeked = true
-			return next, log, err == nil, err
+			return next, log, true, nil
 		},
 	})
 	return err
@@ -514,10 +534,15 @@ func (r *Recorder) Implied(ctx context.Context, learnerID, cardID int64, rating 
 		return fmt.Errorf("evidence: implied must not write onto a spelling card")
 	}
 	now := r.clock.Now()
+	zone, err := r.store.StudyZone(ctx, learnerID)
+	if err != nil {
+		return err
+	}
 	next, log, err := r.review.ScheduleNext(&card, now, fsrs.Good)
 	if err != nil {
 		return err
 	}
+	next.Due = fsrs.SameDayDue(next.Due, now, zone)
 	log.Implied = true
 	return r.store.ApplyReview(ctx, next, log)
 }

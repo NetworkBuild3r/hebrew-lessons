@@ -91,6 +91,7 @@ func TestReplayListenMatchesLiveAttempts(t *testing.T) {
 	const history = "RRWR"
 	live := newEnv(t)
 	lexLive := live.lexeme(kelev)
+	live.clip(lexLive)
 	live.liveListenAttempts(lexLive, history)
 	liveCard, ok := live.card(lexLive, fsrs.SkillListen)
 	if !ok {
@@ -103,6 +104,7 @@ func TestReplayListenMatchesLiveAttempts(t *testing.T) {
 
 	replay := newEnv(t)
 	lexReplay := replay.lexeme(kelev)
+	replay.clip(lexReplay)
 	replay.clk.t = live.clk.t
 	replay.insertListenAttempts(lexReplay, history)
 	if _, ok := replay.card(lexReplay, fsrs.SkillListen); ok {
@@ -152,6 +154,7 @@ func TestReplayListenAllWrongGetsNoCard(t *testing.T) {
 func TestReplayListenSecondRunWritesNothing(t *testing.T) {
 	e := newEnv(t)
 	lex := e.lexeme(kelev)
+	e.clip(lex)
 	e.insertListenAttempts(lex, "RR")
 	if _, err := ReplayListenWord(context.Background(), e.store, nil, e.user, lex); err != nil {
 		t.Fatal(err)
@@ -174,6 +177,7 @@ func TestReplayListenSecondRunWritesNothing(t *testing.T) {
 func TestReplayListenLeavesExistingCardAlone(t *testing.T) {
 	e := newEnv(t)
 	lex := e.lexeme(kelev)
+	e.clip(lex)
 	e.liveListenAttempts(lex, "R")
 	before, ok := e.card(lex, fsrs.SkillListen)
 	if !ok {
@@ -228,6 +232,7 @@ func TestReplayListenDryRunWritesNothing(t *testing.T) {
 func TestReplayListenWrongThenRightCreatesCard(t *testing.T) {
 	e := newEnv(t)
 	lex := e.lexeme(kelev)
+	e.clip(lex)
 	e.insertListenAttempts(lex, "WR")
 	wrote, err := ReplayListenWord(context.Background(), e.store, nil, e.user, lex)
 	if err != nil || !wrote {

@@ -113,6 +113,10 @@ type FeedbackView struct {
 	AlsoCounts string
 	// SlowLine is set when a right answer was slow.
 	SlowLine string
+	// AlsoRightID is the wrong graded attempt this feedback can take back.
+	// Zero hides the button. A right answer and an ungraded reveal leave it zero.
+	// INIT-038/SPEC-009.
+	AlsoRightID int64
 }
 
 // ActivityView is one checked activity, as a screen.
@@ -212,6 +216,15 @@ func ReviewT(lang, en string) templ.Component {
 
 // SlowComingBack is the slow-right feedback line.
 const SlowComingBack = "Right, but slow. It will come back sooner."
+
+// AlsoRightPath is the tap that takes back a wrong graded answer.
+// AlsoRightLabel is the button. AlsoRightTaken is the line after the tap.
+// INIT-038/SPEC-009.
+const (
+	AlsoRightPath  = "/_hx/also-right"
+	AlsoRightLabel = "My answer was also right"
+	AlsoRightTaken = "Taken back. This answer no longer counts."
+)
 
 // AlsoCountsLine names the easier skill that an implied Good covered.
 func AlsoCountsLine(skill string) string {

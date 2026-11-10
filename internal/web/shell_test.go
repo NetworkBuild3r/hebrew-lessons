@@ -100,7 +100,20 @@ var shellPaths = map[*db.Store]string{}
 // pick, as openAt), plus the placement engine and the band seam the shell reads.
 func openShell(t *testing.T, clk clock.Clock, eng PlacementEngine, bands learner.BandSource) (*db.Store, http.Handler) {
 	t.Helper()
-	return openShellAt(t, clk, "https://learn.example", eng, bands)
+	return openShellFlags(t, clk, eng, bands, Options{})
+}
+
+// openShellFlags is openShell with side-feature switches. Zero Options leaves
+// Roots, Isaiah, placement, and the check-in off (INIT-038/SPEC-011).
+func openShellFlags(t *testing.T, clk clock.Clock, eng PlacementEngine, bands learner.BandSource, flags Options) (*db.Store, http.Handler) {
+	t.Helper()
+	return openShellAtFlags(t, clk, "https://learn.example", eng, bands, flags)
+}
+
+// featuresOn turns the four side-feature switches on, so a test sees the
+// feature as it behaves today.
+func featuresOn() Options {
+	return Options{ShowRoots: true, ShowIsaiah: true, ShowPlacement: true, ShowCheckIn: true}
 }
 
 // openShellWithAppZone is openShell with a fixed studyday app zone for learner-day
@@ -141,6 +154,11 @@ func openShellWithAppZone(t *testing.T, clk clock.Clock, appZone string) (*db.St
 // openShellAt is openShell for an origin: a browser test posts from its own server address.
 func openShellAt(t *testing.T, clk clock.Clock, origin string, eng PlacementEngine, bands learner.BandSource) (*db.Store, http.Handler) {
 	t.Helper()
+	return openShellAtFlags(t, clk, origin, eng, bands, Options{})
+}
+
+func openShellAtFlags(t *testing.T, clk clock.Clock, origin string, eng PlacementEngine, bands learner.BandSource, flags Options) (*db.Store, http.Handler) {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "hebrew.sqlite")
 	store, err := db.Open(context.Background(), path, clk)
 	if err != nil {
@@ -160,7 +178,11 @@ func openShellAt(t *testing.T, clk clock.Clock, origin string, eng PlacementEngi
 	study := session.New(store, clk, 1, session.WithGate(func(context.Context, int64) (activity.Gate, error) {
 		return activity.Gate{LettersPassed: false}, nil
 	}))
-	return store, NewOptions(nil, svc, Options{Store: store, Runs: store, study: study, Placement: eng, bands: bands})
+	return store, NewOptions(nil, svc, Options{
+		Store: store, Runs: store, study: study, Placement: eng, bands: bands,
+		ShowRoots: flags.ShowRoots, ShowIsaiah: flags.ShowIsaiah,
+		ShowPlacement: flags.ShowPlacement, ShowCheckIn: flags.ShowCheckIn,
+	})
 }
 
 // shellUnit publishes a shared or learner unit of ungraded story steps.
@@ -257,13 +279,13 @@ func TestChooseTodayAction(t *testing.T) {
 		in   TodayInputs
 		want views.TodayAction
 	}{
-		{"open placement resumes", TodayInputs{PlacementActive: true, LessonInProgress: true, CheckinDue: true, Due: 9, HasLesson: true}, views.ActionResumePlacement},
-		{"no placement starts one", TodayInputs{PlacementNever: true, LessonInProgress: true, CheckinDue: true, Due: 9, HasLesson: true}, views.ActionStartPlacement},
-		{"a lesson in progress continues", TodayInputs{LessonInProgress: true, Due: 9, HasLesson: true}, views.ActionContinueLesson},
-		{"the check-in never outranks a lesson in progress", TodayInputs{LessonInProgress: true, CheckinDue: true, Due: 9, HasLesson: true}, views.ActionContinueLesson},
-		{"the check-in outranks reviews", TodayInputs{CheckinDue: true, Due: 9, HasLesson: true}, views.ActionCheckin},
-		{"the next lesson outranks reviews", TodayInputs{Due: 1, HasLesson: true}, views.ActionNextLesson},
-		{"the next lesson", TodayInputs{HasLesson: true}, views.ActionNextLesson},
+		{"placement switch resumes an open run", TodayInputs{PlacementOn: true, PlacementActive: true, CheckinDue: true, Askable: true}, views.ActionResumePlacement},
+		{"placement switch starts one", TodayInputs{PlacementOn: true, PlacementNever: true, Askable: true}, views.ActionStartPlacement},
+		{"placement switch off ignores an open run", TodayInputs{PlacementActive: true, Askable: true}, views.ActionSession},
+		{"a lesson does not replace the session", TodayInputs{LessonInProgress: true, HasLesson: true, Askable: true}, views.ActionSession},
+		{"check-in switch on offers the check-in", TodayInputs{CheckInOn: true, CheckinDue: true, Askable: true, LessonInProgress: true}, views.ActionCheckin},
+		{"check-in switch off leaves the session", TodayInputs{CheckinDue: true, Askable: true}, views.ActionSession},
+		{"askable cards are the session", TodayInputs{Askable: true, Due: 1, HasLesson: true}, views.ActionSession},
 		{"nothing to do", TodayInputs{}, views.ActionNone},
 	} {
 		if got := ChooseTodayAction(c.in); got != c.want {
@@ -272,95 +294,31 @@ func TestChooseTodayAction(t *testing.T) {
 	}
 }
 
-// Every action but none is drawn with exactly one gold button, and it is the right one.
+// The session is the one gold action. Nothing due is one line and no button.
 func TestTodayStatesRenderOneGoldAction(t *testing.T) {
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	clk := fixedClock(now)
-	ctx := context.Background()
 
-	type state struct {
-		name   string
-		action string
-		eng    PlacementEngine
-		setup  func(store *db.Store, l learnerFix)
-		target string // the href, or the form action, of the gold button
-	}
-	var lessonLink string
-	states := []state{
-		{
-			name: "resume placement", action: "resume_placement", target: `href="/placement"`,
-			setup: func(store *db.Store, l learnerFix) {
-				if _, err := store.InsertPlacementRun(ctx, l.user.ID, now, 1); err != nil {
-					t.Fatal(err)
-				}
-			},
-		},
-		{name: "start placement", action: "start_placement", target: `href="/placement"`, setup: func(*db.Store, learnerFix) {}},
-		{
-			name: "continue a lesson", action: "continue_lesson",
-			setup: func(store *db.Store, l learnerFix) {
-				finishPlacement(t, store, l.user.ID, now.Add(-time.Hour))
-				id := shellUnit(t, store, "Mine", 1, "shared", 3)
-				lessonLink = "/lesson/" + itoa(id) + "/0"
-				run, err := store.StartPlayerRun(ctx, l.user.ID, id, 0)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if _, _, err := store.ContinuePlayerRun(ctx, l.user.ID, run.ID, 0, 3); err != nil {
-					t.Fatal(err)
-				}
-				addCard(t, store, l.user.ID, addLexeme(t, store, helloHe, "hello", "shalom", "m", ""), fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
-			},
-		},
-		{
-			name: "take the check-in", action: "checkin", eng: dueEngine(), target: `action="/_hx/placement/recheck"`,
-			setup: func(store *db.Store, l learnerFix) {
-				finishPlacement(t, store, l.user.ID, now.Add(-40*24*time.Hour))
-				addCard(t, store, l.user.ID, addLexeme(t, store, helloHe, "hello", "shalom", "m", ""), fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
-				shellUnit(t, store, "Next", 1, "shared", 2)
-			},
-		},
-		{
-			name: "do the due reviews", action: "reviews", target: `href="/review"`,
-			setup: func(store *db.Store, l learnerFix) {
-				finishPlacement(t, store, l.user.ID, now.Add(-time.Hour))
-				addCard(t, store, l.user.ID, addLexeme(t, store, helloHe, "hello", "shalom", "m", ""), fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
-			},
-		},
-		{
-			name: "open the next lesson", action: "next_lesson",
-			setup: func(store *db.Store, l learnerFix) {
-				finishPlacement(t, store, l.user.ID, now.Add(-time.Hour))
-				addCard(t, store, l.user.ID, addLexeme(t, store, helloHe, "hello", "shalom", "m", ""), fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
-				id := shellUnit(t, store, "Next", 1, "shared", 2)
-				lessonLink = "/lesson/" + itoa(id) + "/0"
-			},
-		},
-	}
-	for i, s := range states {
-		t.Run(s.name, func(t *testing.T) {
-			lessonLink = ""
-			store, h := openShell(t, clk, s.eng, nil)
-			l := addLearner(t, store, "a@example.com", fmt.Sprintf("sub-%d", i), now)
-			s.setup(store, l)
-			body := getLearner(t, h, l, "/")
-			if got := todayAction(t, body); got != s.action {
-				t.Fatalf("action = %q, want %q", got, s.action)
-			}
-			if n := goldCount(body); n != 1 {
-				t.Fatalf("%d gold actions, want exactly 1", n)
-			}
-			target := s.target
-			if target == "" {
-				target = `href="` + lessonLink + `"`
-			}
-			// The gold button is the one that goes where the action says.
-			gold := regexp.MustCompile(`(?s)<(?:a|button)\b[^>]*class="btn btn-primary"[^>]*>|<form\b[^>]*>(?:\s*<input[^>]*>)*\s*<button type="submit" class="btn btn-primary">`).FindString(body)
-			if !strings.Contains(gold, target) {
-				t.Fatalf("the gold button does not go to %s:\n%s", target, gold)
-			}
-		})
-	}
+	t.Run("due cards are one session", func(t *testing.T) {
+		store, h := openShell(t, clk, dueEngine(), nil)
+		l := addLearner(t, store, "a@example.com", "sub-session", now)
+		finishPlacement(t, store, l.user.ID, now.Add(-time.Hour))
+		addCard(t, store, l.user.ID, addLexeme(t, store, helloHe, "hello", "shalom", "m", ""), fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
+		shellUnit(t, store, "Next", 1, "shared", 2)
+		body := getLearner(t, h, l, "/")
+		if todayAction(t, body) != "session" {
+			t.Fatalf("action = %q, want session", todayAction(t, body))
+		}
+		if n := goldCount(body); n != 1 {
+			t.Fatalf("%d gold actions, want exactly 1", n)
+		}
+		if !strings.Contains(body, "session, about ") || !strings.Contains(body, `href="/review"`) {
+			t.Fatalf("session button missing:\n%s", body)
+		}
+		if strings.Contains(body, `href="/placement"`) || strings.Contains(body, "check-in") || strings.Contains(body, "/lesson/") {
+			t.Fatal("Today still offers a side feature or a lesson")
+		}
+	})
 
 	t.Run("nothing to do has no gold", func(t *testing.T) {
 		store, h := openShell(t, clk, nil, nil)
@@ -370,14 +328,42 @@ func TestTodayStatesRenderOneGoldAction(t *testing.T) {
 		if todayAction(t, body) != "none" || goldCount(body) != 0 {
 			t.Fatalf("idle Today: action %q, %d gold", todayAction(t, body), goldCount(body))
 		}
-		// An empty state names what to do next.
-		if !strings.Contains(body, "Until then, look over what you know.") || !strings.Contains(body, `href="/progress"`) {
-			t.Fatal("the idle Today does not say what to do next")
+		if !strings.Contains(body, "Nothing due") || strings.Contains(body, "session, about") {
+			t.Fatal("idle Today did not say nothing is due in place of a session")
+		}
+		if strings.Contains(body, `href="/placement"`) || strings.Contains(body, `href="/roots"`) || strings.Contains(body, `href="/isaiah"`) {
+			t.Fatal("idle Today still links a side feature")
+		}
+	})
+
+	t.Run("placement switch on starts and resumes", func(t *testing.T) {
+		store, h := openShellFlags(t, clk, nil, nil, Options{ShowPlacement: true})
+		l := addLearner(t, store, "a@example.com", "sub-place", now)
+		body := getLearner(t, h, l, "/")
+		if todayAction(t, body) != "start_placement" || !strings.Contains(body, `href="/placement"`) {
+			t.Fatalf("start: %q", todayAction(t, body))
+		}
+		if _, err := store.InsertPlacementRun(context.Background(), l.user.ID, now, 1); err != nil {
+			t.Fatal(err)
+		}
+		again := getLearner(t, h, l, "/")
+		if todayAction(t, again) != "resume_placement" {
+			t.Fatalf("resume: %q", todayAction(t, again))
+		}
+	})
+
+	t.Run("check-in switch on offers the check-in", func(t *testing.T) {
+		store, h := openShellFlags(t, clk, dueEngine(), nil, Options{ShowCheckIn: true, ShowPlacement: true})
+		l := addLearner(t, store, "a@example.com", "sub-check", now)
+		finishPlacement(t, store, l.user.ID, now.Add(-40*24*time.Hour))
+		body := getLearner(t, h, l, "/")
+		if todayAction(t, body) != "checkin" || !strings.Contains(body, `action="/_hx/placement/recheck"`) {
+			t.Fatalf("check-in: %q", todayAction(t, body))
 		}
 	})
 }
 
-// A lesson in progress outranks a due check-in and a due review, end to end.
+// A lesson in progress does not replace the session, and a switched-off check-in stays hidden.
 func TestTodayCheckinNeverOutranksALessonInProgress(t *testing.T) {
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	ctx := context.Background()
@@ -388,8 +374,8 @@ func TestTodayCheckinNeverOutranksALessonInProgress(t *testing.T) {
 	id := shellUnit(t, store, "Mine", 1, "shared", 3)
 
 	before := getLearner(t, h, l, "/")
-	if todayAction(t, before) != "checkin" {
-		t.Fatalf("before the lesson: %q, want checkin", todayAction(t, before))
+	if todayAction(t, before) != "session" || strings.Contains(before, "check-in") {
+		t.Fatalf("before the lesson: %q", todayAction(t, before))
 	}
 	run, err := store.StartPlayerRun(ctx, l.user.ID, id, 0)
 	if err != nil {
@@ -399,17 +385,8 @@ func TestTodayCheckinNeverOutranksALessonInProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 	after := getLearner(t, h, l, "/")
-	if todayAction(t, after) != "continue_lesson" || !strings.Contains(after, "Step 2 of 3") {
-		t.Fatalf("with a lesson in progress: %q\n%s", todayAction(t, after), articleAttrs(after))
-	}
-	// Opening the lesson without answering is not progress: the check-in is still first.
-	other := addLearner(t, store, "b@example.com", "sub-y", now)
-	finishPlacement(t, store, other.user.ID, now.Add(-40*24*time.Hour))
-	if _, err := store.StartPlayerRun(ctx, other.user.ID, id, 0); err != nil {
-		t.Fatal(err)
-	}
-	if got := todayAction(t, getLearner(t, h, other, "/")); got != "checkin" {
-		t.Fatalf("an opened but untouched lesson counts as progress: %q", got)
+	if todayAction(t, after) != "session" || strings.Contains(after, "Continue lesson") {
+		t.Fatalf("with a lesson in progress: %q", todayAction(t, after))
 	}
 }
 
@@ -438,8 +415,11 @@ func TestDailyLine(t *testing.T) {
 		addCard(t, store, l.user.ID, id, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
 	}
 	body := getLearner(t, h, l, "/")
-	if !strings.Contains(body, "12 reviews due · about 6 minutes") {
-		t.Fatal("the daily line is not on Today")
+	if !strings.Contains(body, "session, about 25 minutes") {
+		t.Fatal("the session length is not on Today")
+	}
+	if strings.Contains(body, "12 reviews due · about 6 minutes") {
+		t.Fatal("Today still estimates the session from the old card cap")
 	}
 	if regexp.MustCompile(`(?i)streak|xp\b|\bpoints\b`).MatchString(body) {
 		t.Fatal("a streak or score is on Today")
@@ -656,8 +636,8 @@ func TestReportHidesTheUnitInTheSameResponse(t *testing.T) {
 	mine := shellUnit(t, store, "Mine only", 3, "learner:"+itoa(a.user.ID), 2)
 	theirs := shellUnit(t, store, "Theirs only", 4, "learner:"+itoa(b.user.ID), 2)
 
-	if today := getLearner(t, h, a, "/"); todayAction(t, today) != "next_lesson" || !strings.Contains(today, "/lesson/"+itoa(reported)+"/0") {
-		t.Fatal("before the report the first unit is next")
+	if today := getLearner(t, h, a, "/"); strings.Contains(today, "/lesson/"+itoa(reported)+"/0") {
+		t.Fatal("Today offers a lesson before the report")
 	}
 	if !strings.Contains(getLearner(t, h, a, "/lessons"), "Reported unit") {
 		t.Fatal("before the report the unit is on Lessons")
@@ -715,7 +695,7 @@ func TestReportHidesTheUnitInTheSameResponse(t *testing.T) {
 	if strings.Contains(today, "Reported unit") || strings.Contains(today, "/lesson/"+itoa(reported)+"/0") {
 		t.Fatal("the reported unit is still on Today")
 	}
-	if !strings.Contains(today, "That lesson is hidden for you.") || !strings.Contains(today, "/lesson/"+itoa(kept)+"/0") {
+	if !strings.Contains(today, "That lesson is hidden for you.") || strings.Contains(today, "/lesson/"+itoa(kept)+"/0") {
 		t.Fatalf("Today after the report:\n%s", articleAttrs(today))
 	}
 	lessons := getLearner(t, h, a, "/lessons")
@@ -735,8 +715,8 @@ func TestReportHidesTheUnitInTheSameResponse(t *testing.T) {
 		t.Fatal("the lesson player still opens the reported unit")
 	}
 	// It is hidden for this learner only.
-	if !strings.Contains(getLearner(t, h, b, "/"), "/lesson/"+itoa(reported)+"/0") || !strings.Contains(getLearner(t, h, b, "/lessons"), "Reported unit") {
-		t.Fatal("a report hid the unit for another learner")
+	if strings.Contains(getLearner(t, h, b, "/"), "/lesson/"+itoa(reported)+"/0") || !strings.Contains(getLearner(t, h, b, "/lessons"), "Reported unit") {
+		t.Fatal("a report hid the unit for another learner, or Today offered it")
 	}
 	if audit := scalar(t, shellPaths[store], `SELECT COUNT(*) FROM publish_audit WHERE action = 'report_hide' AND unit_id = ?`, reported); audit != 1 {
 		t.Fatalf("report_hide audit rows = %d", audit)
@@ -1043,7 +1023,7 @@ func TestFrameForCounts(t *testing.T) {
 func TestCheckinRoute(t *testing.T) {
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	eng := dueEngine()
-	store, h := openShell(t, fixedClock(now), eng, nil)
+	store, h := openShellFlags(t, fixedClock(now), eng, nil, Options{ShowCheckIn: true, ShowPlacement: true})
 	l := addLearner(t, store, "a@example.com", "sub-a", now)
 	finishPlacement(t, store, l.user.ID, now.Add(-40*24*time.Hour))
 
@@ -1088,8 +1068,19 @@ func TestCheckinRoute(t *testing.T) {
 		t.Fatalf("engine error = %d", rec.Code)
 	}
 
+	// With the switch off the route is 404, and Today does not offer a check-in.
+	storeOff, hOff := openShell(t, fixedClock(now), eng, nil)
+	lOff := addLearner(t, storeOff, "b@example.com", "sub-off", now)
+	finishPlacement(t, storeOff, lOff.user.ID, now.Add(-40*24*time.Hour))
+	if rec := formPost(t, hOff, lOff, "/_hx/placement/recheck", url.Values{"_csrf": {lOff.csrf}}, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("switch off = %d", rec.Code)
+	}
+	if strings.Contains(getLearner(t, hOff, lOff, "/"), "check-in") {
+		t.Fatal("Today offers a check-in with the switch off")
+	}
+
 	// With no engine the check-in is off, and Today does not offer it.
-	store2, h2 := openShell(t, fixedClock(now), nil, nil)
+	store2, h2 := openShellFlags(t, fixedClock(now), nil, nil, Options{ShowCheckIn: true})
 	l2 := addLearner(t, store2, "a@example.com", "sub-b", now)
 	finishPlacement(t, store2, l2.user.ID, now.Add(-40*24*time.Hour))
 	if rec := formPost(t, h2, l2, "/_hx/placement/recheck", url.Values{"_csrf": {l2.csrf}}, nil); rec.Code != http.StatusBadRequest {
@@ -1104,7 +1095,7 @@ func TestCheckinOnTodayIsNotDueUntilTheEngineSaysSo(t *testing.T) {
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	eng := dueEngine()
 	eng.status.Due = false
-	store, h := openShell(t, fixedClock(now), eng, nil)
+	store, h := openShellFlags(t, fixedClock(now), eng, nil, Options{ShowCheckIn: true, ShowPlacement: true})
 	l := addLearner(t, store, "a@example.com", "sub-a", now)
 	finishPlacement(t, store, l.user.ID, now.Add(-time.Hour))
 	if got := todayAction(t, getLearner(t, h, l, "/")); got != "none" {
@@ -1131,14 +1122,14 @@ func TestTodayHebrewShellKeepsDirections(t *testing.T) {
 	store, h := openShell(t, fixedClock(now), nil, nil)
 	l := addLearner(t, store, "a@example.com", "sub-a", now)
 	body := getLearner(t, h, l, "/?lang=he")
-	if !strings.Contains(body, `<html lang="he" dir="rtl"`) || !strings.Contains(body, `href="/placement?lang=he"`) {
-		t.Fatal("the Hebrew shell lost its language")
+	if !strings.Contains(body, `<html lang="he" dir="rtl"`) || strings.Contains(body, `href="/placement`) {
+		t.Fatal("the Hebrew shell lost its language or still links placement")
 	}
 	if n := assertRunDir(t, body, "en", "ltr"); n == 0 {
 		t.Fatal("no isolated English runs on the Hebrew Today")
 	}
-	if !strings.Contains(body, "בְּדִיקַת רָמָה") {
-		t.Fatal("the placement action has no Hebrew title")
+	if !strings.Contains(body, "Nothing due") {
+		t.Fatal("the Hebrew Today did not say nothing is due")
 	}
 }
 
@@ -1216,14 +1207,16 @@ func TestTodaySkipsUntouchedBlockedLearnerUnit(t *testing.T) {
 	clean := shellCleanLearnerUnit(t, store, "Clean", 2, scope, morningHe)
 
 	body := getLearner(t, h, l, "/")
-	if todayAction(t, body) != "next_lesson" {
-		t.Fatalf("action = %q, want next_lesson", todayAction(t, body))
+	if todayAction(t, body) != "none" {
+		t.Fatalf("action = %q, want none", todayAction(t, body))
 	}
-	if strings.Contains(body, "/lesson/"+itoa(blocked)+"/0") || strings.Contains(body, "Blocked") {
-		t.Fatalf("untouched blocked unit offered on Today:\n%s", articleAttrs(body))
+	if strings.Contains(body, "/lesson/"+itoa(blocked)+"/0") || strings.Contains(body, "Blocked") || strings.Contains(body, "/lesson/"+itoa(clean)+"/0") {
+		t.Fatalf("Today offered a lesson:\n%s", articleAttrs(body))
 	}
-	if !strings.Contains(body, "/lesson/"+itoa(clean)+"/0") || !strings.Contains(body, "Clean") {
-		t.Fatalf("clean unit not offered:\n%s", articleAttrs(body))
+	srv := newServer(store)
+	next, ok, err := srv.nextTodayLesson(context.Background(), l.user.ID)
+	if err != nil || !ok || next.UnitID != clean {
+		t.Fatalf("next lesson = %+v ok=%v err=%v, want the clean unit", next, ok, err)
 	}
 }
 
@@ -1246,11 +1239,13 @@ func TestTodayContinuesStartedBlockedLearnerUnit(t *testing.T) {
 	}
 
 	body := getLearner(t, h, l, "/")
-	if todayAction(t, body) != "continue_lesson" {
-		t.Fatalf("action = %q, want continue_lesson", todayAction(t, body))
+	if todayAction(t, body) != "none" || strings.Contains(body, "/lesson/"+itoa(blocked)+"/0") {
+		t.Fatalf("Today offered the started unit: %q", todayAction(t, body))
 	}
-	if !strings.Contains(body, "/lesson/"+itoa(blocked)+"/0") {
-		t.Fatalf("started blocked unit not continued:\n%s", articleAttrs(body))
+	srv := newServer(store)
+	next, ok, err := srv.nextTodayLesson(context.Background(), l.user.ID)
+	if err != nil || !ok || next.UnitID != blocked {
+		t.Fatalf("next lesson = %+v ok=%v err=%v, want the started unit", next, ok, err)
 	}
 }
 
@@ -1264,8 +1259,8 @@ func TestTodayReviewsWhenEveryForwardUnitIsBlocked(t *testing.T) {
 	addCard(t, store, l.user.ID, addLexeme(t, store, eveningHe, "evening", "erev", "m", ""), fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
 
 	body := getLearner(t, h, l, "/")
-	if todayAction(t, body) != "reviews" {
-		t.Fatalf("action = %q, want reviews when every forward unit is skipped", todayAction(t, body))
+	if todayAction(t, body) != "session" {
+		t.Fatalf("action = %q, want session when every forward unit is skipped", todayAction(t, body))
 	}
 	if strings.Contains(body, "/lesson/"+itoa(blocked)+"/0") || strings.Contains(body, "Only blocked") {
 		t.Fatalf("blocked unit still on Today:\n%s", articleAttrs(body))

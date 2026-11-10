@@ -170,24 +170,13 @@ func TestLessonPlayer(t *testing.T) {
 
 	today := getAuthed(t, h, brianCookie, "/")
 	link := "/lesson/" + itoa(sharedID) + "/0"
-	if !strings.Contains(today, `href="`+link+`"`) {
-		t.Fatalf("Today does not link to the shared lesson:\n%s", today)
-	}
-	for _, gloss := range []string{"(shalom, hello)", "(boker, morning)"} {
-		if !strings.Contains(today, gloss) {
-			t.Fatalf("chip gloss %s missing", gloss)
-		}
-	}
-	if !strings.Contains(today, "Saying hello.") || !strings.Contains(today, "ז׳") {
-		t.Fatal("situation or gender chip missing")
-	}
-	for _, hidden := range []string{"Draft secret", "Other morning", "Brian later", "כִּסֵּא", "הַבֹּקֶר שֶׁלִּי"} {
+	for _, hidden := range []string{"Draft secret", "Other morning", "Brian later", "כִּסֵּא", "הַבֹּקֶר שֶׁלִּי", "Saying hello."} {
 		if strings.Contains(today, hidden) {
 			t.Fatalf("Today shows %s", hidden)
 		}
 	}
-	if !strings.Contains(today, `data-due="0"`) || !strings.Contains(today, `class="btn btn-primary"`) || !strings.Contains(today, link) {
-		t.Fatal("a gated card stays off the due count, and the next lesson stays on Today")
+	if !strings.Contains(today, `data-due="0"`) || strings.Contains(today, `class="btn btn-primary"`) || strings.Contains(today, link) {
+		t.Fatal("a gated card stays off the due count, and Today does not offer a lesson")
 	}
 	if strings.Contains(today, ">12<") {
 		t.Fatal("placeholder due count is back")
@@ -195,8 +184,8 @@ func TestLessonPlayer(t *testing.T) {
 	if scalar(t, dbPath, `SELECT COUNT(*) FROM lesson_runs`) != 0 {
 		t.Fatal("opening Today started a lesson run")
 	}
-	otherToday := getAuthed(t, h, otherCookie, "/")
-	if !strings.Contains(otherToday, "Other morning") || strings.Contains(otherToday, "Shared hello") {
+	otherLesson := getAuthed(t, h, otherCookie, "/lesson")
+	if !strings.Contains(otherLesson, "Other morning") || strings.Contains(otherLesson, "Shared hello") {
 		t.Fatal("other learner should see their own unit first")
 	}
 
@@ -455,48 +444,27 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 	path := "/lesson/" + itoa(unitID) + "/0"
 
 	listen := activityHTML(t, getAuthed(t, h, cookie, path))
-	// The learner hears the line. Above the buttons nothing says it, and no button gives
-	// a reading. The buttons are lines of Hebrew: the one that played, and others.
-	above, buttons, _ := strings.Cut(listen, `class="choices"`)
-	if containsHebrew(above) || strings.Contains(listen, "shalom") || strings.Contains(listen, "boker") {
-		t.Fatalf("listen_pick prompt leaks Hebrew or translit:\n%s", listen)
+	// A two-word listen_pick is an ungraded reveal. The line is shown, and
+	// posting a lexeme id writes no attempt. INIT-038/SPEC-008.
+	if strings.Contains(listen, `class="choices"`) {
+		t.Fatalf("multi-word listen_pick rendered buttons:\n%s", listen)
 	}
-	if containsHebrew(attrValues(listen)) {
-		t.Fatalf("listen_pick attributes leak Hebrew:\n%s", attrValues(listen))
+	if !strings.Contains(listen, "This is what you heard.") {
+		t.Fatalf("multi-word listen_pick prompt:\n%s", listen)
 	}
-	if !strings.Contains(listen, "What did you hear?") {
-		t.Fatalf("listen_pick does not ask what was heard:\n%s", listen)
+	if !strings.Contains(listen, hello) || !strings.Contains(listen, morning) || !strings.Contains(listen, "shalom") || !strings.Contains(listen, "boker") {
+		t.Fatalf("multi-word listen_pick hid the line:\n%s", listen)
 	}
-	if !strings.Contains(buttons, `<bdi lang="he" dir="rtl">`+line+`</bdi>`) {
-		t.Fatalf("listen_pick has no button with the line that played:\n%s", buttons)
+	if !strings.Contains(listen, `/audio/`+phraseID+`.mp3`) {
+		t.Fatalf("multi-word listen_pick missing the phrase clip:\n%s", listen)
 	}
-	if strings.Contains(listen, ">hello<") || strings.Contains(listen, ">morning<") {
-		t.Fatalf("listen_pick shows English glosses beside Hebrew lines:\n%s", listen)
-	}
-	// The line's other word is never offered as the swap, so a wrong line never repeats it.
-	if !strings.Contains(listen, `value="`+itoa(ids[hello])+`"`) || strings.Contains(listen, `value="`+itoa(ids[morning])+`"`) {
-		t.Fatalf("listen_pick choices should be lexeme ids, without the line's other word:\n%s", listen)
-	}
-	if strings.Contains(listen, `value="`+hello+`"`) || strings.Contains(listen, `value="`+morning+`"`) {
-		t.Fatal("listen_pick value is pointed Hebrew")
-	}
-	if !strings.Contains(listen, `/audio/`+phraseID+`.mp3`) || !strings.Contains(listen, `aria-label="Play"`) {
-		t.Fatalf("listen_pick missing the phrase clip:\n%s", listen)
-	}
-	if strings.Contains(listen, `aria-label="Play the line"`) || strings.Contains(listen, "Play "+hello) {
-		t.Fatalf("listen_pick names the hidden Hebrew:\n%s", listen)
-	}
-	if !strings.Contains(listen, `class="orb orb--hero"`) || !strings.Contains(listen, `preload="none"`) || !strings.Contains(listen, " controls") {
-		t.Fatalf("listen_pick clip is not a native audio plus orb:\n%s", listen)
-	}
-	if strings.Contains(listen, helloID) || strings.Contains(listen, morningID) {
-		t.Fatal("listen_pick prompt includes a word clip")
-	}
-
 	runID := runValue(t, listen)
-	revealed := activityHTML(t, postLesson(t, h, cookie, path, runID, itoa(ids[hello]), true, "brian-csrf").Body.String())
-	if !strings.Contains(revealed, hello) || !strings.Contains(revealed, morning) || !strings.Contains(revealed, "shalom") || !strings.Contains(revealed, "boker") || !strings.Contains(revealed, "wcard__gl") {
-		t.Fatalf("listen_pick answer did not reveal the words:\n%s", revealed)
+	postedListen := postLesson(t, h, cookie, path, runID, itoa(ids[hello]), true, "brian-csrf")
+	if strings.Contains(postedListen.Body.String(), "feedback--") {
+		t.Fatalf("posting an id graded a listen reveal:\n%s", postedListen.Body.String())
+	}
+	if n := countRows(t, store, `SELECT COUNT(*) FROM attempts WHERE user_id = ?`, brian.ID); n != 0 {
+		t.Fatalf("listen reveal recorded %d attempts", n)
 	}
 
 	produce := activityHTML(t, postLesson(t, h, cookie, path, runID, "continue", true, "brian-csrf").Body.String())
@@ -519,41 +487,21 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 	}
 
 	cloze := activityHTML(t, postLesson(t, h, cookie, path, runID, "continue", true, "brian-csrf").Body.String())
-	sentence, choices, ok := strings.Cut(cloze, `class="choices"`)
-	if !ok {
-		t.Fatalf("cloze missing choices:\n%s", cloze)
+	if strings.Contains(cloze, `class="choices"`) || strings.Contains(cloze, "___") {
+		t.Fatalf("cloze is still a question:\n%s", cloze)
 	}
-	if strings.Contains(sentence, hello) || strings.Contains(sentence, "shalom") || strings.Contains(sentence, ">hello<") || strings.Contains(sentence, "wb__gl") {
-		t.Fatalf("cloze sentence shows the gap or a gloss:\n%s", sentence)
+	if !strings.Contains(cloze, hello) || !strings.Contains(cloze, morning) || !strings.Contains(cloze, "shalom") || !strings.Contains(cloze, "boker") {
+		t.Fatalf("cloze reveal hid the sentence:\n%s", cloze)
 	}
-	if !strings.Contains(sentence, morning) || strings.Contains(sentence, "boker") || !strings.Contains(sentence, "___") {
-		t.Fatalf("cloze should show the other word in Hebrew, without its Latin reading:\n%s", sentence)
+	if !strings.Contains(cloze, `/audio/`+phraseID+`.mp3`) {
+		t.Fatalf("cloze reveal hid the sentence clip:\n%s", cloze)
 	}
-	if strings.Contains(cloze, `/audio/`+phraseID+`.mp3`) || strings.Contains(cloze, helloID) {
-		t.Fatalf("cloze ask plays the gapped clip:\n%s", cloze)
+	filled := postLesson(t, h, cookie, path, runID, itoa(ids[hello]), true, "brian-csrf")
+	if strings.Contains(filled.Body.String(), "feedback--") {
+		t.Fatalf("posting an id graded a cloze:\n%s", filled.Body.String())
 	}
-	if !strings.Contains(cloze, `/audio/`+morningID+`.mp3`) {
-		t.Fatalf("cloze hid the other word's clip:\n%s", cloze)
-	}
-	if strings.Contains(attrValues(cloze), hello) || strings.Contains(attrValues(cloze), "shalom") || strings.Contains(attrValues(cloze), "hello") {
-		t.Fatalf("cloze attributes leak the gap:\n%s", attrValues(cloze))
-	}
-	if !strings.Contains(cloze, `aria-label="Play `+morning+`"`) {
-		t.Fatalf("the other word's play button is not named:\n%s", cloze)
-	}
-	if !strings.Contains(choices, hello) || strings.Contains(choices, "shalom") {
-		t.Fatalf("cloze choices should show pointed Hebrew without translit:\n%s", choices)
-	}
-
-	filled := activityHTML(t, postLesson(t, h, cookie, path, runID, itoa(ids[hello]), true, "brian-csrf").Body.String())
-	if strings.Contains(filled, "___") || !strings.Contains(filled, hello) || !strings.Contains(filled, morning) {
-		t.Fatalf("cloze answer did not fill the gap:\n%s", filled)
-	}
-	if !strings.Contains(filled, "shalom") || !strings.Contains(filled, "boker") || !strings.Contains(filled, ">hello<") || !strings.Contains(filled, ">morning<") {
-		t.Fatalf("cloze answer should show translit and gloss:\n%s", filled)
-	}
-	if !strings.Contains(filled, `/audio/`+phraseID+`.mp3`) {
-		t.Fatalf("cloze answer should play the sentence:\n%s", filled)
+	if n := countRows(t, store, `SELECT COUNT(*) FROM attempts WHERE user_id = ?`, brian.ID); n != 1 {
+		t.Fatalf("attempts = %d, want the produce answer only", n)
 	}
 }
 
@@ -994,6 +942,12 @@ func TestChoicesSkipVisibleHelperGlosses(t *testing.T) {
 			cookie := mintSession(t, store, brian.ID, "brian-csrf", now.Add(time.Hour))
 			body := getAuthed(t, h, cookie, "/lesson/"+itoa(unitID)+"/0")
 			ask := activityHTML(t, body)
+			if typ == units.ActivityCloze {
+				if strings.Contains(ask, `class="choices"`) || strings.Contains(ask, "___") || !strings.Contains(ask, gar) {
+					t.Fatalf("cloze is not a filled reveal:\n%s", ask)
+				}
+				return
+			}
 			head, choiceHTML, ok := strings.Cut(ask, `class="choices"`)
 			if !ok {
 				t.Fatalf("missing choices:\n%s", ask)

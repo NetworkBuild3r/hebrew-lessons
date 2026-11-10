@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/choices"
@@ -43,20 +44,19 @@ import (
 //     The button value is the lexeme id, so the pointed word is not in the markup.
 //   - produce hides the Hebrew, the transliteration, and the clip until the
 //     answer. Choices show pointed Hebrew. The button value is the lexeme id.
-//   - cloze gaps the first new word, once. A later copy of that word stays
-//     on the line. Until the answer, the other words show pointed Hebrew
-//     and no Latin reading, and the sentence clip stays hidden. The choices
-//     are pointed Hebrew with no transliteration. After the answer, every
-//     word shows its pointed text, transliteration, and gloss. Choice values
-//     are lexeme ids.
+//   - cloze shows the sentence filled in, with each word's reading and
+//     meaning, then Continue. A blank's key is an AI-written sentence, so
+//     the step is the same reveal already used when fewer than three buttons
+//     can be built, and it records no attempt (ADR-0033 D3). INIT-038/SPEC-008.
 //   - say shows the English cue and "Say it out loud, then hear it." No
 //     Hebrew and no audio until the learner presses "I said it". The reveal
 //     is the model as cards, the line plays once, and Continue advances.
 //     The step writes no attempt, review, or card (INIT-036/SPEC-004–005).
-//   - order shows the English line and pointed-Hebrew chips in a seeded
-//     shuffle that is never the answer. The learner posts chip positions.
-//     One try. The reveal shows the reading, the English, and the clip.
-//     INIT-029/SPEC-003.
+//   - order shows the sentence, its reading, the English cue, and the clip,
+//     then Continue. The key is an AI-written sentence, so the step records
+//     no attempt (ADR-0033 D3). INIT-038/SPEC-008.
+//   - listen_pick of one lexicon word stays a graded ask. A line of two or
+//     more lexicon words reveals what was heard and records nothing.
 //   - any other type shows the words and a continue button.
 //
 // A step with no lexicon target is exposure, not a graded choice.
@@ -247,11 +247,9 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 		p.answerSay(w, r, page, userID, lesson, run, act, target, answer, total, partial)
 		return
 	}
-	// INIT-029/SPEC-003: order posts chip positions, not a lexeme id.
-	if act.Type == units.ActivityOrder {
-		p.answerOrder(w, r, page, userID, lesson, run, act, target, answer, total, partial)
-		return
-	}
+	// Order is an ungraded reveal (ADR-0033 D3). It uses the same post path
+	// as a cloze: askChoiceCount is 0, so Continue advances and nothing is
+	// recorded. INIT-038/SPEC-008.
 	graded := gradedActivity(act.Type) && target.ID != 0
 	if graded {
 		n, countErr := p.askChoiceCount(r.Context(), userID, lesson, run, act, target)
@@ -424,11 +422,10 @@ func (p player) answerSay(w http.ResponseWriter, r *http.Request, page views.Pag
 	p.writeScreen(w, r, page, screen, partial)
 }
 
-// answerOrder grades a build-the-sentence step. The learner posts order=N
-// values that are indices into the served chip list. The server rebuilds
-// that list from the run seed and does not trust a client-supplied key.
-// A post that misses, repeats, or names an unknown chip is 400 and writes
-// nothing. One try. INIT-029/SPEC-003.
+// answerOrder graded a build-the-sentence step. The player no longer calls
+// it: an order key is an AI-written sentence, so the step is a reveal and
+// records nothing (ADR-0033 D3, INIT-038/SPEC-008). The helpers below stay
+// so a chip order can still be checked without trusting the client.
 func (p player) answerOrder(w http.ResponseWriter, r *http.Request, page views.Page, userID int64, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, target db.LexemeView, answer string, total int, partial bool) {
 	var err error
 	var justBuilt []string
@@ -814,7 +811,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		return screen, nil
 	}
 	var pool, earlier []db.LexemeView
-	if run.Phase == "ask" && gradedActivity(act.Type) && target.ID != 0 {
+	if run.Phase == "ask" && gradedActivity(act.Type) && target.ID != 0 && !unprovableAsk(act, lex) {
 		pool, earlier, err = p.taughtChoicePools(ctx, run.UserID, lesson.UnitID, lesson.Position)
 		if err != nil {
 			return views.Screen{}, err
@@ -832,9 +829,11 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		return screen, nil
 	}
 	phase := run.Phase
-	// A recall or cloze that cannot find three options is not a graded ask.
-	// Show the word the way a reveal does, and let Continue move on.
-	if recallOrCloze(act.Type) && run.Phase == "ask" && target.ID != 0 && !screen.Activity.Asking {
+	// A recall that cannot find three options is not a graded ask. A cloze,
+	// an order step, and a multi-word listen_pick are never graded: the key
+	// is an AI-written sentence (ADR-0033 D3). Show the answer the way a
+	// reveal does, and let Continue move on. INIT-038/SPEC-008.
+	if run.Phase == "ask" && (unprovableAsk(act, lex) || (recallOrCloze(act.Type) && target.ID != 0 && !screen.Activity.Asking)) {
 		phase = "reveal"
 	}
 	screen.Activity.Audio = phraseAudio(act, phase, clips.phrase)
@@ -859,7 +858,41 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	screen.Activity.Spotlight = spotlight(act.Type, screen.Activity)
 	p.attachHow(ctx, lesson, run, &screen.Activity)
 	p.attachRoots(ctx, &screen.Activity)
+	p.attachAlsoRight(ctx, lesson, run, act, lex, target, &screen.Activity)
 	return screen, nil
+}
+
+// attachAlsoRight puts the take-back button on a wrong graded reveal, or
+// replaces the line once that attempt has been voided. A right answer, an
+// ungraded reveal, and a step that recorded nothing stay without the button.
+// INIT-038/SPEC-009.
+func (p player) attachAlsoRight(ctx context.Context, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, lex map[string]db.LexemeView, target db.LexemeView, activity *views.Activity) {
+	if activity == nil || p.store == nil || run.UserID == 0 {
+		return
+	}
+	if run.Finished || run.Phase != "reveal" || run.Pending {
+		return
+	}
+	if !strings.Contains(activity.FeedbackClass, "feedback--wrong") {
+		return
+	}
+	if target.ID == 0 || !gradedActivity(act.Type) || unprovableAsk(act, lex) {
+		return
+	}
+	got, ok, err := latestAttempt(ctx, p.store, run.UserID, target.ID, lessonSkill(act.Type), evidence.SourceLesson, lesson.UnitID)
+	if err != nil || !ok || got.correct {
+		return
+	}
+	voided, err := attemptVoided(ctx, p.store, got.id)
+	if err != nil {
+		return
+	}
+	if voided {
+		activity.Feedback = views.AlsoRightTaken
+		activity.AlsoRightID = 0
+		return
+	}
+	activity.AlsoRightID = got.id
 }
 
 func (p player) attachHow(ctx context.Context, lesson db.CourseLesson, run db.PlayerRun, activity *views.Activity) {
@@ -942,14 +975,12 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 			activity.Prompt = ""
 		}
 	}
-	// INIT-029/SPEC-003: English cue on ask and reveal; chips only on ask.
+	// English cue stays. The chip bank is not shown: an order key is an
+	// AI-written sentence, so the step is a reveal. INIT-038/SPEC-008.
 	if act.Type == units.ActivityOrder {
 		activity.Cue = strings.TrimSpace(act.Translation)
-		if !empty && run.Phase == "ask" {
-			activity.OrderChips = orderServed(run, act)
-			activity.Asking = len(activity.OrderChips) > 0
-		} else if run.Phase == "reveal" {
-			activity.Prompt = "" // INIT-029/SPEC-004: ask prompt stays off the reveal
+		if !empty {
+			activity.Prompt = ""
 		}
 		return activity
 	}
@@ -958,10 +989,10 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 		// same part of speech fits the line and still grades wrong.
 		activity.Cue = strings.TrimSpace(act.Translation)
 	}
-	if !empty && act.Type == units.ActivityListenPick && run.Phase != "ask" {
+	if !empty && act.Type == units.ActivityListenPick && (run.Phase != "ask" || unprovableAsk(act, lex)) {
 		activity.Prompt = listenRevealPrompt
 	}
-	if empty || run.Phase != "ask" || !gradedActivity(act.Type) || target.ID == 0 {
+	if empty || run.Phase != "ask" || !gradedActivity(act.Type) || target.ID == 0 || unprovableAsk(act, lex) {
 		return activity
 	}
 	seed, block := choiceSeed(run, target), lineMateExclude(act, lex, target)
@@ -1234,6 +1265,22 @@ func gradedActivity(typ string) bool {
 	}
 }
 
+// unprovableAsk is a lesson step whose key the app cannot prove wrong.
+// Every cloze and every order step is an AI-written sentence. A listen_pick
+// of two or more lexicon words is the same. The render path shows a reveal,
+// and askChoiceCount returns 0 so the post path records nothing.
+// ADR-0033 D3. INIT-038/SPEC-008.
+func unprovableAsk(act units.Activity, lex map[string]db.LexemeView) bool {
+	switch act.Type {
+	case units.ActivityCloze, units.ActivityOrder:
+		return true
+	case units.ActivityListenPick:
+		return lexemeTokenCount(act, lex) > 1
+	default:
+		return false
+	}
+}
+
 // targetFrom grades act.Target when that token is in the lexicon.
 // A published lesson can omit target. The player then grades the first new
 // token, which is how a revision published before target was required keeps
@@ -1333,6 +1380,11 @@ func (p player) askChoiceCount(ctx context.Context, userID int64, lesson db.Cour
 	if err != nil {
 		return 0, err
 	}
+	// A reveal has no buttons. The post path and the render path both see 0.
+	// INIT-038/SPEC-008.
+	if unprovableAsk(act, lex) {
+		return 0, nil
+	}
 	pool, earlier, err := p.taughtChoicePools(ctx, userID, lesson.UnitID, lesson.Position)
 	if err != nil {
 		return 0, err
@@ -1368,7 +1420,12 @@ func choiceSeed(run db.PlayerRun, target db.LexemeView) choices.ChoiceSeed {
 // never share a gloss. Fewer than three buttons is not an ask: the caller
 // shows a reveal instead.
 func askChoices(typ string, unit, earlier []db.LexemeView, target db.LexemeView, seed choices.ChoiceSeed, block choiceExclude) []views.Choice {
-	hebrew := typ == units.ActivityProduce || typ == units.ActivityCloze
+	// A cloze that would have shown buttons is a reveal. Nil is the same
+	// result as fewer than three buttons. INIT-038/SPEC-008.
+	if typ == units.ActivityCloze {
+		return nil
+	}
+	hebrew := typ == units.ActivityProduce
 	if !recallOrCloze(typ) {
 		return lessonChoices(unit, earlier, target, seed, hebrew, false, lessonChoiceButtons, block)
 	}
@@ -1377,12 +1434,12 @@ func askChoices(typ string, unit, earlier []db.LexemeView, target db.LexemeView,
 	return wideChoices(unit, earlier, target, seed, hebrew, false, block)
 }
 
-// wideChoices fills a recall or cloze ask from outside the line only. Same
-// part of speech comes first (this unit, then earlier units). Other parts of
-// speech from outside the line are next. Words on the line are help, or are
-// the rest of a cloze sentence, so they are never buttons. The answer's gloss
-// is never repeated, and neither is any other gloss. The result is nil when
-// three buttons cannot be filled.
+// wideChoices fills a recall ask from outside the line only. Same part of
+// speech comes first (this unit, then earlier units). Other parts of speech
+// from outside the line are next. Words on the line are help, so they are
+// never buttons. A distractor whose gloss overlaps the target's is dropped,
+// and so is an exact duplicate gloss. The result is nil when three buttons
+// cannot be filled. INIT-038/SPEC-008.
 func wideChoices(unit, earlier []db.LexemeView, target db.LexemeView, seed choices.ChoiceSeed, hebrew, translit bool, block choiceExclude) []views.Choice {
 	if target.ID == 0 {
 		return nil
@@ -1409,6 +1466,9 @@ func wideChoices(unit, earlier []db.LexemeView, target db.LexemeView, seed choic
 			if seen[lex.ID] {
 				continue
 			}
+			if glossOverlapsTarget(lex, target) {
+				continue
+			}
 			if key := glossKey(lex.Gloss); key != "" && usedGloss[key] {
 				continue
 			}
@@ -1416,6 +1476,9 @@ func wideChoices(unit, earlier []db.LexemeView, target db.LexemeView, seed choic
 		}
 		for _, lex := range takeDistractors(seed, target, fresh, want-len(distractors)) {
 			if seen[lex.ID] {
+				continue
+			}
+			if glossOverlapsTarget(lex, target) {
 				continue
 			}
 			key := glossKey(lex.Gloss)
@@ -1561,6 +1624,11 @@ func lessonChoices(unit, earlier []db.LexemeView, target db.LexemeView, seed cho
 	if n < 1 {
 		n = lessonChoiceButtons
 	}
+	// A wrong button whose gloss shares a content word with the target is
+	// not an option. Exact glossKey equality missed "you (m.sg.)" beside
+	// "you (f.sg.)". INIT-038/SPEC-008.
+	unit = omitGlossOverlap(unit, target)
+	earlier = omitGlossOverlap(earlier, target)
 	picked := choices.Pick(seed, choiceLexeme(target, false), choicePool(unit, earlier, target, hebrew, block), n)
 	byID := make(map[int64]db.LexemeView, len(unit)+len(earlier)+1)
 	byID[target.ID] = target
@@ -1677,6 +1745,28 @@ func showsLineHelp(act units.Activity, lex map[string]db.LexemeView) bool {
 
 func glossKey(gloss string) string {
 	return strings.ToLower(strings.TrimSpace(gloss))
+}
+
+// glossOverlapsTarget reports whether a distractor's gloss could also be a
+// right reading of the target. The target itself does not overlap.
+// INIT-038/SPEC-008.
+func glossOverlapsTarget(lex, target db.LexemeView) bool {
+	if lex.ID == 0 || lex.ID == target.ID {
+		return false
+	}
+	return activity.GlossesOverlap(lex.Gloss, target.Gloss)
+}
+
+// omitGlossOverlap is the lessonChoices pool with those distractors removed.
+func omitGlossOverlap(rows []db.LexemeView, target db.LexemeView) []db.LexemeView {
+	out := make([]db.LexemeView, 0, len(rows))
+	for _, lex := range rows {
+		if glossOverlapsTarget(lex, target) {
+			continue
+		}
+		out = append(out, lex)
+	}
+	return out
 }
 
 func choiceLexeme(view db.LexemeView, earlier bool) choices.Lexeme {

@@ -19,7 +19,6 @@ func TestLearnerPagesRequireSignIn(t *testing.T) {
 		{"/review", views.UIFor("en", "m").ReviewHeading},
 		{"/progress", views.UIFor("en", "m").ProgressHeading},
 		{"/lesson", views.UIFor("en", "m").LessonHeading},
-		{"/placement", views.PlacementFor("en").Heading},
 	}
 	for _, page := range pages {
 		t.Run(page.path, func(t *testing.T) {
@@ -82,7 +81,7 @@ func TestLearnerPagesRequireSignIn(t *testing.T) {
 
 func TestUngatedRouterServesLearnerPages(t *testing.T) {
 	h := newMux(nil, nil)
-	for _, path := range []string{"/", "/review", "/progress", "/lesson", "/placement"} {
+	for _, path := range []string{"/", "/review", "/progress", "/lesson"} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 		if rec.Code != http.StatusOK {
@@ -96,7 +95,7 @@ func TestUngatedRouterServesLearnerPages(t *testing.T) {
 
 func TestGatedPathVariants(t *testing.T) {
 	h, _ := signedIn(t)
-	for _, path := range []string{"/", "/review", "/progress", "/lesson", "/placement"} {
+	for _, path := range []string{"/", "/review", "/progress", "/lesson"} {
 		head := httptest.NewRecorder()
 		h.ServeHTTP(head, httptest.NewRequest(http.MethodHead, path, nil))
 		if head.Code != http.StatusSeeOther || head.Header().Get("Location") != "/signin" {

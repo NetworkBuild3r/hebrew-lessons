@@ -48,10 +48,6 @@ func TestNumbersAgreeAcrossSurfaces(t *testing.T) {
 
 	home := getAgree(t, fx, "/")
 	progress := getAgree(t, fx, "/progress")
-	skillPages := map[string]string{}
-	for _, skill := range learner.Skills {
-		skillPages[skill] = getAgree(t, fx, "/progress?skill="+skill)
-	}
 
 	session := connectAppMCP(t, fx.app.MCP(), agreeToken)
 	digest := callAgree[mcp.StudyDigest](t, session, "get_study_digest", map[string]any{"learnerId": id})
@@ -75,18 +71,20 @@ func TestNumbersAgreeAcrossSurfaces(t *testing.T) {
 
 	progMCP := callAgree[mcp.Progress](t, session, "get_progress", map[string]any{"learnerId": id})
 
-	// ---- words you know (KnownAnySkill) ----
-	wantKnown := fx.sum.KnownAnySkill
-	if wantKnown == 0 {
-		t.Fatal("fixture KnownAnySkill is 0")
+	// ---- Today's count is Hebrew-from-English proved (ADR-0033 D6) ----
+	wantProved := skillLadder(fx.sum, fsrs.SkillRecall).Proved
+	assertHomeKnown(t, home, wantProved)
+	if !strings.Contains(progress, "Hebrew from English") || !strings.Contains(progress, "Understand by ear") {
+		t.Fatal("Progress missing the ladder headlines")
 	}
-	assertHomeKnown(t, home, wantKnown)
-	assertProgressHeadline(t, progress, wantKnown)
-	if digest.KnownAnySkill != wantKnown {
-		t.Errorf("digest knownAnySkill=%d want %d", digest.KnownAnySkill, wantKnown)
+	if got := rungCount(t, progress, fsrs.SkillRecall, "proved"); got != wantProved {
+		t.Errorf("progress recall proved=%d want %d", got, wantProved)
 	}
-	if modelSum.KnownAnySkill != wantKnown {
-		t.Errorf("get_context.model knownAnySkill=%d want %d", modelSum.KnownAnySkill, wantKnown)
+	if digest.KnownAnySkill != fx.sum.KnownAnySkill {
+		t.Errorf("digest knownAnySkill=%d want %d", digest.KnownAnySkill, fx.sum.KnownAnySkill)
+	}
+	if modelSum.KnownAnySkill != fx.sum.KnownAnySkill {
+		t.Errorf("get_context.model knownAnySkill=%d want %d", modelSum.KnownAnySkill, fx.sum.KnownAnySkill)
 	}
 
 	// ---- per-skill known+solid, estimate, source ----
@@ -101,11 +99,10 @@ func TestNumbersAgreeAcrossSurfaces(t *testing.T) {
 	for _, sk := range fx.sum.Skills {
 		wantKS := sk.Counts[learner.Known] + sk.Counts[learner.Solid]
 		row := overviewRow(t, progress, sk.Skill)
-		if askable[sk.Skill] {
-			if got := overviewKnownCount(t, row); got != wantKS {
-				t.Errorf("progress %s known+solid=%d want %d", sk.Skill, got, wantKS)
-			}
-		} else if !strings.Contains(row, "No audio yet") {
+		if got := rungCountIn(t, row, "proved"); got != sk.Ladder.Proved {
+			t.Errorf("progress %s proved=%d want %d", sk.Skill, got, sk.Ladder.Proved)
+		}
+		if !askable[sk.Skill] && sk.Skill == fsrs.SkillListen && !strings.Contains(row, "No audio yet") {
 			t.Errorf("%s not_askable row missing No audio yet:\n%s", sk.Skill, row)
 		}
 		var dig mcp.DigestSkill
@@ -135,23 +132,6 @@ func TestNumbersAgreeAcrossSurfaces(t *testing.T) {
 		}
 		if mod.EstimateSource != sk.EstimateSource {
 			t.Errorf("model %s estimateSource=%q want %q", sk.Skill, mod.EstimateSource, sk.EstimateSource)
-		}
-		if sk.EstimateSource == learner.EstimateSourcePlacement && !strings.Contains(row, "Placement estimate") && !strings.Contains(row, "From placement on") {
-			// Listening still surfaces the placement estimate on the overview row.
-			if sk.Skill == fsrs.SkillListen {
-				t.Errorf("%s row missing placement estimate:\n%s", sk.Skill, row)
-			}
-		}
-		// Skill tab headline is the estimate for that skill.
-		tab := skillPages[sk.Skill]
-		if m := regexp.MustCompile(`class="count"><bdi lang="en" dir="ltr">([0-9]+)</bdi>`).FindStringSubmatch(tab); m == nil {
-			t.Errorf("skill tab %s missing count", sk.Skill)
-		} else if got, _ := strconv.Atoi(m[1]); got != int(math.Round(sk.EstimatedKnown)) && got != int(sk.EstimatedKnown) {
-			// Estimates can be fractional; page prints "%.0f".
-			want := fmt.Sprintf("%.0f", sk.EstimatedKnown)
-			if m[1] != want {
-				t.Errorf("skill tab %s count=%s want %s", sk.Skill, m[1], want)
-			}
 		}
 	}
 
@@ -246,11 +226,12 @@ func standingDisagreements(t *testing.T, s standingSurfaces, model learner.Stand
 	t.Helper()
 	var out []string
 	want := model.KnownAnySkill
-	if got := chartKnownLast(t, s.progress); got != want {
-		out = append(out, fmt.Sprintf("progress chart last point=%d, model knownAnySkill=%d", got, want))
+	wantProved := directionLadder(model, fsrs.SkillRecall).Proved
+	if got := rungCount(t, s.progress, fsrs.SkillRecall, "proved"); got != wantProved {
+		out = append(out, fmt.Sprintf("progress recall proved=%d, model=%d", got, wantProved))
 	}
-	if got := progressHeadline(t, s.progress); got != want {
-		out = append(out, fmt.Sprintf("progress headline=%d, model knownAnySkill=%d", got, want))
+	if got := chartKnownLast(t, s.progress); got != wantProved {
+		out = append(out, fmt.Sprintf("progress chart last point=%d, model recall proved=%d", got, wantProved))
 	}
 	if s.summary.KnownAnySkill != want {
 		out = append(out, fmt.Sprintf("get_learner_model summary knownAnySkill=%d, model=%d", s.summary.KnownAnySkill, want))
@@ -271,9 +252,6 @@ func standingDisagreements(t *testing.T, s standingSurfaces, model learner.Stand
 			if got := s.standing.Directions[i]; got.Skill != d.Skill || got.Verdict != d.Verdict || got.Direction != d.Direction {
 				out = append(out, fmt.Sprintf("get_learner_model direction %s=%+v, model=%+v", d.Skill, got, d))
 			}
-		}
-		if v := overviewVerdict(t, overviewRow(t, s.progress, d.Skill)); v != d.Verdict {
-			out = append(out, fmt.Sprintf("progress %s data-verdict=%q, model %q", d.Skill, v, d.Verdict))
 		}
 		if s.compact == nil {
 			continue
@@ -317,7 +295,8 @@ func TestNumbersAgreePlantedMismatch(t *testing.T) {
 		t.Fatalf("unedited surfaces disagree: %v", d)
 	}
 
-	want := strconv.Itoa(model.KnownAnySkill)
+	wantProved := directionLadder(model, fsrs.SkillRecall).Proved
+	want := strconv.Itoa(wantProved)
 	chart := regexp.MustCompile(`(?s)<section class="c-card pchart"[^>]*data-chart="est".*?</section>`).FindStringIndex(progress)
 	if chart == nil {
 		t.Fatal("no est chart")
@@ -327,11 +306,10 @@ func TestNumbersAgreePlantedMismatch(t *testing.T) {
 	if cut < 0 {
 		t.Fatalf("chart has no cell %s", want)
 	}
-	editedCard := card[:cut] + ">" + strconv.Itoa(model.KnownAnySkill+1) + "<" + card[cut+len(want)+2:]
-	verdictSkill := model.Directions[0].Skill
-	verdictOld := `data-skill="` + verdictSkill + `" data-verdict="` + model.Directions[0].Verdict + `"`
-	if !strings.Contains(progress, verdictOld) {
-		t.Fatalf("progress has no %s", verdictOld)
+	editedCard := card[:cut] + ">" + strconv.Itoa(wantProved+1) + "<" + card[cut+len(want)+2:]
+	provedOld := `data-rung="proved"`
+	if !strings.Contains(overviewRow(t, progress, fsrs.SkillRecall), provedOld) {
+		t.Fatal("progress recall row has no proved rung")
 	}
 	editedDigest := append([]mcp.DigestHistoryPoint(nil), digest.History...)
 	editedDigest[len(editedDigest)-1].KnownAnySkill++
@@ -344,9 +322,10 @@ func TestNumbersAgreePlantedMismatch(t *testing.T) {
 			s.progress = progress[:chart[0]] + editedCard + progress[chart[1]:]
 			return s
 		}},
-		{"one data-verdict", "data-verdict", func(s standingSurfaces) standingSurfaces {
-			s.progress = strings.Replace(progress, verdictOld,
-				`data-skill="`+verdictSkill+`" data-verdict="planted"`, 1)
+		{"one proved rung", "proved", func(s standingSurfaces) standingSurfaces {
+			row := overviewRow(t, progress, fsrs.SkillRecall)
+			planted := strings.Replace(row, "("+want+")", "("+strconv.Itoa(wantProved+1)+")", 1)
+			s.progress = strings.Replace(progress, row, planted, 1)
 			return s
 		}},
 		{"digest last point", "digest history", func(s standingSurfaces) standingSurfaces {
@@ -558,6 +537,40 @@ func callAgree[T any](t *testing.T, session *mcpsdk.ClientSession, name string, 
 	return out
 }
 
+func skillLadder(sum learner.Summary, skill string) learner.LadderCounts {
+	for _, sk := range sum.Skills {
+		if sk.Skill == skill {
+			return sk.Ladder
+		}
+	}
+	return learner.LadderCounts{}
+}
+
+func directionLadder(model learner.Standing, skill string) learner.LadderCounts {
+	for _, d := range model.Directions {
+		if d.Skill == skill {
+			return d.Ladder
+		}
+	}
+	return learner.LadderCounts{}
+}
+
+func rungCount(t *testing.T, body, skill, rung string) int {
+	t.Helper()
+	return rungCountIn(t, overviewRow(t, body, skill), rung)
+}
+
+func rungCountIn(t *testing.T, row, rung string) int {
+	t.Helper()
+	re := regexp.MustCompile(`data-rung="` + regexp.QuoteMeta(rung) + `".*?\(([0-9]+)\)`)
+	m := re.FindStringSubmatch(row)
+	if m == nil {
+		t.Fatalf("no %s rung in row:\n%s", rung, row)
+	}
+	n, _ := strconv.Atoi(m[1])
+	return n
+}
+
 func assertHomeKnown(t *testing.T, body string, want int) {
 	t.Helper()
 	wantS := strconv.Itoa(want)
@@ -570,27 +583,6 @@ func assertHomeKnown(t *testing.T, body string, want int) {
 	}
 }
 
-func assertProgressHeadline(t *testing.T, body string, want int) {
-	t.Helper()
-	wantS := strconv.Itoa(want)
-	if m := regexp.MustCompile(`class="count"><bdi lang="en" dir="ltr">([0-9]+)</bdi>`).FindStringSubmatch(body); m == nil || m[1] != wantS {
-		t.Fatalf("Progress headline %v want %s", m, wantS)
-	}
-	if !strings.Contains(body, "Words you know") {
-		t.Fatal("Progress missing Words you know")
-	}
-}
-
-func progressHeadline(t *testing.T, body string) int {
-	t.Helper()
-	m := regexp.MustCompile(`class="count"><bdi lang="en" dir="ltr">([0-9]+)</bdi>`).FindStringSubmatch(body)
-	if m == nil {
-		t.Fatal("Progress has no headline count")
-	}
-	n, _ := strconv.Atoi(m[1])
-	return n
-}
-
 func overviewRow(t *testing.T, body, skill string) string {
 	t.Helper()
 	re := regexp.MustCompile(`(?s)<li class="pknow__skill" data-skill="` + regexp.QuoteMeta(skill) + `"[^>]*>.*?</li>`)
@@ -599,15 +591,6 @@ func overviewRow(t *testing.T, body, skill string) string {
 		t.Fatalf("no overview row for %s", skill)
 	}
 	return row
-}
-
-func overviewVerdict(t *testing.T, row string) string {
-	t.Helper()
-	m := regexp.MustCompile(`data-verdict="([^"]*)"`).FindStringSubmatch(row)
-	if m == nil {
-		t.Fatalf("no data-verdict in row:\n%s", row)
-	}
-	return m[1]
 }
 
 func chartKnownLast(t *testing.T, body string) int {
@@ -627,22 +610,6 @@ func chartKnownLast(t *testing.T, body string) int {
 		t.Fatalf("no numbers in last chart row:\n%s", last)
 	}
 	n, _ := strconv.Atoi(nums[len(nums)-1][1])
-	return n
-}
-
-func overviewKnownCount(t *testing.T, row string) int {
-	t.Helper()
-	re := regexp.MustCompile(`data-count="known"><bdi[^>]*>([0-9]+)</bdi>`)
-	m := re.FindStringSubmatch(row)
-	if m == nil {
-		// No-card / not-askable rows have no known count — treat as 0 when hinted.
-		if strings.Contains(row, "Not practiced") || strings.Contains(row, "Listening counts") ||
-			strings.Contains(row, "No audio yet") {
-			return 0
-		}
-		t.Fatalf("no known count in row:\n%s", row)
-	}
-	n, _ := strconv.Atoi(m[1])
 	return n
 }
 

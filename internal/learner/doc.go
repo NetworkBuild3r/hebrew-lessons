@@ -11,6 +11,8 @@
 // The rules are pure functions and live in state.go and diagnose.go:
 //
 //   - StateOf turns the Evidence of one word and skill into a State.
+//   - LadderOf turns that evidence into the proved ladder (ADR-0033 D4).
+//     Counts read the ladder. KnownRule4 is the previous count, kept callable.
 //   - Diagnose turns a struggling WordState and its confusions into a Cause.
 //
 // Every threshold is a named constant, and thresholds_test.go pins them. Changing

@@ -131,11 +131,12 @@ func TestPutUnitPublishFlag(t *testing.T) {
 	mem := NewMemory()
 	mem.AddLexeme(helloLexeme())
 	session := connectMCP(t, Handler(Options{
-		AuthToken: testToken,
-		Course:    mem,
-		Lexicon:   mem,
-		Lookup:    mem,
-		Units:     mem,
+		AuthToken:          testToken,
+		Course:             mem,
+		Lexicon:            mem,
+		Lookup:             mem,
+		Units:              mem,
+		LearnerAutoPublish: true,
 	}), testToken)
 
 	// SPEC-020: a learner unit with no briefId is saved as a draft and not published.

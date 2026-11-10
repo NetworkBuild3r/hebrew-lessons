@@ -20,7 +20,6 @@ var cspPages = []string{
 	"/progress",
 	"/lessons",
 	"/me",
-	"/placement",
 	"/signin",
 }
 

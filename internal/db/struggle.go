@@ -73,6 +73,16 @@ func (s *Store) StruggleStats(ctx context.Context, userID int64, topN int) (Stru
 
 // StruggleStatsAt is StruggleStats with the window ending at now.
 func (s *Store) StruggleStatsAt(ctx context.Context, userID int64, topN int, now time.Time) (Struggle, error) {
+	return s.struggleStats(ctx, userID, topN, now, EvidenceOpts{})
+}
+
+// StruggleStatsAtOpts is StruggleStatsAt with EvidenceOpts. An active void
+// leaves that review and that confusion out. INIT-038/SPEC-002.
+func (s *Store) StruggleStatsAtOpts(ctx context.Context, userID int64, topN int, now time.Time, opts EvidenceOpts) (Struggle, error) {
+	return s.struggleStats(ctx, userID, topN, now, opts)
+}
+
+func (s *Store) struggleStats(ctx context.Context, userID int64, topN int, now time.Time, opts EvidenceOpts) (Struggle, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return Struggle{}, err
@@ -94,7 +104,7 @@ func (s *Store) StruggleStatsAt(ctx context.Context, userID int64, topN int, now
 			MAX(rl.reviewed_at)
 		FROM cards AS c
 		JOIN lexemes AS l ON l.id = c.lexeme_id
-		JOIN review_log AS rl ON rl.card_id = c.id AND rl.implied = 0
+		JOIN review_log AS rl ON rl.card_id = c.id AND rl.implied = 0`+skipVoid(opts.IncludeVoided, "review_log_id", "rl.id")+`
 		WHERE c.user_id = ?
 		GROUP BY l.id, l.text_nfc, l.gloss_en`, since, userID)
 	if err != nil {
@@ -128,7 +138,7 @@ func (s *Store) StruggleStatsAt(ctx context.Context, userID int64, topN int, now
 	}
 	rows.Close()
 
-	keys, err := s.confusionKeys(ctx, userID, since)
+	keys, err := s.confusionKeys(ctx, userID, since, opts.IncludeVoided)
 	if err != nil {
 		return Struggle{}, err
 	}
@@ -139,7 +149,7 @@ func (s *Store) StruggleStatsAt(ctx context.Context, userID int64, topN int, now
 		return cmp.Compare(a.TextNFC, b.TextNFC)
 	})
 
-	confusions, err := s.confusionPairs(ctx, userID, since)
+	confusions, err := s.confusionPairs(ctx, userID, since, opts.IncludeVoided)
 	if err != nil {
 		return Struggle{}, err
 	}
@@ -166,7 +176,7 @@ func (s *Store) StruggleStatsAt(ctx context.Context, userID int64, topN int, now
 	return Struggle{Lexemes: lexemes, Confusions: confusions, Top: top}, nil
 }
 
-func (s *Store) confusionKeys(ctx context.Context, userID int64, since string) (map[int64][]string, error) {
+func (s *Store) confusionKeys(ctx context.Context, userID int64, since string, includeVoided bool) (map[int64][]string, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return nil, err
@@ -174,7 +184,7 @@ func (s *Store) confusionKeys(ctx context.Context, userID int64, since string) (
 	rows, err := conn.QueryContext(ctx, `
 		SELECT lexeme_id, key
 		FROM confusion_misses
-		WHERE learner_id = ? AND lexeme_id IS NOT NULL AND at >= ?
+		WHERE learner_id = ? AND lexeme_id IS NOT NULL AND at >= ?`+skipVoid(includeVoided, "confusion_id", "confusion_misses.id")+`
 		GROUP BY lexeme_id, key
 		ORDER BY key`, userID, since)
 	if err != nil {
@@ -196,7 +206,7 @@ func (s *Store) confusionKeys(ctx context.Context, userID int64, since string) (
 	return out, nil
 }
 
-func (s *Store) confusionPairs(ctx context.Context, userID int64, since string) ([]ConfusionPair, error) {
+func (s *Store) confusionPairs(ctx context.Context, userID int64, since string, includeVoided bool) ([]ConfusionPair, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return nil, err
@@ -204,7 +214,7 @@ func (s *Store) confusionPairs(ctx context.Context, userID int64, since string) 
 	rows, err := conn.QueryContext(ctx, `
 		SELECT m.kind, m.key, COUNT(*), MAX(m.at)
 		FROM confusion_misses AS m
-		WHERE m.learner_id = ? AND m.at >= ?
+		WHERE m.learner_id = ? AND m.at >= ?`+skipVoid(includeVoided, "confusion_id", "m.id")+`
 		  AND NOT EXISTS (
 			SELECT 1 FROM confusion_clears AS c
 			WHERE c.learner_id = m.learner_id
@@ -241,7 +251,17 @@ func (s *Store) confusionPairs(ctx context.Context, userID int64, since string) 
 // LatestConfusionLexeme is the newest word tied to this learner's confusion key.
 // kind is letter_pair or agreement, and key is the stored pair, for example ב/כ.
 // ok is false when every row for that key has a null lexeme.
+// An active void leaves that confusion out. INIT-038/SPEC-002.
 func (s *Store) LatestConfusionLexeme(ctx context.Context, learnerID int64, kind, key string) (int64, bool, error) {
+	return s.latestConfusionLexeme(ctx, learnerID, kind, key, EvidenceOpts{})
+}
+
+// LatestConfusionLexemeOpts is LatestConfusionLexeme with EvidenceOpts.
+func (s *Store) LatestConfusionLexemeOpts(ctx context.Context, learnerID int64, kind, key string, opts EvidenceOpts) (int64, bool, error) {
+	return s.latestConfusionLexeme(ctx, learnerID, kind, key, opts)
+}
+
+func (s *Store) latestConfusionLexeme(ctx context.Context, learnerID int64, kind, key string, opts EvidenceOpts) (int64, bool, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return 0, false, err
@@ -249,7 +269,7 @@ func (s *Store) LatestConfusionLexeme(ctx context.Context, learnerID int64, kind
 	var id sql.NullInt64
 	err = conn.QueryRowContext(ctx, `
 		SELECT lexeme_id FROM confusion_misses
-		WHERE learner_id = ? AND kind = ? AND key = ? AND lexeme_id IS NOT NULL
+		WHERE learner_id = ? AND kind = ? AND key = ? AND lexeme_id IS NOT NULL`+skipVoid(opts.IncludeVoided, "confusion_id", "confusion_misses.id")+`
 		ORDER BY at DESC, id DESC
 		LIMIT 1`, learnerID, kind, key).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {

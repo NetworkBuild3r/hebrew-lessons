@@ -25,7 +25,9 @@
 //
 // # Constants
 //
-// SessionCap is 20. TargetSuccess is 0.85, the sessionlimits value the
+// SessionCap is the card count at the default pace (20). A learner with
+// 200 timed answers gets a card count from his median seconds per answer,
+// sized to 20 to 30 minutes. TargetSuccess is 0.85, the sessionlimits value the
 // coach also reports. New-card caps follow recent accuracy
 // (INIT-027/SPEC-005): 2 below LowAccuracy (0.80), 5 from 0.80 through
 // HighAccuracy (0.90), and 8 above 0.90. MaxNewPerSession is the high tier
@@ -59,7 +61,7 @@
 // Suspended cards, and words whose intro lesson is unfinished, stay out.
 //
 // Due struggling and due known cards fill their PlanFor shares. Room left under
-// SessionCap is filled from the other due side. Not-yet-due known cards are
+// The card budget is filled from the other due side. Not-yet-due known cards are
 // never added. Each side is ordered by due time, then by a pure mix of the
 // injected seed and the card id. There is no math/rand draw. The same clock,
 // the same seed, and the same rows always build the same queue.

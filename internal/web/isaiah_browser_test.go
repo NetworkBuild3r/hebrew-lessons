@@ -85,7 +85,7 @@ func startIsaiahServer(t *testing.T) (origin, cookie string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv.Config.Handler = NewOptions(nil, svc, Options{Store: store})
+	srv.Config.Handler = NewOptions(nil, svc, Options{Store: store, ShowIsaiah: true, ShowRoots: true})
 	srv.Start()
 	t.Cleanup(srv.Close)
 	cookie = mintSession(t, store, user.ID, "brian-csrf", now.Add(time.Hour)).Value

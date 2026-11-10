@@ -162,6 +162,11 @@ templ ActivityBlock(a Activity) {
 							if a.Audio != "" {
 								@PaceControls("line-clip")
 							}
+							if alsoRightTap(a) {
+								@ButtonWith(ButtonQuiet, templ.Attributes{"type": "submit", "name": "attempt", "value": Num64(a.AlsoRightID), "formnovalidate": true, "formaction": AlsoRightPath, "hx-post": AlsoRightPath, "hx-target": "#lesson-frame", "hx-swap": "outerHTML", "hx-select": "unset"}) {
+									@E(AlsoRightLabel)
+								}
+							}
 							<button type="submit" class="btn btn-primary" name="answer" value="continue" autofocus>@E(a.Continue)</button>
 						}
 					</div>

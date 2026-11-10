@@ -611,18 +611,17 @@ func (s *Store) AudioIDByText(ctx context.Context, textNFC string) (string, bool
 	return id, true, nil
 }
 
-// KnownLexemeIDs returns the sorted ids of words whose skill is known under
-// ADR-0031: checked successes on at least two study days, plus the existing
-// known thresholds (enough successes, newest three right, recall chance).
-// A single right read answer does not qualify. Finishing a lesson does not
-// add its new words. INIT-036/SPEC-002.
+// KnownLexemeIDs returns the sorted ids of words that are recalled later or
+// proved on some skill (ADR-0033 D6). A placement-only card is not taught, so
+// it is not in the set. Finishing a lesson does not add its new words.
+// INIT-038/SPEC-005.
 func (s *Store) KnownLexemeIDs(ctx context.Context, userID int64) ([]int64, error) {
 	ids, _, err := s.strictKnownLexemes(ctx, userID)
 	return ids, err
 }
 
 // LearnerKnownLexemes returns the pointed NFC text of KnownLexemeIDs, sorted by that text.
-// The set is ADR-0031 strict known (INIT-036/SPEC-002). There is no learner_lexemes table.
+// The set is recalled later or proved (ADR-0033 D6). There is no learner_lexemes table.
 func (s *Store) LearnerKnownLexemes(ctx context.Context, userID int64) ([]string, error) {
 	_, texts, err := s.strictKnownLexemes(ctx, userID)
 	if err != nil {
@@ -634,14 +633,14 @@ func (s *Store) LearnerKnownLexemes(ctx context.Context, userID int64) ([]string
 	return texts, nil
 }
 
-// strictKnownLexemes is the shared ADR-0031 known set for KnownLexemeIDs,
-// LearnerKnownLexemes, knownTexts, and suggestedStart. INIT-036/SPEC-002.
+// strictKnownLexemes is the recalled-or-proved set for KnownLexemeIDs,
+// LearnerKnownLexemes, knownTexts, and suggestedStart. ADR-0033 D6.
 func (s *Store) strictKnownLexemes(ctx context.Context, userID int64) ([]int64, []string, error) {
 	now := s.Clock().Now()
 	ev, err := s.LearnerEvidence(ctx, userID, LearnerQuery{
 		AgainWindow:    8,
 		AccuracyWindow: 20,
-		RecentWindow:   knownRecentRight,
+		RecentWindow:   3, // matches learner/rule.KnownRecentRight; the rule lives there
 		MissSince:      now.AddDate(0, 0, -7),
 		ConfusionSince: now.AddDate(0, 0, -30),
 	})
@@ -651,7 +650,7 @@ func (s *Store) strictKnownLexemes(ctx context.Context, userID int64) ([]int64, 
 	seen := map[int64]struct{}{}
 	var ids []int64
 	for _, sk := range ev.Skills {
-		if !skillStrictKnown(sk, now) {
+		if !recalledOrProved(sk, now) {
 			continue
 		}
 		if _, ok := seen[sk.LexemeID]; ok {

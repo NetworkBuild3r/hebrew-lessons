@@ -39,6 +39,12 @@
 // undoes only cards that same taught row created that still have no review.
 // ADR-0022 decision D2. INIT-026/SPEC-005.
 //
+// VoidAnswers takes answers back without deleting them (ADR-0033 D1). It writes
+// a void beside the attempt, its review_log row, and its confusion row, then
+// replays the card from the reviews that still count. UndoVoid marks the batch
+// undone and replays again, so the card is the one the recorder would have
+// stored. Fuzz is off, and each step uses the same study-day cutoff as Attempt.
+//
 // The package depends on db, fsrs, clock, and studyday. It does not import
 // session. Time comes from the clock, so tests are deterministic. The learner
 // id is a field of Attempt that handlers fill from the signed-in session, never

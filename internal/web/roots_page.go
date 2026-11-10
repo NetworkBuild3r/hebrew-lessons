@@ -10,6 +10,10 @@ import (
 )
 
 func (s *server) serveRoots(w http.ResponseWriter, r *http.Request, lang, csrf string) {
+	if s == nil || !s.showRoots {
+		notFound(w, r)
+		return
+	}
 	page, _, err := s.pageFor(r, lang, csrf, "roots")
 	if err != nil {
 		serverError(w)
@@ -36,6 +40,10 @@ func (s *server) serveRoots(w http.ResponseWriter, r *http.Request, lang, csrf s
 }
 
 func (s *server) serveRoot(w http.ResponseWriter, r *http.Request, lang, csrf string) {
+	if s == nil || !s.showRoots {
+		notFound(w, r)
+		return
+	}
 	root := r.PathValue("root")
 	if s == nil || s.store == nil || !roots.ValidPath(root) {
 		http.NotFound(w, r)

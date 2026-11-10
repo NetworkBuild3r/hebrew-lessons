@@ -155,7 +155,17 @@ func (s *Store) LatestConfusionClear(ctx context.Context, learnerID int64, kind,
 }
 
 // LastConfusionMiss returns the newest miss for the pair, if any.
+// An active void leaves that confusion out. INIT-038/SPEC-002.
 func (s *Store) LastConfusionMiss(ctx context.Context, learnerID int64, kind, key string) (time.Time, bool, error) {
+	return s.lastConfusionMiss(ctx, learnerID, kind, key, EvidenceOpts{})
+}
+
+// LastConfusionMissOpts is LastConfusionMiss with EvidenceOpts.
+func (s *Store) LastConfusionMissOpts(ctx context.Context, learnerID int64, kind, key string, opts EvidenceOpts) (time.Time, bool, error) {
+	return s.lastConfusionMiss(ctx, learnerID, kind, key, opts)
+}
+
+func (s *Store) lastConfusionMiss(ctx context.Context, learnerID int64, kind, key string, opts EvidenceOpts) (time.Time, bool, error) {
 	conn, err := s.connOrErr()
 	if err != nil {
 		return time.Time{}, false, err
@@ -164,7 +174,7 @@ func (s *Store) LastConfusionMiss(ctx context.Context, learnerID int64, kind, ke
 	err = conn.QueryRowContext(ctx, `
 		SELECT at
 		FROM confusion_misses
-		WHERE learner_id = ? AND kind = ? AND key = ?
+		WHERE learner_id = ? AND kind = ? AND key = ?`+skipVoid(opts.IncludeVoided, "confusion_id", "confusion_misses.id")+`
 		ORDER BY at DESC, id DESC
 		LIMIT 1`, learnerID, kind, key).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {

@@ -33,17 +33,38 @@ func (s *server) serveWords(w http.ResponseWriter, r *http.Request, lang, csrf s
 		http.Error(w, "unknown skill", http.StatusBadRequest)
 		return
 	}
+	ladder := r.URL.Query().Get("ladder")
+	if ladder != "" && !learner.ValidLadder(ladder) {
+		http.Error(w, "unknown ladder", http.StatusBadRequest)
+		return
+	}
+	if ladder != "" && skill == "" {
+		http.Error(w, "unknown skill", http.StatusBadRequest)
+		return
+	}
 	page.Title = "Words · " + views.AppName
 	view := views.WordsView{
 		Page: page, State: state, Empty: "Words you have met appear here.",
 		AllHref: stateHref(page, "/me/words", ""), LearningHref: stateHref(page, "/me/words", "learning"),
 		KnownHref: stateHref(page, "/me/words", "known"), StrugglingHref: stateHref(page, "/me/words", "struggling"),
+		Ladder: ladder, LadderLabel: ladderLabel(ladder),
 	}
 	if skill != "" {
-		view.SkillLabel = learner.DirectionLabel(skill)
+		if ladder != "" {
+			view.SkillLabel = ladderSkillLabel(skill)
+		} else {
+			view.SkillLabel = learner.DirectionLabel(skill)
+		}
 	}
 	if user != nil && s != nil && s.store != nil {
-		words, err := s.metWords(r.Context(), user.ID, skill, state)
+		var words []learner.WordState
+		var err error
+		if ladder != "" {
+			view.Empty = "No words are on this rung."
+			words, err = s.ladderWords(r.Context(), user.ID, skill, ladder)
+		} else {
+			words, err = s.metWords(r.Context(), user.ID, skill, state)
+		}
 		if err != nil {
 			serverError(w)
 			return
@@ -67,7 +88,7 @@ func (s *server) serveWords(w http.ResponseWriter, r *http.Request, lang, csrf s
 			if word.LexemeID > 0 {
 				row.WordHref = page.Href("/words/" + strconv.FormatInt(word.LexemeID, 10))
 			}
-			if lx, ok := lex[word.Text]; ok && lx.Root != "" && visible[lx.Root] {
+			if lx, ok := lex[word.Text]; ok && s.showRoots && lx.Root != "" && visible[lx.Root] {
 				row.Root = lx.Root
 				row.Href = page.Href("/roots/" + lx.Root)
 			}
@@ -143,6 +164,43 @@ func stateHref(page views.Page, path, state string) string {
 // metWords lists the learner's met words in one state group. With a skill, the state is that
 // skill's; without one, the word's overall state. "struggling" includes slipping words, as the
 // Progress struggling count does.
+func ladderLabel(rung string) string {
+	switch learner.Ladder(rung) {
+	case learner.Proved:
+		return views.LabelRungProved
+	case learner.RecalledLater:
+		return views.LabelRungRecalledLater
+	case learner.Slipping:
+		return views.LabelRungSlipping
+	case learner.NotYetAsked:
+		return views.LabelRungNotYetAsked
+	default:
+		return ""
+	}
+}
+
+// ladderWords lists the taught words on one rung of one skill.
+func (s *server) ladderWords(ctx context.Context, userID int64, skill, rung string) ([]learner.WordState, error) {
+	var out []learner.WordState
+	model := s.model()
+	cursor := learner.Cursor("")
+	for pages := 0; pages < 20; pages++ {
+		page, next, err := model.List(ctx, userID, learner.Filter{
+			Skill: skill, Ladder: rung, Limit: learner.MaxPageSize, After: cursor,
+		})
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, page...)
+		if next == "" {
+			break
+		}
+		cursor = next
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Text < out[j].Text })
+	return out, nil
+}
+
 func (s *server) metWords(ctx context.Context, userID int64, skill, filter string) ([]learner.WordState, error) {
 	states := []learner.State{learner.Seen, learner.Learning, learner.Struggling, learner.Regressed, learner.Known, learner.Solid}
 	switch filter {

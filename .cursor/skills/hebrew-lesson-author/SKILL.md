@@ -1,6 +1,8 @@
 ---
 name: hebrew-lesson-author
 description: >-
+  PAUSED for INIT-038 Stage 1 (ADR-0033 D11): do not run this skill, and do not
+  write or publish a learner unit, until Brian lifts the pause.
   Builds one Hebrew lesson for one learner over MCP, from a lesson brief: get the
   brief, write a unit within it, add any missing lexicon entries, make the audio,
   validate it by rule id, publish it to the learner's Today, and leave a coach
