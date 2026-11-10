@@ -9,6 +9,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
 
 // gradeCard inserts a new card and applies ratings through fsrs.Review.Grade,
@@ -56,7 +57,11 @@ func TestReplayHistoryMatchesStoredCard(t *testing.T) {
 	if err != nil || len(histories) != 1 {
 		t.Fatalf("histories = %v, %v", histories, err)
 	}
-	got, ok, err := replayHistory(replayScheduler(), histories[0])
+	zone, err := e.store.StudyZone(ctx, e.user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := replayHistory(replayScheduler(), histories[0], zone)
 	if err != nil || !ok {
 		t.Fatal(err, ok)
 	}
@@ -73,7 +78,7 @@ func TestReplayHistoryMatchesStoredCard(t *testing.T) {
 }
 
 func TestReplayEmptyHistory(t *testing.T) {
-	_, ok, err := replayHistory(replayScheduler(), db.CardHistory{CardID: 1})
+	_, ok, err := replayHistory(replayScheduler(), db.CardHistory{CardID: 1}, studyday.Zone{})
 	if err != nil || ok {
 		t.Fatalf("empty: ok=%v err=%v", ok, err)
 	}

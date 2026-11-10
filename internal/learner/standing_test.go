@@ -285,8 +285,10 @@ func noteIDs(notes []WordNote) []int64 {
 // reviews taken after waiting.
 func TestStandingDueIsCardsDueNow(t *testing.T) {
 	e := newEnv(t)
-	e.card(e.user, e.lexeme(), fsrs.SkillSpell, 1, 0)
-	later := e.card(e.user, e.lexeme(), fsrs.SkillSpell, 1, 0)
+	// LastReview on a prior study day so EffectiveDue does not push the due
+	// card to the next cutoff (ADR-0033 D10). daysAgo=0 would make Due 0.
+	e.card(e.user, e.lexeme(), fsrs.SkillSpell, 1, 1)
+	later := e.card(e.user, e.lexeme(), fsrs.SkillSpell, 1, 1)
 	e.exec(`UPDATE cards SET due = ? WHERE id = ?`, db.FormatTime(testNow.Add(48*time.Hour)), later)
 
 	got, err := e.model.Standing(context.Background(), e.user)

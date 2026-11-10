@@ -138,6 +138,25 @@ func (e *env) lexeme() int64 {
 	return id
 }
 
+// clip stores audio for a lexeme so a listen card can be written (INIT-038/SPEC-003).
+func (e *env) clip(lexemeID int64) {
+	e.t.Helper()
+	conn, err := e.store.DB()
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	var text string
+	if err := conn.QueryRowContext(context.Background(),
+		`SELECT text_nfc FROM lexemes WHERE id = ?`, lexemeID).Scan(&text); err != nil {
+		e.t.Fatal(err)
+	}
+	if _, err := e.store.InsertAudio(context.Background(), db.Asset{
+		ID: fmt.Sprintf("%064x", lexemeID), TextNFC: text, Voice: "v", Model: "legacy", Bytes: 4, CreatedAt: e.clk.Now(),
+	}); err != nil {
+		e.t.Fatal(err)
+	}
+}
+
 func (e *env) lexemes(n int) []int64 {
 	ids := make([]int64, n)
 	for i := range ids {

@@ -1066,6 +1066,7 @@ func TestDailyReplayAniFixtureIsLearningOrBetter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	e.clip(id)
 	e.attempts(e.user, id, fsrs.SkillListen, "RRR")
 	if n := e.count(`SELECT COUNT(*) FROM cards WHERE skill = 'listen'`); n != 0 {
 		t.Fatal("fixture already had a listen card")
@@ -1099,6 +1100,7 @@ func TestDailyJobReplaysListenOnce(t *testing.T) {
 	var logs bytes.Buffer
 	e.daily = e.newDaily("job-a", WithLogger(slog.New(slog.NewTextHandler(&logs, nil))))
 	id := e.lexeme()
+	e.clip(id)
 	e.attempts(e.user, id, fsrs.SkillListen, "RR")
 	if n := e.count(`SELECT COUNT(*) FROM cards WHERE skill = 'listen'`); n != 0 {
 		t.Fatal("fixture already had a listen card")

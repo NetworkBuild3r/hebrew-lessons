@@ -6,6 +6,7 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
 
 // Replay compares stored cards to a fresh FSRS walk of review_log.
@@ -31,11 +32,12 @@ func replayScheduler() *fsrs.Review {
 	return fsrs.New(nil, nil)
 }
 
-// replayHistory walks hist.Reviews oldest-first through ScheduleNext, including
-// implied rows. Implied credit was recorded with the same ScheduleNext call as a
-// normal grade (Good for Recorder.Implied, Good or Hard for spelling); the
-// Implied flag does not change the math, only the rating and ReviewedAt do.
-func replayHistory(sched *fsrs.Review, hist db.CardHistory) (db.Card, bool, error) {
+// replayHistory walks hist.Reviews oldest-first through ScheduleNext and the
+// study-day cutoff, matching what Recorder/Grade/Implied store (ADR-0033 D10).
+// Implied credit uses the same ScheduleNext call as a normal grade (Good for
+// Recorder.Implied, Good or Hard for spelling); the Implied flag does not
+// change the math, only the rating and ReviewedAt do.
+func replayHistory(sched *fsrs.Review, hist db.CardHistory, zone studyday.Zone) (db.Card, bool, error) {
 	if len(hist.Reviews) == 0 {
 		return db.Card{}, false, nil
 	}
@@ -45,6 +47,7 @@ func replayHistory(sched *fsrs.Review, hist db.CardHistory) (db.Card, bool, erro
 		if err != nil {
 			return db.Card{}, false, err
 		}
+		next.Due = fsrs.SameDayDue(next.Due, r.ReviewedAt, zone)
 		next.ID = hist.CardID
 		next.LexemeID = hist.LexemeID
 		next.Skill = hist.Skill
@@ -89,7 +92,7 @@ type skillKey struct {
 // Cards already omitted by CardHistories / LearnerEvidence stay out.
 // Unreviewed cards that existed by at keep HasCard with the creation state
 // (new, zeros). Cards with reviews use the FSRS replay walk.
-func applyPastCardHistories(ev *db.LearnerEvidence, histories []db.CardHistory) error {
+func applyPastCardHistories(ev *db.LearnerEvidence, histories []db.CardHistory, zone studyday.Zone) error {
 	byKey := make(map[skillKey]db.CardHistory, len(histories))
 	for _, h := range histories {
 		byKey[skillKey{h.LexemeID, h.Skill}] = h
@@ -115,7 +118,7 @@ func applyPastCardHistories(ev *db.LearnerEvidence, histories []db.CardHistory) 
 			ls.Lapses = 0
 			continue
 		}
-		replayed, ok, err := replayHistory(sched, h)
+		replayed, ok, err := replayHistory(sched, h, zone)
 		if err != nil {
 			return err
 		}
@@ -143,14 +146,14 @@ func clearCardFields(ls *db.LearnerSkill) {
 
 // countReplayMismatches compares each reviewed card's stored schedule (from
 // CardHistories) to a fresh replay. Unreviewed cards are skipped.
-func countReplayMismatches(histories []db.CardHistory) (int, error) {
+func countReplayMismatches(histories []db.CardHistory, zone studyday.Zone) (int, error) {
 	sched := replayScheduler()
 	n := 0
 	for _, h := range histories {
 		if len(h.Reviews) == 0 {
 			continue
 		}
-		replayed, ok, err := replayHistory(sched, h)
+		replayed, ok, err := replayHistory(sched, h, zone)
 		if err != nil {
 			return 0, err
 		}
