@@ -105,10 +105,11 @@ func seedLearner(tb testing.TB, words, attempts int) (*Model, int64) {
 }
 
 // learnerPerfLimit is perfLimit times LEARNER_PERF_SLACK.
-// An empty value means 1, so a local run still asserts 200ms. CI sets 2.
+// An empty value means 1, so a local run still asserts 200ms. CI sets 3.
 // On run 39479442471 the best of five was 229ms while the other shards
-// loaded the same node, and 200ms failed that healthy page. Slack 2 is
-// 400ms. A missing index still takes seconds, which 400ms does not hide.
+// loaded the same node, and 200ms failed that healthy page. Slack 2
+// (400ms) later failed at 441ms on run 43100819105. Slack 3 is 600ms.
+// A missing index still takes seconds, which 600ms does not hide.
 func learnerPerfLimit(t *testing.T) time.Duration {
 	t.Helper()
 	slack := 1

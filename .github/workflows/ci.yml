@@ -633,12 +633,14 @@ jobs:
       # TestListFirstPageOver50kAttempts asserts its time limit only when the
       # race detector is off. Learner lives in shard B. This step is before
       # the race build so the sample is not competing with this shard's own
-      # race compile. LEARNER_PERF_SLACK=2 covers the other shards sharing
+      # race compile. LEARNER_PERF_SLACK=3 covers the other shards sharing
       # the node; local runs leave it unset and keep the 200ms limit.
       - name: learner tests
         if: steps.module.outputs.present == 'true' && steps.affected.outputs.run_tests == 'true' && matrix.shard == 'app'
         env:
-          LEARNER_PERF_SLACK: "2"
+          # 3 shards share the node; slack 2 (400ms) failed at 441ms best-of-5
+          # on run 43100819105. Slack 3 is 600ms; a missing index is still seconds.
+          LEARNER_PERF_SLACK: "3"
         shell: bash
         run: |
           set -euo pipefail

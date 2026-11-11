@@ -47,7 +47,9 @@ func TestNumbersAgreeAcrossSurfaces(t *testing.T) {
 	id := fx.userID
 
 	home := getAgree(t, fx, "/")
-	progress := getAgree(t, fx, "/progress")
+	// Cross-surface number checks need the detail Progress view; the default
+	// brief screen is one can-do sentence (RSCH-013) without ladder rows.
+	progress := getAgree(t, fx, "/progress?detail=1")
 
 	session := connectAppMCP(t, fx.app.MCP(), agreeToken)
 	digest := callAgree[mcp.StudyDigest](t, session, "get_study_digest", map[string]any{"learnerId": id})
@@ -276,7 +278,7 @@ func standingDisagreements(t *testing.T, s standingSurfaces, model learner.Stand
 // requires the agreement check to name it. The unedited surfaces must agree.
 func TestNumbersAgreePlantedMismatch(t *testing.T) {
 	fx := seedAgreeFixture(t)
-	progress := getAgree(t, fx, "/progress")
+	progress := getAgree(t, fx, "/progress?detail=1")
 	session := connectAppMCP(t, fx.app.MCP(), agreeToken)
 	digest := callAgree[mcp.StudyDigest](t, session, "get_study_digest", map[string]any{"learnerId": fx.userID})
 	var ctxFull struct {
