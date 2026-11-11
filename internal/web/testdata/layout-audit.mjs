@@ -2,6 +2,7 @@
 // desktop widths in light and dark, and measures what a person would call broken:
 //   h-scroll   the page scrolls sideways
 //   off-screen a box sticks out past the screen edge, outside a scroller
+//   spill      a control, text or picture sticks out of the card or box it sits in
 //   clipped    text is cut off by its own box
 //   overlap    two pieces of text or two controls sit on top of each other
 //   covered    a control is under another layer where a finger would land (each control is scrolled to the middle of the screen first,
@@ -13,6 +14,7 @@
 // Needs Node 22+, Chrome, and a server started with DEV=1 (POST /auth/local signs in).
 //   ORIGIN=http://127.0.0.1:8098 OUT=./shots CHROME=/path/to/chrome node layout-audit.mjs
 // Optional: SHOTS=all (a picture of every screen), ONLY=phone,desktop, SCHEMES=light.
+//   ONLY=narrow,landscape,zoom200 runs the stress sizes. UI_LANG=he runs the Hebrew interface. TEXT=1.5 scales text.
 import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { writeFileSync, mkdirSync } from "node:fs";
@@ -31,9 +33,18 @@ const ALL = [
   { name: "tablet", width: 768, height: 1024, mobile: true },
   { name: "laptop", width: 1280, height: 800, mobile: false },
   { name: "desktop", width: 1440, height: 900, mobile: false },
+  // reflow at 320 CSS px (WCAG 1.4.10), a phone on its side, and a laptop at 200% browser zoom
+  { name: "narrow", width: 320, height: 568, mobile: true },
+  { name: "landscape", width: 740, height: 360, mobile: true },
+  { name: "zoom200", width: 640, height: 400, mobile: false },
 ];
+// Default runs skip the three stress sizes unless ONLY names them.
+const DEFAULT_SKIP = ["narrow", "landscape", "zoom200"];
 const only = (process.env.ONLY || "").split(",").filter(Boolean);
-const VIEWPORTS = only.length ? ALL.filter((v) => only.includes(v.name)) : ALL;
+const VIEWPORTS = only.length ? ALL.filter((v) => only.includes(v.name)) : ALL.filter((v) => !DEFAULT_SKIP.includes(v.name));
+// UI_LANG=he audits the Hebrew (right-to-left) interface. TEXT=1.5 scales the page text by half again.
+const UI_LANG = process.env.UI_LANG || "";
+const TEXT = process.env.TEXT || "";
 const SCHEMES = (process.env.SCHEMES || "light,dark").split(",");
 
 const probe = createServer();
@@ -76,8 +87,13 @@ const ev = async (expression) => {
   if (r.exceptionDetails) throw new Error(JSON.stringify(r.exceptionDetails).slice(0, 400));
   return r.result.value;
 };
-const go = async (url) => { await send("Page.navigate", { url }, sessionId); await delay(650); await ev("document.fonts.ready.then(() => 1)"); };
+const go = async (url) => {
+  await send("Page.navigate", { url }, sessionId); await delay(650); await ev("document.fonts.ready.then(() => 1)");
+  if (TEXT) { await ev(`document.documentElement.style.fontSize = ${JSON.stringify(String(+TEXT * 100) + "%")}; 1`); await delay(150); }
+};
 async function viewport(v, scheme) {
+  // switching from a desktop size to a phone size otherwise keeps a zoomed-out page scale
+  await send("Emulation.clearDeviceMetricsOverride", {}, sessionId);
   await send("Emulation.setDeviceMetricsOverride", { width: v.width, height: v.height, deviceScaleFactor: 1, mobile: v.mobile }, sessionId);
   await send("Emulation.setTouchEmulationEnabled", { enabled: v.mobile }, sessionId);
   await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }, { name: "prefers-reduced-motion", value: "reduce" }] }, sessionId);
@@ -155,6 +171,34 @@ const AUDIT = `(() => {
     if (el.matches('img,svg,canvas,video')) { const r = rectOf(el); boxes.push({ el, kind: 'picture', left: r.left, top: r.top, right: r.right, bottom: r.bottom }); continue; }
     const b = textBox(el);
     if (b) boxes.push({ el, kind: 'text', ...b });
+  }
+  // spill: a control, text or picture that sticks out of the card or box it sits in
+  const isBox = (p) => {
+    const cs = getComputedStyle(p);
+    const border = ['Top', 'Right', 'Bottom', 'Left'].some((s) => parseFloat(cs['border' + s + 'Width']) > 0 && cs['border' + s + 'Style'] !== 'none');
+    const m = /rgba?\\(([^)]*)\\)/.exec(cs.backgroundColor), a = m ? (m[1].split(',').length > 3 ? parseFloat(m[1].split(',')[3]) : 1) : 0;
+    return border || a > 0.05 || (cs.backgroundImage && cs.backgroundImage !== 'none');
+  };
+  const spilled = new Set();
+  for (const b of boxes) {
+    if (b.kind === 'picture' && b.el.closest('[aria-hidden=true]')) continue;
+    if (pinned(b.el) || scroller(b.el)) continue;
+    let anc = null;
+    for (let p = b.el.parentElement; p && p !== document.body && p !== de; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (cs.display === 'contents') continue;
+      if (/(auto|scroll|hidden|clip)/.test(cs.overflowX)) break;
+      if (isBox(p)) { anc = p; break; }
+    }
+    if (!anc) continue;
+    const ar = rectOf(anc);
+    if (ar.width < 4) continue;
+    const over = Math.max(ar.left - b.left, b.right - ar.right);
+    if (over > 2) {
+      const key = desc(anc);
+      if (spilled.has(key)) continue; spilled.add(key);
+      add('spill', desc(b.el) + '  out of  ' + key, { by: Math.round(over) + 'px' });
+    }
   }
   const seen = new Set();
   for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
@@ -250,8 +294,9 @@ async function links(prefix, max) {
 async function walkLesson(href, label, v, scheme, pick) {
   await go(ORIGIN + href);
   for (let i = 0; i < 16; i++) {
+    try {
     const state = JSON.parse(await ev(`JSON.stringify({
-      done: /Lesson complete|All done/.test(document.body.innerText),
+      done: /Lesson complete|All done|\u05d4\u05e9\u05d9\u05e2\u05d5\u05e8 \u05d4\u05d5\u05e9\u05dc\u05dd/.test((document.body && document.body.innerText) || ""),
       typed: !!document.querySelector('#write-answer'),
       choices: document.querySelectorAll('#lesson-frame .c-answer').length,
       cont: !!document.querySelector('#lesson-frame form button[name="answer"][value="continue"]'),
@@ -268,13 +313,17 @@ async function walkLesson(href, label, v, scheme, pick) {
       await delay(600);
       await audit(name + " checked", v, scheme);
     } else if (state.choices) {
-      await ev(`(() => { const b = [...document.querySelectorAll('#lesson-frame .c-answer')]; b[${pick === 'last' ? 'b.length - 1' : '0'}].click(); })()`);
+      await ev(`(() => { const b = [...document.querySelectorAll('#lesson-frame .c-answer')]; const t = b[${pick === 'last' ? 'b.length - 1' : '0'}]; if (t) t.click(); })()`);
       await delay(600);
       await audit(name + " answered", v, scheme);
     }
     const clicked = await ev(`(() => { const b = document.querySelector('#lesson-frame form button[name="answer"][value="continue"]') || document.querySelector('#lesson-frame form button[name="answer"]') || document.querySelector('#lesson-frame form button[type=submit]'); if (!b) return false; b.click(); return true; })()`);
     if (!clicked) return;
     await delay(600);
+    } catch (e) {
+      if (!/null|undefined|Execution context|navigat/i.test(String(e))) throw e;
+      await delay(800); // the page was between loads; look again
+    }
   }
 }
 
@@ -287,6 +336,7 @@ for (const scheme of SCHEMES) for (const v of VIEWPORTS) {
   await audit("/signin (signed out)", v, scheme);
   await go(ORIGIN + "/healthz");
   await ev(`fetch("/auth/local",{method:"POST"}).then(r=>r.status)`);
+  if (UI_LANG) await ev(`document.cookie = "hebrew_lang=${UI_LANG}; path=/"; 1`);
 
   const paths = [...STATIC];
   const found = new Set();
@@ -325,7 +375,7 @@ for (const r of report) for (const i of r.issues) {
   if (!groups.has(key)) groups.set(key, { ...i, where: new Set(), n: 0, extra: i.size || i.by || i.x || i.w || i.px || i.scrollY || "" });
   const g = groups.get(key); g.n++; g.where.add(`${r.viewport}/${r.scheme}:${r.screen}`);
 }
-const order = ["h-scroll", "off-screen", "covered", "overlap", "clipped", "small-tap", "tiny-text"];
+const order = ["h-scroll", "off-screen", "covered", "spill", "overlap", "clipped", "small-tap", "tiny-text"];
 const lines = [...groups.values()].sort((a, b) => order.indexOf(a.k) - order.indexOf(b.k) || b.n - a.n);
 for (const g of lines) console.log(`${g.k.padEnd(10)} x${String(g.n).padEnd(3)} ${g.d}  [${g.extra}]  e.g. ${[...g.where][0]}`);
 const counts = {};

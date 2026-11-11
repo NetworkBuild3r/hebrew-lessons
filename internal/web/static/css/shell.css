@@ -29,7 +29,8 @@
   .dock-wrap { padding-inline: var(--space-2); }
   .dock { padding: var(--space-1); gap: 0; }
   .dock__link { padding-inline: 0; }
-  .dock__label { letter-spacing: 0; }
+  /* Five labels share 320px, so larger browser text cannot grow past what fits. */
+  .dock__label { letter-spacing: 0; font-size: min(var(--fs-caption), 3.6vw); }
 }
 .section-jump {
   display: flex;
@@ -338,16 +339,16 @@
   border-radius: var(--radius-pill);
   background: var(--surface-soft);
   color: var(--text);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
   line-height: normal;
 }
 .lf-stage[data-state="now"] { background: var(--ink); color: var(--surface); font-weight: 700; }
 .lf-head { display: grid; gap: var(--space-2); padding-block-start: 0; }
-.lf-head .eyebrow { text-transform: uppercase; letter-spacing: .06em; font-size: 13px; font-weight: 700; color: var(--muted); }
-.lf-title { font-family: var(--font-ui); font-size: 22px; font-weight: 700; line-height: normal; }
+.lf-head .eyebrow { text-transform: uppercase; letter-spacing: .06em; font-size: 0.8125rem; font-weight: 700; color: var(--muted); }
+.lf-title { font-family: var(--font-ui); font-size: 1.375rem; font-weight: 700; line-height: normal; }
 .lesson-frame .btn { border-radius: 12px; min-block-size: var(--size-cta); }
-.lesson-frame .recall-prompt { font-size: 32px; font-weight: 700; line-height: normal; }
+.lesson-frame .recall-prompt { font-size: 2rem; font-weight: 700; line-height: normal; }
 .lf-unit { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); font-family: var(--font-display); font-size: var(--fs-he-md); line-height: var(--lh-he-display); }
 .lf-outline { display: none; }
 .lf-steps { display: grid; gap: var(--space-1); list-style: none; padding: 0; }
@@ -407,8 +408,8 @@
   background: var(--surface);
   text-align: center;
 }
-.see__he { font-family: var(--font-he); font-size: 36px; font-weight: 700; line-height: var(--lh-he-display); }
-.see__en { margin: 0; font-size: 20px; font-weight: 700; line-height: 1.3; }
+.see__he { font-family: var(--font-he); font-size: 2.25rem; font-weight: 700; line-height: var(--lh-he-display); }
+.see__en { margin: 0; font-size: 1.25rem; font-weight: 700; line-height: 1.3; }
 .see__meta { margin: 0; color: var(--muted); font-size: var(--fs-caption); }
 .see[data-see-one] .see__card:not([data-current]) { display: none; }
 
@@ -424,7 +425,7 @@
   box-shadow: none;
 }
 .activity[data-kind="recall"] .wcard__new { display: none; }
-.activity[data-kind="recall"] .wcard__he { font-size: 32px; }
+.activity[data-kind="recall"] .wcard__he { font-size: 2rem; }
 
 /* Write, after Check: the typed echo and the sheet say it. The word shows with its sound,
    without the tap hint or the New badge. */
@@ -447,7 +448,7 @@
   box-shadow: none;
 }
 .activity[data-kind="story"] .wcard__new { display: none; }
-.activity[data-kind="story"] .wcard__he { font-size: 22px; }
+.activity[data-kind="story"] .wcard__he { font-size: 1.375rem; }
 
 /* Use: small word chips. */
 .activity[data-kind="order"] .order-chip {
@@ -455,7 +456,7 @@
   border: 1px solid var(--hairline-strong);
   border-radius: 10px;
   background: var(--surface);
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 
 /* The same chips when Use is shown, not scored: the words are cards that open a meaning. */
@@ -469,7 +470,7 @@
   box-shadow: none;
 }
 .activity[data-kind="order"] .wcard__new { display: none; }
-.activity[data-kind="order"] .wcard__he { font-size: 18px; }
+.activity[data-kind="order"] .wcard__he { font-size: 1.125rem; }
 
 /* Write: the learner types the Hebrew. */
 .write { display: grid; gap: var(--space-4); }

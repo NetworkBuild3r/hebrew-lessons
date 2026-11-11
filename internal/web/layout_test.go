@@ -10,6 +10,8 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
+// TestTodayLayout checks the markup of Today: landmarks, the nav, and the
+// escaped token. It does not prove a box is on the screen. TestScreenGeometry does.
 func TestTodayLayout(t *testing.T) {
 	const token = `tok"en<script>`
 	body := get(t, newMux(nil, CSRFFunc(func(*http.Request) string { return token })), "/")
@@ -179,7 +181,7 @@ func TestStaticHasNoExternalURL(t *testing.T) {
 	if !strings.Contains(css, "--lh-he-body: 1.6") || !strings.Contains(css, "--lh-he-display: 1.3") {
 		t.Fatal("pointed line-height tokens missing")
 	}
-	for _, token := range []string{"--fs-he-xl:", "--fs-he-md: 24px", "--fs-small: 15px", "--content-max: 1080px", "--rail-w: 92px", "--tap: var(--size-tap)", "--size-tap: 44px", "--size-cta: 56px", "--motion-shift: 16px", "--motion-shift: 0px", `url("../fonts/noto-sans-hebrew-hebrew.woff2")`} {
+	for _, token := range []string{"--fs-he-xl:", "--fs-he-md: 1.5rem", "--fs-small: .9375rem", "--content-max: 1080px", "--rail-w: 92px", "--tap: var(--size-tap)", "--size-tap: 44px", "--size-cta: 56px", "--motion-shift: 16px", "--motion-shift: 0px", `url("../fonts/noto-sans-hebrew-hebrew.woff2")`} {
 		if !strings.Contains(css, token) {
 			t.Fatalf("tokens missing %s", token)
 		}

@@ -541,7 +541,7 @@ h1 {
   background: var(--gbtn-fill);
   color: var(--gbtn-text);
   font-weight: 500;
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 20px;
   white-space: nowrap;
 }
@@ -1125,17 +1125,17 @@ h1 {
   align-items: baseline;
   gap: 6px;
 }
-.wb--chip .wb__he { font-size: 17px; }
+.wb--chip .wb__he { font-size: 1.0625rem; }
 .wb--chip .wb__tr, .wb--chip .wb__gl { font-size: var(--fs-caption); color: var(--muted); }
 .wb--inline { display: inline; }
 .wb--inline .wb__he { font-size: 1.05em; }
 .wb--inline .wb__aux { font-size: .82em; white-space: nowrap; }
 .wb--card { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); }
 .wb--card .wb__he { font-size: var(--fs-he-md); }
-.wb--card .wb__tr { font-size: 14.5px; }
+.wb--card .wb__tr { font-size: 0.90625rem; }
 .wb--card .wb__gl { font-size: var(--fs-small); }
 .wb--display { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); overflow: visible; }
-.wb__line { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: var(--space-2); color: var(--on-ink-muted); font-size: 18px; overflow: visible; }
+.wb__line { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: var(--space-2); color: var(--on-ink-muted); font-size: 1.125rem; overflow: visible; }
 .rcard__body .wb__line { color: var(--muted); }
 .slate .wb__tr { color: var(--on-ink-muted); }
 

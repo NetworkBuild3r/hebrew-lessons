@@ -37,18 +37,18 @@
   --font-ui: "Noto Sans Hebrew", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-he: "Noto Sans Hebrew", "Arial Hebrew", sans-serif;      /* all pointed Hebrew: best nikud placement */
   --font-display: "Frank Ruhl Libre", "Noto Sans Hebrew", Georgia, serif;
-  --fs-he-hero: clamp(72px, 5vw + 48px, 112px);   /* the one word on a prompt */
-  --fs-he-xl: clamp(44px, 2.4vw + 30px, 64px);    /* intro word, story title */
-  --fs-he-lg: clamp(28px, 1vw + 22px, 36px);      /* answers, tiles, story text */
-  --fs-he-md: 24px;                               /* list rows, chips */
-  --fs-display: clamp(40px, 2.6vw + 22px, 60px);  /* big numbers, page titles */
-  --fs-h1: clamp(30px, 1.4vw + 22px, 40px);
-  --fs-h2: clamp(22px, .6vw + 18px, 26px);
-  --fs-body: 17px; --lh-body: 1.6;
+  --fs-he-hero: clamp(4.5rem, 5vw + 3rem, 7rem);        /* the one word on a prompt */
+  --fs-he-xl: clamp(2.75rem, 2.4vw + 1.875rem, 4rem); /* intro word, story title */
+  --fs-he-lg: clamp(1.75rem, 1vw + 1.375rem, 2.25rem); /* answers, tiles, story text */
+  --fs-he-md: 1.5rem;                            /* list rows, chips */
+  --fs-display: clamp(2.5rem, 2.6vw + 1.375rem, 3.75rem); /* big numbers, page titles */
+  --fs-h1: clamp(1.875rem, 1.4vw + 1.375rem, 2.5rem);
+  --fs-h2: clamp(1.375rem, .6vw + 1.125rem, 1.625rem);
+  --fs-body: 1.0625rem; --lh-body: 1.6;
   --motion-shift: 16px;   /* travel distance for enter/exit; 0 under reduced motion */
   --lh-he-body: 1.6;      /* running pointed Hebrew (story, sentences) */
   --lh-he-display: 1.3;   /* large pointed Hebrew; never below 1.25 for pointed text */
-  --fs-small: 15px; --fs-caption: 12.5px; --tracking-caps: .09em;
+  --fs-small: .9375rem; --fs-caption: .78125rem; --tracking-caps: .09em;
 
   /* space: --space-1..8 are generated; the 96px step has no Figma variable */
   --space-9: 96px;

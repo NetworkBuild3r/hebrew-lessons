@@ -109,3 +109,14 @@
   line-height: var(--lh-he-body);
   text-align: start;
 }
+
+/* Under 360px ten keys of 28px do not fit inside the page gutters, so the last keys spilled out of the
+   card. The keyboard takes back half the gutter and the keys may shrink to fit, about 26px each. */
+@media (max-width: 359px) {
+  .hk {
+    inline-size: calc(100% + var(--space-5));
+    margin-inline: calc(var(--space-3) * -1);
+    padding: var(--space-1);
+  }
+  .hk-key { min-inline-size: 0; }
+}

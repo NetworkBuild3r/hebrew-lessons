@@ -329,6 +329,8 @@ func TestKeyboardCSS(t *testing.T) {
 	if !strings.Contains(rule(".hk-hints"), "min-block-size: var(--size-tap)") {
 		t.Error(".hk-hints is not at least --size-tap tall")
 	}
+	// This pins the CSS floor of 28px. It does not measure a drawn key.
+	// TestScreenGeometry measures the keys on the produce step.
 	if !strings.Contains(rule(".hk-key"), "min-inline-size: calc(var(--space-6) - var(--space-1))") {
 		t.Error(".hk-key min width is not space-6 minus space-1 (28px)")
 	}

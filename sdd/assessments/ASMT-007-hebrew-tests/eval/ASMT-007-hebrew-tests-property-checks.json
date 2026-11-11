@@ -1,0 +1,13 @@
+{
+  "schema": "assessment-eval.property-checks/v1",
+  "target_report": "sdd/assessments/ASMT-007-hebrew-tests/ASMT-007-hebrew-tests-assessment-report.md",
+  "evaluated_at": "2026-11-11",
+  "script_executed": false,
+  "reason": "scripts/dev/run_py.sh is not under the kit root this skill's path climb produced (C:\\Users\\BrianNelson). The checker was not run. all_passed is false because the script did not pass; it did not run.",
+  "passed": 0,
+  "failed": 0,
+  "all_passed": false,
+  "details": [
+    "NOT RUN: eval_report_checks.py was not executed"
+  ]
+}

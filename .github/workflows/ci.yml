@@ -729,9 +729,9 @@ jobs:
         run: |
           set -euo pipefail
           set -o pipefail
-          go test -count=1 -v -run '^(TestClipPlayAfterSwap|TestKeyboardNode)$' ./internal/web | tee node.out
+          go test -count=1 -v -run '^(TestClipPlayAfterSwap|TestKeyboardNode|TestScreenGeometry)$' ./internal/web | tee node.out
           # A renamed test matches nothing, prints [no tests to run], and exits 0
-          # with no --- SKIP line. Require both PASS lines. errexit ignores a
+          # with no --- SKIP line. Require each PASS line. errexit ignores a
           # bare "! grep", so the skip check is an explicit if.
           if grep -q -- '--- SKIP' node.out; then
             echo "::error::a node test printed --- SKIP"
@@ -743,6 +743,10 @@ jobs:
           fi
           if ! grep -q -- '--- PASS: TestKeyboardNode' node.out; then
             echo "::error::missing --- PASS: TestKeyboardNode"
+            exit 1
+          fi
+          if ! grep -q -- '--- PASS: TestScreenGeometry' node.out; then
+            echo "::error::missing --- PASS: TestScreenGeometry"
             exit 1
           fi
 
