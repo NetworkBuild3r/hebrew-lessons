@@ -206,7 +206,7 @@ These do not judge success; they catch damage. Each is read weekly, and a breach
 If any of these fires, stop building, make the app review-only, and move tutor material to Anki (BRAIN-001 Option D). Amended 2026-11-11: Brian decided there is one platform, so the standalone worksheet player that used to sit in `Aharon's code/` was removed and is no longer a fallback.
 
 1. **A1.** The Stage 1 exit is not met by 2026-11-30.
-2. **A2.** A second initiative opens before Stage 1 closes.
+2. **A2.** A second initiative opens before Stage 1 closes. Amended 2026-11-11: Brian chose to open INIT-039 (Stage 2, one platform) now, while the Stage 1 exit check is still running. A2 does not fire for INIT-039. It still bars any third initiative while INIT-039 is open. G1 to G5 still decide whether INIT-039's class import is kept (G2) and whether the app stays on the new path (the exit check).
 3. **A3.** Study minutes are under 120 in week 4.
 4. **A4.** The probe is flat at two monthly sittings in a row.
 
