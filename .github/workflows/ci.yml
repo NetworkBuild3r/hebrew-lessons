@@ -51,9 +51,12 @@ permissions:
 env:
   IMAGE: ghcr.io/networkbuild3r/hebrew
 
+# cancel-in-progress on push too: a push run that sticks in "queued" with 0 jobs
+# (GitHub 409: "has not been queued yet") otherwise holds this group forever and
+# blocks every later main run. PR behavior stays the same.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   shard:
