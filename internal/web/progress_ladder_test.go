@@ -122,36 +122,20 @@ func TestProgressLadderHeadlineAndComparison(t *testing.T) {
 	}
 
 	body := getLearner(t, h, l, "/progress")
-	know := section(t, body, "c-card pknow", "")
 	for _, gone := range []string{
 		"Words you know", "Say it from English", "Placement estimate:", "data-verdict=",
 		"You gained", views.LabelLearnedTodayCheckTomorrow, views.LabelKnownExplain,
+		views.PhraseAppTaught, "%", "What changed",
 	} {
-		if strings.Contains(know, gone) {
-			t.Errorf("headline still has %q", gone)
+		if strings.Contains(body, gone) {
+			t.Errorf("progress still has %q", gone)
 		}
 	}
-	if !strings.Contains(know, views.PhraseAppTaught) {
-		t.Fatal("missing the app-taught denominator")
+	if !strings.Contains(body, "say words from English") || !strings.Contains(body, `class="btn btn-primary progress__next"`) {
+		t.Fatalf("missing the can-do sentence or the next action:\n%s", body)
 	}
-	recallRow := overviewRow(t, know, "recall")
-	listenRow := overviewRow(t, know, "listen")
-	if !strings.Contains(recallRow, `data-size="headline"`) || !strings.Contains(listenRow, `data-size="headline"`) {
-		t.Fatal("the two headline rows are not the large ones")
-	}
-	if !strings.Contains(overviewRow(t, know, "read"), `data-size="small"`) || !strings.Contains(overviewRow(t, know, "spell"), `data-size="small"`) {
-		t.Fatal("reading and spelling are not the smaller rows")
-	}
-	if rungSum(t, recallRow) != recall.Taught || rungCount(t, recallRow, "proved") != recall.Proved {
-		t.Fatalf("recall row does not match %+v:\n%s", recall, recallRow)
-	}
-	if rungSum(t, listenRow) != listen.Taught {
-		t.Fatalf("listen row does not sum to taught %+v:\n%s", listen, listenRow)
-	}
-	for _, rung := range []string{"proved", "recalled_later", "slipping", "not_yet_asked"} {
-		if !regexp.MustCompile(`data-rung="` + rung + `"[^>]*>[\s\S]*?[0-9]+% \([0-9]+\)`).MatchString(recallRow) {
-			t.Errorf("recall %s percentage has no count:\n%s", rung, recallRow)
-		}
+	if recall.Proved < 1 {
+		t.Fatal("the fixture has nothing proved to say")
 	}
 
 	expect := map[string][]string{
@@ -162,7 +146,7 @@ func TestProgressLadderHeadlineAndComparison(t *testing.T) {
 	}
 	absent := []string{"דָּג"}
 	for rung, want := range expect {
-		list := getLearner(t, h, l, hrefOf(t, recallRow, rung))
+		list := getLearner(t, h, l, "/me/words?skill=recall&ladder="+rung)
 		if !strings.Contains(list, "Hebrew from English") || !strings.Contains(list, `data-ladder="`+rung+`"`) {
 			t.Fatalf("%s list is not that rung:\n%s", rung, list)
 		}
@@ -188,31 +172,12 @@ func TestProgressLadderHeadlineAndComparison(t *testing.T) {
 		}
 	}
 
-	panel := regexp.MustCompile(`(?s)<div class="pchanged"[^>]*data-panel="what-changed".*?</div>`).FindString(body)
-	if panel == "" {
-		t.Fatal("What changed panel is missing inside the 14 days")
+	if strings.Contains(body, `data-panel="what-changed"`) || strings.Contains(body, views.LabelLadderRule) {
+		t.Fatal("the comparison numbers are on the progress screen")
 	}
-	if got := panelNumber(t, panel, "rule4-with-voids"); got != withVoids {
-		t.Fatalf("with voids on the page = %d, want %d", got, withVoids)
-	}
-	if got := panelNumber(t, panel, "rule4-after-void"); got != afterVoid {
-		t.Fatalf("after void on the page = %d, want %d", got, afterVoid)
-	}
-	if got := panelNumber(t, panel, "ladder"); got != recall.Proved {
-		t.Fatalf("ladder number = %d, want proved %d", got, recall.Proved)
-	}
-	if !strings.Contains(panel, views.LabelLadderRule) {
-		t.Fatal("the panel does not state the whole rule")
-	}
+	_ = withVoids
+	_ = afterVoid
 
-	est := section(t, body, "c-card pchart", `data-chart="est"`)
-	if strings.Contains(est, "old rule") || strings.Contains(est, "77") || strings.Contains(est, "66") {
-		t.Fatalf("history chart mixed rule versions or the any-skill count:\n%s", est)
-	}
-	rows := tableRows(est)
-	if len(rows) != 1 || rows[0][1] != strconv.Itoa(recall.Proved) {
-		t.Fatalf("history chart %v, want one proved point %d", rows, recall.Proved)
-	}
 	skillChart := section(t, getLearner(t, h, l, "/progress?skill=recall"), "c-card pchart", `data-chart="est"`)
 	if strings.Contains(skillChart, "Nov 8") || strings.Contains(skillChart, "old rule") {
 		t.Fatalf("skill chart drew the other rule version:\n%s", skillChart)
@@ -232,9 +197,11 @@ func TestProgressLadderHeadlineAndComparison(t *testing.T) {
 		t.Fatal(err)
 	}
 	afterTutor := getLearner(t, h, l, "/progress")
-	tutorKnow := section(t, afterTutor, "c-card pknow", "")
-	if strings.Contains(tutorKnow, views.PhraseAppTaught) || !strings.Contains(tutorKnow, views.PhraseTutorTaught) {
-		t.Fatal("tutor words did not change the denominator label")
+	if strings.Contains(afterTutor, views.PhraseAppTaught) || strings.Contains(afterTutor, views.PhraseTutorTaught) {
+		t.Fatal("progress showed a denominator")
+	}
+	if !strings.Contains(afterTutor, "say words from English") {
+		t.Fatal("the sentence changed when a tutor word was recorded")
 	}
 }
 
@@ -267,8 +234,8 @@ func TestLadderCompareIsGoneAfter14Days(t *testing.T) {
 	if strings.Contains(body, `data-panel="what-changed"`) || strings.Contains(body, views.LabelWhatChanged) {
 		t.Fatal("the comparison panel is still on the page after 14 days")
 	}
-	if !strings.Contains(body, "Hebrew from English") {
-		t.Fatal("the ladder headline is gone with the panel")
+	if !strings.Contains(body, `data-cando="1"`) || !strings.Contains(body, `class="btn btn-primary progress__next"`) {
+		t.Fatal("the can-do sentence is gone with the panel")
 	}
 }
 

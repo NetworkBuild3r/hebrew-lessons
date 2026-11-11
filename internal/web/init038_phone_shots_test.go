@@ -43,7 +43,7 @@ func TestInit038PhoneShots(t *testing.T) {
 		{
 			Origin: progOrigin, Cookie: progCookies["data"], Path: "/progress",
 			File: filepath.Join(outDir, "progress-390.png"),
-			Wait: `document.body.innerText.includes("Understand by ear")`,
+			Wait: `document.body.innerText.includes("Do today")`,
 		},
 		{
 			Origin: shellOrigin, Cookie: shellCookies["full"], Path: "/",

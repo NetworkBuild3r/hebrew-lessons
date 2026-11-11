@@ -218,13 +218,13 @@ func progressShot(t *testing.T, dir string) shotJob {
 		t.Fatal(err)
 	}
 	h := NewOptions(nil, svc, Options{Store: store2, Runs: store2})
-	body := getLearner(t, h, l, "/progress")
+	body := getLearner(t, h, l, "/progress?detail=1")
 	if !strings.Contains(body, "Not finished") || !strings.Contains(body, "Retake placement") {
 		t.Fatal("progress shot page is missing the row or the button")
 	}
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
-	return shotJob{Origin: srv.URL, Cookie: l.cookie.Value, Path: "/progress", File: filepath.Join(dir, "progress-placement-390.png"), Wait: `document.body.innerText.includes("Not finished")`, Clip: ".pplace"}
+	return shotJob{Origin: srv.URL, Cookie: l.cookie.Value, Path: "/progress?detail=1", File: filepath.Join(dir, "progress-placement-390.png"), Wait: `document.body.innerText.includes("Not finished")`, Clip: ".pplace"}
 }
 
 const shotScript = `

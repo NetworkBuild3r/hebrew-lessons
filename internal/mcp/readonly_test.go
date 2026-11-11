@@ -146,6 +146,8 @@ func TestReadOnlyTokenDeniesWrites(t *testing.T) {
 		{name: "add_coach_note", args: map[string]any{}},
 		{name: "record_mistakes", args: map[string]any{"mistakes": []any{}}},
 		{name: "record_taught_words", args: map[string]any{"words": []any{}}},
+		{name: "import_class_sheet", args: map[string]any{"ref": "x", "classOn": "2026-11-01", "body": "tutor: a"}},
+		{name: "put_story", args: map[string]any{"text": "a"}},
 		{name: "remove_taught_words", args: map[string]any{"on": "2026-11-01", "lexemeIds": []any{}}},
 		{name: "upsert_common_mistakes", args: map[string]any{"mistakes": []any{}}},
 		{name: "upsert_verb_forms", args: map[string]any{"forms": []any{}}},

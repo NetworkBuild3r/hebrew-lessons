@@ -50,21 +50,21 @@ Detail for each spec is section 4 of the [BRAIN-002 spec skeleton](../../brainst
 | --- | --- | --- | --- | --- | --- |
 | SPEC-001 | docs | [ADR-0034](../../../docs/decisions/ADR-0034-stage-2-lessons-built-from-your-classes.md): the Stage 2 lesson decision | none | 2h | complete 2026-11-11 |
 | SPEC-002 | data | Migration 024: lesson type, item flags, class sheets and lines, sheet reference, `run_id` ([`migrations/024_class_sheets_and_flags.sql`](../../../migrations/024_class_sheets_and_flags.sql)) | SPEC-001 | 4h | complete 2026-11-11 |
-| SPEC-003 | service | Class sheet import with per-sheet checks | SPEC-002 | 5h | not started |
-| SPEC-004 | service | Matcher, T0 test, and lexicon entry checks | SPEC-003 | 6h | not started |
-| SPEC-005 | api | MCP tools for the class queue | SPEC-004 | 3h | not started |
-| SPEC-006 | service | Lesson engine: suspension, taught-first buttons, second ask | SPEC-002 | 5h | not started |
-| SPEC-007 | service | Word lesson picker and assembler | SPEC-004, SPEC-006 | 6h | not started |
-| SPEC-008 | service | Easy lesson assembler and the Today plan | SPEC-007 | 5h | not started |
-| SPEC-009 | service | Minimal measurement and the weekly readout | SPEC-002, SPEC-007, SPEC-008 | 4h | not started |
-| SPEC-010 | api | Optional: the story slot (cuttable) | SPEC-002, SPEC-007 | 3h | not started |
-| SPEC-011 | frontend | Thin lesson player: word lesson and easy lesson | SPEC-006, SPEC-007, SPEC-008 | 6h | not started |
-| SPEC-012 | frontend | Flag control | SPEC-006, SPEC-011 | 4h | not started |
-| SPEC-013 | frontend | Today: review first, reserved lesson slot, source label | SPEC-008, SPEC-011 | 4h | not started |
-| SPEC-014 | frontend | Speaking-prep page (cuttable) | SPEC-004 | 2h | not started |
-| SPEC-015 | service | Release-bar tests | SPEC-007, SPEC-008, SPEC-011, SPEC-012 | 5h | not started |
-| SPEC-016 | docs | Security Review | SPEC-002 to SPEC-015 | 3h | not started |
-| SPEC-017 | docs | Architecture and Design Diagrams | SPEC-016 | 2h | not started |
+| SPEC-003 | service | Class sheet import with per-sheet checks | SPEC-002 | 5h | complete 2026-11-11. `lessons.ImportSheet`, `db.SaveClassSheet`. Local tests. |
+| SPEC-004 | service | Matcher, T0 test, and lexicon entry checks | SPEC-003 | 6h | complete 2026-11-11. Exact match, one prefix, two hits is a miss, entry checks, ranked pool. Forms are passed in on the word. |
+| SPEC-005 | api | MCP tools for the class queue | SPEC-004 | 3h | complete 2026-11-11. `import_class_sheet`, `get_class_queue`. `record_taught_words` stores `sheetRef` when it names a passed sheet and writes nothing when it does not. A word with no sheet still records. |
+| SPEC-006 | service | Lesson engine: suspension, taught-first buttons, second ask | SPEC-002 | 5h | engine is in: a flagged word is not built, `WithUnrecorded` stores nothing, `WithRun` writes `run_id`, `WithTaughtFirst` ranks seen words. The also-right tap writes the flag. The player does not yet ask the second time. |
+| SPEC-007 | service | Word lesson picker, assembler, and the pre-flight | SPEC-004, SPEC-006 | 6h | complete 2026-11-11. `lessons.Assemble` and `Preflight`. A lesson under 2 words or 4 graded items becomes the easy lesson. A missed word left out of the passage is added. |
+| SPEC-008 | service | Easy lesson assembler and the Today plan | SPEC-007 | 5h | plan is in: `TodayOffer` reserves the word lesson under 15 minutes and the easy lesson over it. Today does not call it yet. |
+| SPEC-009 | service | Minimal measurement and the weekly readout | SPEC-002, SPEC-007, SPEC-008 | 4h | `Readout` is five lines and says too early under 3 starts. It is not on the weekly report yet. |
+| SPEC-010 | api | One story tool, and one skill that must call it (cuttable) | SPEC-002, SPEC-007 | 4h | complete 2026-11-11. `put_story` returns every failure in one reply. Migration 025 stores one story. The skill is `.cursor/skills/hebrew-story`. |
+| SPEC-011 | frontend | Thin lesson player: word lesson and easy lesson | SPEC-006, SPEC-007, SPEC-008 | 6h | not started. The current player already runs See, Check, Read, Write, and building the stored sentence. A separate player file is not written. |
+| SPEC-012 | frontend | Flag control | SPEC-006, SPEC-011 | 4h | the also-right tap voids and flags in one request. Undo is `UndoFlag` and has no button yet. |
+| SPEC-013 | frontend | Today: review first, reserved lesson slot, source label | SPEC-008, SPEC-011 | 4h | not started. The offer is `TodayOffer`. Today still uses the old lesson gate. |
+| SPEC-014 | frontend | Speaking-prep page (cuttable) | SPEC-004 | 2h | complete 2026-11-11. `GET /me/speaking` is this learner's tutor lines only. |
+| SPEC-015 | service | Release-bar tests | SPEC-007, SPEC-008, SPEC-011, SPEC-012 | 5h | the six-lesson robot is `TestReleaseBarSixLessons`: perfect run, wrong run, a held line, two older sheets, and a lesson with no graded key. The typed accept-set table stays the INIT-038 test. |
+| SPEC-016 | docs | Security Review | SPEC-002 to SPEC-015 | 3h | not started. It has to be an agent that did not write this code. |
+| SPEC-017 | docs | Architecture and Design Diagrams | SPEC-016 | 2h | diagrams are in [diagrams.md](diagrams.md). |
 
 **Total:** about 69h, of which about 52h is code. Cut SPEC-010 and SPEC-014 first if time is short.
 **Minimum path to a first lesson you can study:** SPEC-001, 002, 003, 004, 005, 006, 007, 011, 013 (41h).
@@ -82,11 +82,33 @@ And, run locally on a copy of the data: a word lesson and an easy lesson play en
 ## Constraints
 
 - **Nothing is deleted.** The old player `lesson.go`, the old validator, units 1 to 34, and the unit tools stay. They retire in a later group after the new lessons have been on Today for three weeks (BRAIN-002 section 6, Retirement group).
-- **No validator rule is added.** Built lessons are checked by the pre-flight and by tests.
+- **No rule is added to the old validator.** Built lessons are checked by the pre-flight in SPEC-007. The story, if an agent writes one, is checked by the one tool in SPEC-010. A sentence in a skill is not a check.
 - **One initiative in flight.** Conjugation (slice 2) and retirement are separate later initiatives.
 - **Migrations are additive.** No learning record is overwritten. Tests run on a temp database and on a copy of `data\local-dev`.
 - **No production deploy.** Every spec closes on a local check.
 
 ## Deferred
 
-The conjugation lesson (slice 2), the retirement group (archive units 12 to 34, retire `put_unit`, `publish_unit`, `get_lesson_brief`, `internal/brief`, the paused author skills), the listening lesson (needs a voice), the spelling lesson (cut: typed Write does that work), graded word order, T1 keys, words from outside the class sheets.
+The conjugation lesson (slice 2), the retirement group (archive units 12 to 34, retire `put_unit`, `publish_unit`, `get_lesson_brief`, `internal/brief`, the paused author skills), the listening lesson (needs a voice), the spelling lesson (cut: typed Write does that work), T1 keys, words from outside the class sheets. Building a stored sentence is in the word lesson (ADR-0034, amended 2026-11-11), not deferred.
+
+## How a lesson is checked
+
+An agent may write the optional story. It does not write the questions, the keys, or the steps for words the passage left out. Those are code. The skill can be large. The tool is one call. A lesson the tool rejects is not saved.
+
+**SPEC-007, the pre-flight, runs in code before a lesson opens.** It is deterministic. Today can call it as a dry run. It refuses or drops a step, and it writes the drop into the frozen lesson with the check id. It does not call the old validator.
+
+| Check | Pass | If it fails |
+| --- | --- | --- |
+| New words | A word lesson has 2 to 4 T0 words, no two sharing a gloss. An easy lesson has none. | Offer the easy lesson, or review only. |
+| Passage | Up to 3 tutor lines, at least 90 percent of the tokens already taught. | Drop the passage. Never fill it with an agent sentence that failed its check. |
+| Order of steps | See, then the meaning check, then the passage, then Write with the Hebrew hidden, then building the stored sentence. | The assembler does not emit another order. |
+| Sentence key | The key is the stored line, plus any other order stored with it. | A fill-in-the-blank the code cannot prove is not graded. |
+| Sentence sound | One clip of the whole line, or no clip. | Word clips are not played in a row as the sentence. |
+| Due words left out | A word that ranked into this lesson, or a word due back from an earlier class (two or more classes, a held line, or a miss), and that is not in the passage or the new-word list. | Code adds a step for that word: a meaning check, or the word inside the stored sentence. The agent does not add the step. |
+| Graded keys | At least one graded key, and every key is T0. | The lesson does not open. |
+
+**SPEC-010 is one tool, not a set of small ones.** `put_story` takes the story text and returns pass or fail with every broken check in that same response: unpointed text, a word with no lexicon entry, coverage under 90 percent, too long, markup, a repeat of an earlier story, and any due word the story was given and did not use. The agent retries against that list. There is at most one open story slot. The story is checked again when the lesson starts. It is never graded. If it fails, the step is dropped and the lesson still runs.
+
+**One large skill calls that tool.** The paused author skill stays paused for writing whole units. The story skill, when it is written, holds the lesson shape and the research in one place so the agent is not sent through five small skills. The only write it makes is the story. It must call `put_story` and stop when the tool still rejects the text. `put_unit` is not how a story is saved.
+
+**What this does not do.** It does not add rules to the old validator, and it does not let the skill decide the questions. The old validator stays for units 1 to 34 until those units are archived.

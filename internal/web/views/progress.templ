@@ -7,6 +7,17 @@ package views
 // is the same one the AI reads through get_progress.
 templ Progress(v ProgressView) {
 	@Layout(v.Page) {
+		if v.Brief {
+			<article class="progress" data-skill="" data-empty={ Flag(v.Empty) }>
+				<header class="progress__head">
+					<h1 lang={ v.Lang }>{ v.ProgressHeading }</h1>
+					<p class="progress__cando" data-cando="1">@T(v.Lang, v.CanDoHE, v.CanDo)</p>
+				</header>
+				<a class="btn btn-primary progress__next" href={ templ.SafeURL(v.Href("/")) }>
+					<span>@T(v.Lang, v.NextActionHE, v.NextAction)</span>
+				</a>
+			</article>
+		} else {
 		<article class="progress" data-skill={ v.Skill } data-empty={ Flag(v.Empty) }>
 			<header class="progress__head">
 				<h1 lang={ v.Lang }>{ v.ProgressHeading }</h1>
@@ -49,6 +60,7 @@ templ Progress(v ProgressView) {
 				</div>
 			}
 		</article>
+		}
 	}
 }
 

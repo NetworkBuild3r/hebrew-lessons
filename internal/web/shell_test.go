@@ -643,7 +643,7 @@ func TestReportHidesTheUnitInTheSameResponse(t *testing.T) {
 		t.Fatal("before the report the unit is on Lessons")
 	}
 	// Two shared units plus this learner's unit. The other learner's unit is not in the count.
-	if !strings.Contains(getLearner(t, h, a, "/progress"), ">0/3</bdi>") {
+	if !strings.Contains(getLearner(t, h, a, "/progress?detail=1"), ">0/3</bdi>") {
 		t.Fatal("before the report Progress counts both shared units and this learner's unit")
 	}
 
@@ -703,7 +703,7 @@ func TestReportHidesTheUnitInTheSameResponse(t *testing.T) {
 		t.Fatal("Lessons after the report")
 	}
 	// The reported unit drops out. The kept shared unit and this learner's unit remain.
-	if !strings.Contains(getLearner(t, h, a, "/progress"), ">0/2</bdi>") {
+	if !strings.Contains(getLearner(t, h, a, "/progress?detail=1"), ">0/2</bdi>") {
 		t.Fatal("Progress still counts the reported unit")
 	}
 	for _, p := range []string{"/lesson/" + itoa(reported) + "/0", "/lessons/" + itoa(reported) + "/report"} {

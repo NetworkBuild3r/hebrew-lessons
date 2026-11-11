@@ -21,6 +21,8 @@
 }
 .progress__head { display: grid; gap: var(--space-1); }
 .progress__lede { color: var(--muted); font-size: var(--fs-body); line-height: var(--lh-he-body); max-inline-size: var(--player-max); }
+.progress__cando { font-size: var(--fs-h2); line-height: var(--lh-body); max-inline-size: 28rem; margin: 0; }
+.progress__next { margin-block-start: var(--space-4); }
 .progress__units { color: var(--muted); font-size: var(--fs-small); }
 .progress__units-n,
 .progress__lessons-n { color: var(--text); font-weight: 700; margin-inline-start: var(--space-1); }

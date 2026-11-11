@@ -58,7 +58,7 @@ func TestAuthRejectAndAccept(t *testing.T) {
 	// 9 authoring tools, 5 learner tools from SPEC-021, 4 pattern tools, 3 mistake and verb tools,
 	// upsert_noun_forms (INIT-023/SPEC-006), 2 Isaiah tools, and the four INIT-026 tools
 	// set_time_zone, record_taught_words, remove_taught_words, get_study_digest.
-	if len(tools.Tools) != 28 {
+	if len(tools.Tools) != 32 {
 		t.Fatalf("tools = %d", len(tools.Tools))
 	}
 }
@@ -159,13 +159,14 @@ func TestToolsResourcesAndIdempotency(t *testing.T) {
 			tool.Name != "upsert_noun_forms" &&
 			tool.Name != "upsert_verse_notes" &&
 			tool.Name != "set_time_zone" &&
-			tool.Name != "record_taught_words" && tool.Name != "remove_taught_words") {
+			tool.Name != "record_taught_words" && tool.Name != "remove_taught_words" &&
+			tool.Name != "import_class_sheet" && tool.Name != "put_story") {
 			t.Fatalf("%s annotations %#v", tool.Name, tool.Annotations)
 		}
 	}
 	for _, name := range []string{"get_context", "lookup", "validate_unit", "put_unit", "upsert_lexemes", "generate_audio", "publish_unit", "get_learner_words", "get_unit",
 		"get_learner_model", "get_progress", "get_study_digest", "get_lesson_brief", "add_coach_note", "unpublish_unit", "set_time_zone",
-		"record_taught_words", "remove_taught_words"} {
+		"record_taught_words", "remove_taught_words", "import_class_sheet", "get_class_queue", "get_story_request", "put_story"} {
 		if !gotNames[name] {
 			t.Fatalf("missing %s in %#v", name, gotNames)
 		}

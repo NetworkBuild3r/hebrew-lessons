@@ -18,6 +18,7 @@ type Attempt struct {
 	Activity  string
 	Source    string
 	UnitID    int64
+	RunID     int64
 	Prompt    string
 	Response  string
 	Correct   bool
@@ -83,16 +84,19 @@ func (s *Store) WriteAttempt(ctx context.Context, w AttemptWrite) (AttemptResult
 	}
 	defer tx.Rollback()
 
-	var unit any
+	var unit, run any
 	if a.UnitID != 0 {
 		unit = a.UnitID
 	}
+	if a.RunID != 0 {
+		run = a.RunID
+	}
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO attempts (
-			user_id, lexeme_id, skill, activity, source, unit_id, prompt, response,
+			user_id, lexeme_id, skill, activity, source, unit_id, run_id, prompt, response,
 			correct, dont_know, hint_used, latency_ms, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		a.UserID, a.LexemeID, a.Skill, a.Activity, a.Source, unit, a.Prompt, a.Response,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		a.UserID, a.LexemeID, a.Skill, a.Activity, a.Source, unit, run, a.Prompt, a.Response,
 		evidenceBool(a.Correct), evidenceBool(a.DontKnow), evidenceBool(a.HintUsed), a.LatencyMS, FormatTime(a.CreatedAt),
 	)
 	if err != nil {

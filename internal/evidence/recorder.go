@@ -69,6 +69,7 @@ type Attempt struct {
 	Activity       string
 	Source         string
 	UnitID         int64
+	RunID          int64
 	Prompt         string
 	Response       string
 	Correct        bool
@@ -388,6 +389,7 @@ func (a Attempt) row(now time.Time) db.Attempt {
 		Activity:  a.Activity,
 		Source:    a.Source,
 		UnitID:    a.UnitID,
+		RunID:     a.RunID,
 		Prompt:    truncateRunes(a.Prompt, maxPromptRunes),
 		Response:  truncateRunes(a.Response, MaxResponseRunes),
 		Correct:   a.Correct && !a.DontKnow,

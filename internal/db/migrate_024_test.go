@@ -230,5 +230,13 @@ func m24Aside(st m7State) m7State {
 		delete(st.rowCnts, name)
 		st.schema = m8SchemaWithout(st.schema, name)
 	}
+	return m25Aside(st)
+}
+
+// m25Aside drops the story slot, which migration 025 adds.
+func m25Aside(st m7State) m7State {
+	delete(st.tables, "story_slots")
+	delete(st.rowCnts, "story_slots")
+	st.schema = m8SchemaWithout(st.schema, "story_slots")
 	return st
 }

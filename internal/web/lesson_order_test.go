@@ -130,6 +130,7 @@ func postOrder(t *testing.T, f orderFixture, runID string, positions []int) *htt
 	t.Helper()
 	form := url.Values{}
 	form.Set("run", runID)
+	form.Set("answer", "check")
 	for _, p := range positions {
 		form.Add("order", strconv.Itoa(p))
 	}
@@ -181,32 +182,22 @@ func wrongPermutation(served []string) []int {
 	return out
 }
 
-// TestOrderIsUngradedReveal: the step shows the sentence, the English, and
-// the clip, with no chip bank. askChoiceCount agrees at zero.
-// INIT-038/SPEC-008.
-func TestOrderIsUngradedReveal(t *testing.T) {
+// TestOrderAsksToBuildTheStoredSentence: the ask is the shuffled words and
+// the English cue. The sentence clip is not on the ask. Opening writes nothing.
+func TestOrderAsksToBuildTheStoredSentence(t *testing.T) {
 	f := setupOrderLesson(t, []string{orderAcceptLine()})
 	run, ask := f.openAsk(t)
-	if len(ask.OrderChips) != 0 || ask.Asking {
-		t.Fatalf("order reveal still asks: chips %v asking %v", ask.OrderChips, ask.Asking)
+	if !ask.Asking || len(ask.OrderChips) != 3 {
+		t.Fatalf("order ask: chips %v asking %v", ask.OrderChips, ask.Asking)
+	}
+	if orderMatchesAnswer(ask.OrderChips, f.lesson.Activities[0]) {
+		t.Fatalf("the bank was already an answer: %v", ask.OrderChips)
 	}
 	if ask.Cue != "hello morning thanks" {
 		t.Fatalf("cue = %q", ask.Cue)
 	}
-	if ask.Audio == "" {
-		t.Fatal("order reveal hid the clip")
-	}
-	got := map[string]bool{}
-	for _, w := range ask.Words {
-		got[w.Text] = true
-		if !w.ShowTranslit || w.Translit == "" {
-			t.Fatalf("word %q missing reading: %+v", w.Text, w)
-		}
-	}
-	for _, tok := range units.Tokenize(orderLine()) {
-		if !got[tok] {
-			t.Fatalf("reveal missing %q", tok)
-		}
+	if ask.Audio != "" {
+		t.Fatal("the sentence clip was on the ask")
 	}
 	p := player{store: f.store}
 	target, err := p.targetOf(context.Background(), f.lesson, f.lesson.Activities[0])
@@ -214,7 +205,7 @@ func TestOrderIsUngradedReveal(t *testing.T) {
 		t.Fatal(err)
 	}
 	n, err := p.askChoiceCount(context.Background(), f.userID, f.lesson, run, f.lesson.Activities[0], target)
-	if err != nil || n != 0 {
+	if err != nil || n != 3 {
 		t.Fatalf("askChoiceCount = %d, %v", n, err)
 	}
 	if scalar(t, f.dbPath, `SELECT COUNT(*) FROM attempts`) != 0 {
@@ -222,37 +213,48 @@ func TestOrderIsUngradedReveal(t *testing.T) {
 	}
 }
 
-// TestOrderPostsWriteNoAttempt: a chip post, right or wrong, records nothing.
-// INIT-038/SPEC-008.
-func TestOrderPostsWriteNoAttempt(t *testing.T) {
-	for _, name := range []string{"positions", "empty"} {
-		t.Run(name, func(t *testing.T) {
-			f := setupOrderLesson(t, []string{orderAcceptLine()})
-			run, _ := f.openAsk(t)
-			var rec *httptest.ResponseRecorder
-			if name == "empty" {
-				rec = postOrder(t, f, strconv.FormatInt(run.ID, 10), nil)
-			} else {
-				rec = postOrder(t, f, strconv.FormatInt(run.ID, 10), []int{0, 1, 2})
-			}
-			if rec.Code != http.StatusOK {
-				t.Fatalf("POST = %d\n%s", rec.Code, rec.Body.String())
-			}
-			if n := scalar(t, f.dbPath, `SELECT COUNT(*) FROM attempts`); n != 0 {
-				t.Fatalf("order attempts = %d", n)
-			}
-			if n := scalar(t, f.dbPath, `SELECT COUNT(*) FROM cards`); n != 0 {
-				t.Fatalf("order scheduled a card: %d", n)
-			}
-		})
+// TestOrderCheckGradesTheStoredSentence: the stored line and an accept line
+// are right. Another order is wrong. Either way one attempt is written, and
+// no card is scheduled from this step.
+func TestOrderCheckGradesTheStoredSentence(t *testing.T) {
+	f := setupOrderLesson(t, []string{orderAcceptLine()})
+	run, ask := f.openAsk(t)
+	right := positionsForTokens(ask.OrderChips, units.Tokenize(orderLine()))
+	rec := postOrder(t, f, strconv.FormatInt(run.ID, 10), right)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "feedback--right") {
+		t.Fatalf("stored line = %d\n%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "/audio/") {
+		t.Fatal("the reveal did not play the sentence clip")
+	}
+	if n := scalar(t, f.dbPath, `SELECT COUNT(*) FROM attempts`); n != 1 {
+		t.Fatalf("attempts = %d", n)
+	}
+	if n := scalar(t, f.dbPath, `SELECT COUNT(*) FROM cards`); n != 0 {
+		t.Fatalf("order scheduled a card: %d", n)
+	}
+
+	f2 := setupOrderLesson(t, []string{orderAcceptLine()})
+	run2, ask2 := f2.openAsk(t)
+	also := positionsForTokens(ask2.OrderChips, units.Tokenize(orderAcceptLine()))
+	rec = postOrder(t, f2, strconv.FormatInt(run2.ID, 10), also)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "feedback--right") {
+		t.Fatalf("accept line = %d\n%s", rec.Code, rec.Body.String())
+	}
+
+	f3 := setupOrderLesson(t, []string{orderAcceptLine()})
+	run3, ask3 := f3.openAsk(t)
+	rec = postOrder(t, f3, strconv.FormatInt(run3.ID, 10), wrongPermutation(ask3.OrderChips))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Not quite") {
+		t.Fatalf("wrong order = %d\n%s", rec.Code, rec.Body.String())
 	}
 }
 
-// TestOrderContinueWritesNothing: Continue moves on and records no attempt.
-// INIT-038/SPEC-008.
-func TestOrderContinueWritesNothing(t *testing.T) {
+// TestOrderContinueBeforeCheckStays: Continue on the ask does not skip the
+// build. After Check, Continue leaves the step.
+func TestOrderContinueBeforeCheckStays(t *testing.T) {
 	f := setupOrderLesson(t, nil)
-	run, _ := f.openAsk(t)
+	run, ask := f.openAsk(t)
 	rec := postLesson(t, f.h, f.cookie, f.path, strconv.FormatInt(run.ID, 10), "continue", true, "brian-csrf")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("continue = %d\n%s", rec.Code, rec.Body.String())
@@ -264,8 +266,24 @@ func TestOrderContinueWritesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !after.Finished && after.ActivityIx == run.ActivityIx && after.Phase == run.Phase {
-		t.Fatal("continue did not leave the order step")
+	if after.Phase != "ask" || after.ActivityIx != run.ActivityIx {
+		t.Fatal("continue left the build")
+	}
+	right := positionsForTokens(ask.OrderChips, units.Tokenize(orderLine()))
+	rec = postOrder(t, f, strconv.FormatInt(run.ID, 10), right)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("check = %d", rec.Code)
+	}
+	rec = postLesson(t, f.h, f.cookie, f.path, strconv.FormatInt(run.ID, 10), "continue", true, "brian-csrf")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("continue after check = %d", rec.Code)
+	}
+	done, err := f.store.PlayerRunFor(context.Background(), f.userID, run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !done.Finished {
+		t.Fatal("continue after the build did not finish the lesson")
 	}
 }
 

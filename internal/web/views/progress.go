@@ -238,6 +238,12 @@ type ProgressView struct {
 	Placement      []PlacementRow
 	// CanSay is what the learner can produce from memory. Nil when there is no signed-in learner.
 	CanSay *CanSayPanel
+	// Brief is the learner's Progress screen: one sentence and the next action (RSCH-013).
+	Brief bool
+	// CanDo is one sentence of what the learner can do, with no counts (RSCH-013).
+	// CanDoHE is that sentence in Hebrew. NextAction is the one thing to do next.
+	CanDo, CanDoHE           string
+	NextAction, NextActionHE string
 }
 
 // CanSayWord is one word in the "you can now say" list. Audio is the clip src, empty without one.
@@ -506,6 +512,45 @@ func ProgressHE(en string) string {
 // ProgressT is UI copy for the Progress and Home number labels. Missing Hebrew falls back to English.
 func ProgressT(lang, en string) templ.Component {
 	return T(lang, progressHE[en], en)
+}
+
+// CanDoSentence is one line of ability. A skill is named only when at least one
+// taught word is proved. No counts. RSCH-013.
+func CanDoSentence(listen, recall, read, spell bool) (en, he string) {
+	var enParts, heParts []string
+	if listen {
+		enParts = append(enParts, "understand words by ear")
+		heParts = append(heParts, "לְהָבִין מִלִּים בַּשְּׁמִיעָה")
+	}
+	if read {
+		enParts = append(enParts, "read words")
+		heParts = append(heParts, "לִקְרוֹא מִלִּים")
+	}
+	if recall {
+		enParts = append(enParts, "say words from English")
+		heParts = append(heParts, "לוֹמַר מִלִּים מֵהָאַנְגְּלִית")
+	}
+	if spell {
+		enParts = append(enParts, "spell words")
+		heParts = append(heParts, "לְאַיֵּת מִלִּים")
+	}
+	if len(enParts) == 0 {
+		return "You are still learning your first words.", "אַתָּה עֲדַיִן לוֹמֵד אֶת הַמִּלִּים הָרִאשׁוֹנוֹת."
+	}
+	return "You can " + joinAnd(enParts) + ".", "אַתָּה יָכוֹל " + joinAnd(heParts) + "."
+}
+
+func joinAnd(parts []string) string {
+	switch len(parts) {
+	case 0:
+		return ""
+	case 1:
+		return parts[0]
+	case 2:
+		return parts[0] + " and " + parts[1]
+	default:
+		return strings.Join(parts[:len(parts)-1], ", ") + ", and " + parts[len(parts)-1]
+	}
 }
 
 // ProgressLabel is the plain Progress/Home string for aria-label and data attributes.

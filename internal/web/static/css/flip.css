@@ -410,7 +410,7 @@ html.js .wcard__detail > .orb--word {
   border: 0;
   border-radius: var(--radius-pill);
   background: transparent;
-  color: var(--ink);
+  color: var(--text);
   font: inherit;
   font-size: var(--fs-caption);
   font-weight: 700;

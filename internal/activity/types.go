@@ -229,6 +229,7 @@ var (
 	ErrNotChecked      = errors.New("activity: flashcards are self-graded and have no item")
 	ErrUnknownActivity = errors.New("activity: unknown activity")
 	ErrUnknownWord     = errors.New("activity: unknown word")
+	ErrSuspended       = errors.New("activity: the word is flagged")
 	ErrNoGloss         = errors.New("activity: the word has no gloss")
 	ErrNoAudio         = errors.New("activity: the word has no audio")
 	ErrNotEnoughWords  = errors.New("activity: not enough fair distractors")

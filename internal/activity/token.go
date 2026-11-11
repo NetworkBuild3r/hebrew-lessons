@@ -98,6 +98,8 @@ type pending struct {
 	skill        string
 	source       string
 	unit         int64
+	run          int64
+	unrecorded   bool
 	builtAt      time.Time
 	expires      time.Time
 

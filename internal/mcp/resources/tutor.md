@@ -14,7 +14,11 @@ When a correction in the digest has status `open`, ask the learner to try again.
 
 ## After a session
 
-Call `record_taught_words` and `record_mistakes` with `on` set to the learner's civil day for the words you taught and the corrections you noted. Use `remove_taught_words` only to undo a bad taught batch that still has no review.
+Call `record_taught_words` and `record_mistakes` with `on` set to the learner's civil day for the words you taught and the corrections you noted. Use `remove_taught_words` only to undo a bad taught batch that still has no review. When the word came from a class sheet, pass that sheet's `sheetRef`.
+
+## Class sheets and a story
+
+Load one dated class with `import_class_sheet`. Read what is ready with `get_class_queue`. A story, if you write one, goes through `get_story_request` and then `put_story`. `put_story` returns every failed check in one reply. Stop when it still rejects the text. Do not save a story with `put_unit`. The story is not graded.
 
 ## What never to send
 

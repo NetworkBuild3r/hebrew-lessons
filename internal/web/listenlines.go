@@ -12,6 +12,59 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
+// sentenceListen is a listening step whose key is a stored English line.
+// The Hebrew stays hidden until the answer. RSCH-004: listening is its own skill.
+func sentenceListen(act units.Activity, lex map[string]db.LexemeView) bool {
+	return act.Type == units.ActivityListenPick && strings.TrimSpace(act.Translation) != "" && lexemeTokenCount(act, lex) > 1
+}
+
+// sentenceListenChoices asks what the whole line meant. The right button is the
+// stored English. The other two are different sentences, posted as other words
+// so a click on them is not the line they heard.
+func sentenceListenChoices(act units.Activity, lex map[string]db.LexemeView, target db.LexemeView) []views.Choice {
+	if target.ID == 0 {
+		return nil
+	}
+	var ids []string
+	seen := map[int64]bool{target.ID: true}
+	for _, tok := range units.Tokenize(act.Text) {
+		view, ok := lex[tok]
+		if !ok || view.ID == 0 || seen[view.ID] {
+			continue
+		}
+		seen[view.ID] = true
+		ids = append(ids, strconv.FormatInt(view.ID, 10))
+		if len(ids) == 2 {
+			break
+		}
+	}
+	if len(ids) < 2 {
+		return nil
+	}
+	right := strings.TrimSpace(act.Translation)
+	wrongs := []string{"I want coffee.", "Good night."}
+	n := 0
+	var labels []string
+	for _, w := range wrongs {
+		if strings.EqualFold(w, right) {
+			continue
+		}
+		labels = append(labels, w)
+		n++
+		if n == 2 {
+			break
+		}
+	}
+	if len(labels) < 2 {
+		return nil
+	}
+	return []views.Choice{
+		{Value: ids[0], Label: labels[0]},
+		{Value: strconv.FormatInt(target.ID, 10), Label: right},
+		{Value: ids[1], Label: labels[1]},
+	}
+}
+
 const (
 	listenAskPrompt      = "What did you hear?"
 	listenMeaningPrompt  = "Listen, then pick the meaning."

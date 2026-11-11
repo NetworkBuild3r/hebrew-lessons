@@ -21,7 +21,8 @@ func renderView(t *testing.T, c templ.Component) string {
 
 func TestCanSaySectionRendersTheList(t *testing.T) {
 	v := views.ProgressView{
-		Page: views.Page{UI: views.UIFor("en", views.AddressMasculine)},
+		Page:  views.Page{UI: views.UIFor("en", views.AddressMasculine)},
+		Skill: "recall",
 		CanSay: &views.CanSayPanel{
 			TotalText: "2 things",
 			AddedText: "1 this week",
@@ -48,6 +49,7 @@ func TestCanSaySectionRendersTheList(t *testing.T) {
 func TestCanSaySectionEmpty(t *testing.T) {
 	v := views.ProgressView{
 		Page:   views.Page{UI: views.UIFor("en", views.AddressMasculine)},
+		Skill:  "recall",
 		CanSay: &views.CanSayPanel{Empty: true},
 	}
 	body := renderView(t, views.Progress(v))

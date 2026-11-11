@@ -51,7 +51,7 @@ func TestLocalLessonTypes(t *testing.T) {
 		{"listen_pick", "listening", units.Activity{Type: units.ActivityListenPick, Text: peace}, "Listen, then pick the meaning.", "continue"},
 		{"produce", "word · write, typed", units.Activity{Type: units.ActivityProduce, Text: peace}, "data-hk-input", peace},
 		{"cloze", "word · use, shown not scored", units.Activity{Type: units.ActivityCloze, Text: line, Target: peace, Translation: "peace in the morning"}, peace, "continue"},
-		{"order", "word · use, shown not scored", units.Activity{Type: units.ActivityOrder, Text: line, Translation: "peace morning water"}, "Put the words in order.", "continue"},
+		{"order", "word · use, build the stored sentence", units.Activity{Type: units.ActivityOrder, Text: line, Translation: "peace morning water"}, "Build the sentence", "continue"},
 		{"say", "speaking, not graded", units.Activity{Type: units.ActivitySay, Text: peace, PromptEN: "peace"}, "Say it out loud", "continue"},
 		{"shadow", "listen and repeat", units.Activity{Type: units.ActivityShadow, Text: line}, "Listen, then say the line.", "continue"},
 		{"pattern", "conjugation", units.Activity{Type: units.ActivityPattern, Text: line}, "Read the example.", "continue"},

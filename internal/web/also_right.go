@@ -58,6 +58,15 @@ func (s *server) postAlsoRight(w http.ResponseWriter, r *http.Request, lang, csr
 		serverError(w)
 		return
 	}
+	if conn, err := s.store.DB(); err == nil {
+		var lexemeID int64
+		if err := conn.QueryRowContext(r.Context(), `SELECT lexeme_id FROM attempts WHERE id = ? AND user_id = ?`, attemptID, user.ID).Scan(&lexemeID); err == nil && lexemeID > 0 {
+			if err := s.store.FlagItem(r.Context(), user.ID, lexemeID, attemptID, "also_right", ""); err != nil {
+				serverError(w)
+				return
+			}
+		}
+	}
 	if s.writeAlsoRight(w, r, lang, csrf, user.ID, attemptID) {
 		return
 	}

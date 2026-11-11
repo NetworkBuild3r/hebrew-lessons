@@ -62,6 +62,7 @@ type recordTaughtInput struct {
 	LearnerID *int64         `json:"learnerId,omitempty" jsonschema:"Required for an admin, including the static token. A learner account may omit it and may only use its own id."`
 	On        string         `json:"on,omitempty" jsonschema:"Learner's civil day YYYY-MM-DD. Defaults to today in the learner's zone."`
 	Words     []taughtWordIn `json:"words" jsonschema:"1 to 50 words, each with lexemeId or he."`
+	SheetRef  string         `json:"sheetRef,omitempty" jsonschema:"File reference of the passed class sheet these words came from. Omit it for a word that is not from a class sheet. An unknown reference writes nothing."`
 }
 
 type taughtWordOut struct {
@@ -164,6 +165,17 @@ func (s *service) recordTaughtWords(ctx context.Context, _ *mcp.CallToolRequest,
 	if len(ids) == 0 {
 		return nil, out, nil
 	}
+	var sheetID int64
+	if ref := strings.TrimSpace(in.SheetRef); ref != "" {
+		attacher, ok := s.course.(sheetAttacher)
+		if !ok {
+			return nil, out, errors.New("Class sheets are not connected, so nothing was written.")
+		}
+		sheetID, err = attacher.RequirePassedSheet(ctx, id, ref)
+		if err != nil {
+			return nil, out, errors.New("sheetRef is not a passed class sheet, so nothing was written.")
+		}
+	}
 	res, err := store.Taught(ctx, id, ids, on, z)
 	if err != nil {
 		return nil, out, mapTaughtErr(err)
@@ -179,6 +191,11 @@ func (s *service) recordTaughtWords(ctx context.Context, _ *mcp.CallToolRequest,
 		}
 		out.Words[i] = taughtWordOut{LexemeID: w.LexemeID, Created: created, HadCard: had, Already: w.Already}
 		out.Due = w.Due
+	}
+	if sheetID > 0 {
+		if err := s.course.(sheetAttacher).AttachTaughtSheet(ctx, id, ids, on, sheetID); err != nil {
+			return nil, out, storeErr("The words were recorded, but the class sheet could not be attached.", err)
+		}
 	}
 	return nil, out, nil
 }

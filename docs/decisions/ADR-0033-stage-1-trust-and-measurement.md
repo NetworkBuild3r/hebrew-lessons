@@ -45,7 +45,7 @@ Brian, 2026-11-09: "Asking me questions like pick one, i____, eat, sleep, walk. 
 
 **D3 · An answer the app cannot prove wrong records nothing.**
 - **Blanks with buttons become reveals.** They show the answer and record no attempt, in every unit, finished units included.
-- **No AI-written sentence is graded.** Every unit today is AI-written, so `order` steps and multi-word `listen_pick` steps also become ungraded reveals.
+- **No AI-written sentence is graded as the only possible Hebrew.** A cloze blank and a multi-word `listen_pick` stay ungraded reveals. Amended 2026-11-11: building a stored sentence is graded. The key is that sentence, and any other order stored with it. A different sentence that could also mean the English is not what the step asks.
 - **No judge model is built,** in either stage.
 - **Fairer buttons where grading remains.** On the graded asks that remain, a wrong button is dropped when its gloss overlaps the target's (`activity.GlossesOverlap`), not only on an exact match.
 

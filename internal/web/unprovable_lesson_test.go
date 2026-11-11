@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -108,9 +109,9 @@ func assertNoChoiceOverlap(t *testing.T, name string, got []views.Choice, byID m
 }
 
 // TestUnprovableStepsFiftySeeds walks one fixture lesson, once per seed.
-// A cloze, an order step, and a multi-word listen_pick write no attempt.
-// The rendered button count matches askChoiceCount on every step. On the
-// graded asks, no wrong button's gloss overlaps the target. INIT-038/SPEC-008.
+// A cloze and a multi-word listen_pick write no attempt. Building the stored
+// sentence does: the key is that sentence. On the graded asks, no wrong
+// button's gloss overlaps the target. INIT-038/SPEC-008.
 func TestUnprovableStepsFiftySeeds(t *testing.T) {
 	const seeds = 50
 	emails := make([]string, seeds)
@@ -178,20 +179,32 @@ func TestUnprovableStepsFiftySeeds(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if act.Type == units.ActivityOrder {
+				if !strings.Contains(body, `data-order-chip`) {
+					t.Fatalf("seed %d order step did not ask for the sentence", seed)
+				}
+				served := servedOrderChips(t, body)
+				rec := postOrderPositions(t, fx.h, cookie, path, itoa(runID), positionsForTokens(served, units.Tokenize(act.Text)))
+				if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "feedback--right") {
+					t.Fatalf("seed %d order build = %d", seed, rec.Code)
+				}
+				attempts++
+				next := postLesson(t, fx.h, cookie, path, itoa(runID), "continue", true, lessonCSRF)
+				if next.Code != http.StatusOK {
+					t.Fatalf("seed %d continue order = %d", seed, next.Code)
+				}
+				body = next.Body.String()
+				continue
+			}
 			got := choiceValuesAllowEmpty(t, body)
 			if len(got) != n {
 				t.Fatalf("seed %d step %d %s: render %d buttons, post count %d", seed, step, act.Type, len(got), n)
 			}
 			if unprovableAsk(act, lex) {
-				if n != 0 || strings.Contains(body, `data-order-chip`) {
+				if n != 0 {
 					t.Fatalf("seed %d step %d %s is still an ask (%d buttons)", seed, step, act.Type, n)
 				}
-				if act.Type == units.ActivityOrder {
-					rec := postOrderPositions(t, fx.h, cookie, path, itoa(runID), []int{0, 1, 2})
-					if rec.Code != http.StatusOK {
-						t.Fatalf("seed %d order post = %d", seed, rec.Code)
-					}
-				} else if target.ID != 0 {
+				if target.ID != 0 {
 					rec := postLesson(t, fx.h, cookie, path, itoa(runID), itoa(target.ID), true, lessonCSRF)
 					if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "feedback--") {
 						t.Fatalf("seed %d step %d graded a reveal", seed, step)
@@ -236,8 +249,8 @@ func TestUnprovableStepsFiftySeeds(t *testing.T) {
 			}
 			body = next.Body.String()
 		}
-		if n := countRows(t, fx.store, `SELECT COUNT(*) FROM attempts WHERE user_id = ? AND activity IN ('cloze', 'order')`, user.ID); n != 0 {
-			t.Fatalf("seed %d cloze or order attempts = %d", seed, n)
+		if n := countRows(t, fx.store, `SELECT COUNT(*) FROM attempts WHERE user_id = ? AND activity = 'cloze'`, user.ID); n != 0 {
+			t.Fatalf("seed %d cloze attempts = %d", seed, n)
 		}
 		if n := countRows(t, fx.store, `SELECT COUNT(*) FROM attempts WHERE user_id = ? AND activity = 'listen_pick' AND prompt LIKE '%' || ? || '%'`, user.ID, upGar); n != 0 {
 			t.Fatalf("seed %d multi-word listen_pick attempts = %d", seed, n)
@@ -245,10 +258,30 @@ func TestUnprovableStepsFiftySeeds(t *testing.T) {
 	}
 }
 
+var orderChipRE = regexp.MustCompile(`(?s)data-order-i="(\d+)"[^>]*>.*?<bdi[^>]*>([^<]+)</bdi>`)
+
+func servedOrderChips(t *testing.T, body string) []string {
+	t.Helper()
+	matches := orderChipRE.FindAllStringSubmatch(body, -1)
+	if len(matches) == 0 {
+		t.Fatalf("no order chips:\n%s", body)
+	}
+	out := make([]string, len(matches))
+	for _, m := range matches {
+		i, err := strconv.Atoi(m[1])
+		if err != nil || i < 0 || i >= len(out) {
+			t.Fatalf("chip index %q", m[1])
+		}
+		out[i] = strings.TrimSpace(m[2])
+	}
+	return out
+}
+
 func postOrderPositions(t *testing.T, h http.Handler, cookie *http.Cookie, path, runID string, positions []int) *httptest.ResponseRecorder {
 	t.Helper()
 	form := url.Values{}
 	form.Set("run", runID)
+	form.Set("answer", "check")
 	form.Set("_csrf", lessonCSRF)
 	for _, p := range positions {
 		form.Add("order", strconv.Itoa(p))

@@ -239,6 +239,14 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 		serverError(w)
 		return
 	}
+	// Build the stored sentence. The key is that line, and any other order
+	// stored on it. It is not a claim that no other Hebrew could mean the same
+	// thing. RSCH-005: this step comes after Write, so the spelling was already
+	// produced with the Hebrew hidden.
+	if act.Type == units.ActivityOrder {
+		p.answerOrder(w, r, page, userID, lesson, run, act, target, answer, total, partial)
+		return
+	}
 	if act.Type == units.ActivityDialogue && (dialogueSide(act, run) != "" || answer == "side-a" || answer == "side-b") {
 		p.answerDialogue(w, r, page, userID, lesson, run, act, answer, total, partial)
 		return
@@ -247,9 +255,6 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 		p.answerSay(w, r, page, userID, lesson, run, act, target, answer, total, partial)
 		return
 	}
-	// Order is an ungraded reveal (ADR-0033 D3). It uses the same post path
-	// as a cloze: askChoiceCount is 0, so Continue advances and nothing is
-	// recorded. INIT-038/SPEC-008.
 	graded := gradedActivity(act.Type) && target.ID != 0
 	// A Write step is typed, so it never needs three buttons to be a question.
 	if graded && act.Type != units.ActivityProduce {
@@ -478,15 +483,13 @@ func (p player) answerSay(w http.ResponseWriter, r *http.Request, page views.Pag
 	p.writeScreen(w, r, page, screen, partial)
 }
 
-// answerOrder graded a build-the-sentence step. The player no longer calls
-// it: an order key is an AI-written sentence, so the step is a reveal and
-// records nothing (ADR-0033 D3, INIT-038/SPEC-008). The helpers below stay
-// so a chip order can still be checked without trusting the client.
+// answerOrder grades a build-the-sentence step against the stored line.
+// A post that is not a complete placement re-renders the ask and records nothing.
 func (p player) answerOrder(w http.ResponseWriter, r *http.Request, page views.Page, userID int64, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, target db.LexemeView, answer string, total int, partial bool) {
 	var err error
 	var justBuilt []string
 	switch {
-	case run.Phase == "ask" && answer != "continue":
+	case run.Phase == "ask" && answer == "check":
 		positions, ok := parseOrderPositions(r.PostForm["order"])
 		if !ok {
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -904,6 +907,11 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	if act.Type == units.ActivityOrder && phase == "ask" {
 		screen.Activity.Words = nil
 	}
+	// A listening question about a whole line: the Hebrew stays hidden until
+	// the answer. The play control is the sentence.
+	if sentenceListen(act, lex) && phase == "ask" {
+		screen.Activity.Words = nil
+	}
 	// INIT-029/SPEC-004: reveal shows the learner's built line and plays the clip.
 	if act.Type == units.ActivityOrder && phase == "reveal" {
 		screen.Activity.OrderAnswer = p.orderAnswerTokens(ctx, run.UserID, lesson.UnitID, target.ID)
@@ -1047,13 +1055,23 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 			activity.Prompt = ""
 		}
 	}
-	// English cue stays. The chip bank is not shown: an order key is an
-	// AI-written sentence, so the step is a reveal. INIT-038/SPEC-008.
+	// Build the stored sentence after Write (RSCH-005). The English is the cue.
+	// The chips are the line's words, shuffled, and not in an order that is
+	// already an answer. The whole-line clip plays after Check, not before.
 	if act.Type == units.ActivityOrder {
 		activity.Cue = strings.TrimSpace(act.Translation)
-		if !empty {
+		activity.Heading = "Build the sentence"
+		if empty {
 			activity.Prompt = ""
+			return activity
 		}
+		if run.Phase == "ask" {
+			activity.OrderChips = orderServed(run, act)
+			activity.Asking = len(activity.OrderChips) > 1
+			activity.Prompt = ""
+			return activity
+		}
+		activity.Prompt = ""
 		return activity
 	}
 	if act.Type == units.ActivityCloze {
@@ -1084,6 +1102,18 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 	}
 	seed, block := choiceSeed(run, target), lineMateExclude(act, lex, target)
 	activity.Choices = askChoices(act.Type, pool, earlier, target, seed, block)
+	if act.Type == units.ActivityListenPick && sentenceListen(act, lex) {
+		// The question is the meaning of the whole line, in English. The Hebrew
+		// stays off until the answer. Wrong buttons are other sentences, not
+		// words that also fit this one. RSCH-004: listening is its own skill.
+		activity.Choices = sentenceListenChoices(act, lex, target)
+		activity.Prompt = listenAskPrompt
+		activity.Stage = true
+		activity.Asking = len(activity.Choices) >= lessonMinChoices
+		if activity.Asking {
+			return activity
+		}
+	}
 	if act.Type == units.ActivityListenPick {
 		// The learner heard a line, so the buttons are lines of Hebrew. A lesson with too
 		// few other words cannot make wrong lines. Then the step asks for the meaning.
@@ -1117,7 +1147,8 @@ func (p player) clips(ctx context.Context, act units.Activity) (clipSet, error) 
 	if err != nil {
 		return clipSet{}, err
 	}
-	if phrase == "" && act.Type == units.ActivityStory && hebrewLine(text) {
+	// One recording of the whole line. Word clips are not a sentence.
+	if phrase == "" && (act.Type == units.ActivityStory || act.Type == units.ActivityOrder || act.Type == units.ActivityListenPick) && hebrewLine(text) {
 		p.ensureStoryClip(ctx, text)
 		phrase, err = p.audioSrc(ctx, text)
 		if err != nil {
@@ -1353,15 +1384,21 @@ func gradedActivity(typ string) bool {
 }
 
 // unprovableAsk is a lesson step whose key the app cannot prove wrong.
-// Every cloze and every order step is an AI-written sentence. A listen_pick
-// of two or more lexicon words is the same. The render path shows a reveal,
-// and askChoiceCount returns 0 so the post path records nothing.
-// ADR-0033 D3. INIT-038/SPEC-008.
+// A cloze blank in a sentence, and a listen_pick of two or more words, stay
+// reveals: another word can also fit, and the app must not mark that wrong
+// (ADR-0033 D3). Building a stored sentence is different. The key is that
+// sentence, so the order step is graded.
 func unprovableAsk(act units.Activity, lex map[string]db.LexemeView) bool {
 	switch act.Type {
-	case units.ActivityCloze, units.ActivityOrder:
+	case units.ActivityCloze:
 		return true
 	case units.ActivityListenPick:
+		// A stored English line can be the question: what did you hear?
+		// The Hebrew stays hidden until the answer. A line with no stored
+		// English cannot be proved, so it stays a reveal.
+		if strings.TrimSpace(act.Translation) != "" && lexemeTokenCount(act, lex) > 1 {
+			return false
+		}
 		return lexemeTokenCount(act, lex) > 1
 	default:
 		return false
@@ -1468,7 +1505,10 @@ func (p player) askChoiceCount(ctx context.Context, userID int64, lesson db.Cour
 		return 0, err
 	}
 	// A reveal has no buttons. The post path and the render path both see 0.
-	// INIT-038/SPEC-008.
+	// An order step's "buttons" are the words of the stored sentence.
+	if act.Type == units.ActivityOrder {
+		return len(orderServed(run, act)), nil
+	}
 	if unprovableAsk(act, lex) {
 		return 0, nil
 	}
@@ -2102,7 +2142,7 @@ func headFor(f *views.LessonFrame, lesson db.CourseLesson, act units.Activity, a
 			f.Eyebrow = name + " · not graded"
 		}
 	case units.ActivityOrder:
-		f.Heading, f.Eyebrow = "See it in a sentence", "Shown, not scored"
+		f.Heading, f.Eyebrow = "Build the sentence", name
 	}
 	if a.Heading != "" {
 		f.Heading = a.Heading

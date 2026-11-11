@@ -96,6 +96,7 @@ func (s *server) serveProgress(w http.ResponseWriter, r *http.Request, secure bo
 	ui := views.UIFor(lang, gender)
 	skill := chooseSkill(r.URL.Query().Get("skill"))
 	v := views.ProgressView{
+		Brief: skill == "" && r.URL.Query().Get("detail") != "1",
 		Page:      views.Page{UI: ui, Title: ui.DocTitle("progress"), CSRF: csrf, Current: "progress"},
 		Empty:     true,
 		Skill:     skill,
@@ -227,6 +228,8 @@ func (s *server) fillProgress(ctx context.Context, userID int64, v *views.Progre
 	if lessonsTotal > 0 {
 		v.LessonsText = strconv.Itoa(lessonsDone) + "/" + strconv.Itoa(lessonsTotal)
 	}
+	v.CanDo, v.CanDoHE = views.CanDoSentence(false, false, false, false)
+	v.NextAction, v.NextActionHE = "Do today's session", "הַשִּׁעוּר שֶׁל הַיּוֹם"
 
 	// The job writes yesterday, so 90 snapshot days end the day before today and begin 90 days back.
 	rows, err := s.store.SnapshotRows(ctx, userID, addDaysStr(today, -progressWindowDays), today)
@@ -398,7 +401,40 @@ func (s *server) fillOverview(ctx context.Context, userID int64, v *views.Progre
 	}
 	ss := skillOfSummary(sum, bestSkill)
 	v.Retention = retentionChart(bestSkill, learner.DirectionLabel(bestSkill), days, today, ss.Retention)
+	v.CanDo, v.CanDoHE = views.CanDoSentence(
+		provedOf(v.LadderRows, "listen"),
+		provedOf(v.LadderRows, "recall"),
+		provedOf(v.LadderRows, "read"),
+		provedOf(v.LadderRows, "spell"),
+	)
 	return nil
+}
+
+func provedOf(rows []views.LadderRow, skill string) bool {
+	for _, row := range rows {
+		if row.Skill != skill {
+			continue
+		}
+		for _, rung := range row.Rungs {
+			if rung.Rung == string(learner.Proved) && countInShare(rung.Share) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func countInShare(share string) int {
+	open := strings.LastIndex(share, "(")
+	close := strings.LastIndex(share, ")")
+	if open < 0 || close <= open {
+		return 0
+	}
+	n, err := strconv.Atoi(share[open+1 : close])
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 func recallProved(sum learner.Summary) int {

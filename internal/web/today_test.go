@@ -87,7 +87,7 @@ func TestHomeFromRealData(t *testing.T) {
 	if strings.Contains(body, "data-placement=") {
 		t.Fatal("a learner with no run rendered a placement")
 	}
-	progress := getLearner(t, h, learner, "/progress")
+	progress := getLearner(t, h, learner, "/progress?detail=1")
 	// Progress (SPEC-018) shows the learner model by skill. What is left of the old three counts
 	// is the lessons finished; the known count and the due count are on Today.
 	if !strings.Contains(progress, `>1/2</bdi>`) {
@@ -1109,7 +1109,7 @@ func TestHomeAndProgressShareKnownAnySkill(t *testing.T) {
 		t.Fatalf("Home visible count %v, want %s", m, want)
 	}
 
-	progress := getLearner(t, h, l, "/progress")
+	progress := getLearner(t, h, l, "/progress?detail=1")
 	recall := overviewRow(t, progress, "recall")
 	if !strings.Contains(recall, "Hebrew from English") {
 		t.Fatalf("Progress recall row:\n%s", recall)

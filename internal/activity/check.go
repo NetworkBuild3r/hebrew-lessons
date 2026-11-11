@@ -80,10 +80,17 @@ func (e *Engine) Check(ctx context.Context, userID int64, token string, resp Res
 		return Result{}, err
 	}
 
+	if p.unrecorded {
+		e.pending.remove(c.ID)
+		res := g.result
+		res.Feedback = p.source != evidence.SourcePlacement
+		return res, nil
+	}
+
 	for i := p.wrote; i < len(g.attempts); i++ {
 		a := g.attempts[i]
-		a.UserID, a.Source, a.UnitID = p.user, p.source, p.unit
-		a.SkipSchedule = p.source == evidence.SourceLesson
+		a.UserID, a.Source, a.UnitID, a.RunID = p.user, p.source, p.unit, p.run
+		a.SkipSchedule = p.source == evidence.SourceLesson || p.unrecorded
 		a.LettersPassed = gate.LettersPassed
 		rating, err := e.rec.Attempt(ctx, a)
 		if err != nil {

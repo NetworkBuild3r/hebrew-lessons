@@ -1516,6 +1516,7 @@ html.js .clip-rows {
   line-height: var(--lh-he-display);
   cursor: grab;
 }
+.order [data-order-check].is-waiting { opacity: .55; }
 .order-chip:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;

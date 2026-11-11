@@ -30,7 +30,8 @@ var (
 
 func TestOrbButtonsCarryAudio(t *testing.T) {
 	progress := renderView(t, views.Progress(views.ProgressView{
-		Page: views.Page{UI: views.UIFor("en", views.AddressMasculine)},
+		Page:  views.Page{UI: views.UIFor("en", views.AddressMasculine)},
+		Skill: "recall",
 		CanSay: &views.CanSayPanel{
 			TotalText: "2 things",
 			AddedText: "1 this week",

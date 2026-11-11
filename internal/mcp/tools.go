@@ -664,6 +664,7 @@ func registerTools(server *mcp.Server, svc *service) {
 	registerLessonBrief(server, svc)
 	registerCoachNote(server, svc)
 	registerTaughtTools(server, svc)
+	registerClassTools(server, svc)
 	registerUnpublishUnit(server, svc)
 	registerGetUnit(server, svc)
 	registerPatternTools(server, svc)

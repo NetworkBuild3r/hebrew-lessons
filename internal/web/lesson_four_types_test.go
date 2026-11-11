@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -173,9 +176,9 @@ func seedFourLessons(t *testing.T, store *db.Store) fourLessonIDs {
 		}}},
 	})
 	listen := publishLesson(t, store, units.Unit{
-		Title: "Listening", Situation: "A line you already know.", Concept: "Hear a line you already know", Position: 2,
+		Title: "Listening", Situation: "A new line, from words you know.", Concept: "Hear a new line", Position: 2,
 		Lessons: []units.Lesson{{Kind: units.KindLesson, Activities: []units.Activity{
-			{Type: units.ActivityListenPick, Text: wantCoffee, Translation: "I want coffee", Target: fourCoffee},
+			{Type: units.ActivityListenPick, Text: joinFour(fourPeace, fourMorning, fourI, fourHeWants, fourWater), Translation: "Good morning. I want water.", Target: fourWater},
 		}}},
 	})
 	easy := publishLesson(t, store, units.Unit{
@@ -235,17 +238,43 @@ func walkLesson(t *testing.T, h http.Handler, learner learnerFix, path string) l
 			return walk
 		}
 		before := body
-		answer := answerOnScreen(body)
-		posted := postLesson(t, h, learner.cookie, path, runID, answer, true, learner.csrf)
+		var posted *httptest.ResponseRecorder
+		if strings.Contains(body, "data-order") && !strings.Contains(body, "That's right") && !strings.Contains(body, "Not quite") {
+			posted = postBuiltSentence(t, h, learner, path, runID, body)
+		} else {
+			posted = postLesson(t, h, learner.cookie, path, runID, answerOnScreen(body), true, learner.csrf)
+		}
 		if posted.Code != 200 {
-			t.Fatalf("%s answer %s = %d\n%s", path, answer, posted.Code, clip(posted.Body.String(), 300))
+			t.Fatalf("%s post = %d\n%s", path, posted.Code, clip(posted.Body.String(), 300))
 		}
 		body = posted.Body.String()
 		if body == before {
-			t.Fatalf("%s stuck on step %s after %s\n%s", path, dataStep(body), answer, clip(body, 600))
+			t.Fatalf("%s stuck on step %s\n%s", path, dataStep(body), clip(body, 600))
 		}
 	}
 	return walk
+}
+
+func postBuiltSentence(t *testing.T, h http.Handler, learner learnerFix, path, runID, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	served := servedOrderChips(t, body)
+	form := url.Values{}
+	form.Set("run", runID)
+	form.Set("answer", "check")
+	form.Set("_csrf", learner.csrf)
+	for _, p := range positionsForTokens(served, []string{fourI, fourHeWants, fourCoffee}) {
+		form.Add("order", strconv.Itoa(p))
+	}
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+	req.Host = "learn.example"
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("Origin", "https://learn.example")
+	req.Header.Set("X-CSRF-Token", learner.csrf)
+	req.AddCookie(learner.cookie)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
 }
 
 func lessonDone(body string) bool {

@@ -40,7 +40,7 @@ func TestRetakePlacement(t *testing.T) {
 	firstID := finishV3(t, store, user.id, firstAt, firstLevel, firstWords)
 	retakeID := finishV3(t, store, user.id, retakeAt, retakeLevel, retakeWords)
 
-	body := getPlaced(t, h, user, "/progress")
+	body := getPlaced(t, h, user, "/progress?detail=1")
 	form := retakeForm(t, body)
 	for _, want := range []string{
 		`method="post"`,

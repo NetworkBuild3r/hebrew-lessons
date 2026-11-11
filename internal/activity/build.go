@@ -127,10 +127,13 @@ func (e *Engine) ready() error {
 type BuildOption func(*buildConfig)
 
 type buildConfig struct {
-	source  string
-	unit    int64
-	choices int
-	skill   string
+	source      string
+	unit        int64
+	run         int64
+	choices     int
+	skill       string
+	unrecorded  bool
+	taughtFirst bool
 }
 
 // WithChoices sets how many options a pick shows, including the answer.
@@ -151,6 +154,16 @@ func WithSource(source string) BuildOption { return func(c *buildConfig) { c.sou
 
 // WithUnit sets the unit a lesson item belongs to.
 func WithUnit(unitID int64) BuildOption { return func(c *buildConfig) { c.unit = unitID } }
+
+// WithRun sets the lesson run an answer belongs to. INIT-039/SPEC-006.
+func WithRun(runID int64) BuildOption { return func(c *buildConfig) { c.run = runID } }
+
+// WithUnrecorded builds the same question again and stores nothing. Only the first answer counts.
+func WithUnrecorded() BuildOption { return func(c *buildConfig) { c.unrecorded = true } }
+
+// WithTaughtFirst ranks words the learner has seen ahead of the rest of the lexicon
+// when the wrong buttons are drawn.
+func WithTaughtFirst() BuildOption { return func(c *buildConfig) { c.taughtFirst = true } }
 
 // WithSkill sets the skill the item trains. Required when Kind is TypeIt and the
 // visit is spelling (ADR-0028 D6): SpecOf(TypeIt) alone would train recall.
@@ -217,6 +230,13 @@ func (e *Engine) build(ctx context.Context, userID, lexemeID int64, kind Kind, o
 	if !found {
 		return built{}, ErrUnknownWord
 	}
+	flagged, err := e.store.FlaggedLexemes(ctx, userID)
+	if err != nil {
+		return built{}, err
+	}
+	if flagged[lexemeID] {
+		return built{}, ErrSuspended
+	}
 	if needsGloss(kind) && strings.TrimSpace(anchor.Gloss) == "" {
 		return built{}, ErrNoGloss
 	}
@@ -231,7 +251,7 @@ func (e *Engine) build(ctx context.Context, userID, lexemeID int64, kind Kind, o
 	}
 	p := &pending{
 		user: userID, lexeme: lexemeID, kind: kind, skill: spec.Skill,
-		source: cfg.source, unit: cfg.unit, builtAt: now, expires: now.Add(e.ttl),
+		source: cfg.source, unit: cfg.unit, run: cfg.run, unrecorded: cfg.unrecorded, builtAt: now, expires: now.Add(e.ttl),
 	}
 	item := Item{Kind: kind, Skill: spec.Skill, ExpiresAt: p.expires, Typed: spec.Typed}
 
@@ -245,7 +265,7 @@ func (e *Engine) build(ctx context.Context, userID, lexemeID int64, kind Kind, o
 		if cfg.choices >= 2 {
 			n = cfg.choices
 		}
-		dis, err := e.pick(anchor, words, n-1, Need{}, prefer, false)
+		dis, err := e.pick(anchor, words, n-1, Need{}, prefer, cfg.taughtFirst)
 		if err != nil {
 			return built{}, err
 		}

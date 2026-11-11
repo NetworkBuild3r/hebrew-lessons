@@ -65,7 +65,9 @@
       fields.appendChild(input);
     }
     var total = allChips(root).length;
-    check.disabled = chips.length === 0 || chips.length !== total;
+    var complete = total > 0 && chips.length === total;
+    check.disabled = false;
+    check.classList.toggle("is-waiting", !complete);
     row.classList.toggle("is-drop", false);
     row.setAttribute("aria-label", chips.length ? "Your sentence, " + chips.length + " words" : "Your sentence");
   }
@@ -118,12 +120,7 @@
       var found = base.querySelectorAll("[data-order]");
       for (var i = 0; i < found.length; i++) roots.push(found[i]);
     }
-    for (var j = 0; j < roots.length; j++) {
-      sync(roots[j]);
-      var check = checkOf(roots[j]);
-      if (check) check.disabled = true;
-      sync(roots[j]);
-    }
+    for (var j = 0; j < roots.length; j++) sync(roots[j]);
   }
 
   D.addEventListener("dragstart", function (ev) {
@@ -224,6 +221,24 @@
       place(chip, root, null);
     }
   });
+
+  // Write the hidden fields before htmx reads the form. A disabled Check
+  // looked the same as a live one, so the click appeared to do nothing.
+  D.addEventListener("submit", function (ev) {
+    var form = ev.target;
+    if (!form || !form.querySelector) return;
+    var root = form.querySelector("[data-order]");
+    if (!root) return;
+    sync(root);
+    var chips = placed(root);
+    var total = allChips(root).length;
+    if (total === 0 || chips.length !== total) {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      var hint = root.querySelector(".order-hint");
+      if (hint) hint.textContent = "Place every word in the row, then check.";
+    }
+  }, true);
 
   D.addEventListener("htmx:load", function (ev) {
     var elt = ev.detail && ev.detail.elt ? ev.detail.elt : ev.target;

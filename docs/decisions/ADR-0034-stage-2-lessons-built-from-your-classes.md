@@ -19,7 +19,7 @@ Stage 1 made grades honest. The app still does not teach from the thing Brian ac
 **D3. Every graded key is T0.** There is no T1 source. A word with no checked lexicon entry cannot be a key. An entry check runs before a word can be asked: pointed form, gloss, part of speech, and a consonant form that does not collide with a different taught word.
 
 **D4. Two lessons ship first.**
-- *Word lesson:* about 4 new words, a grid with Listen, a meaning check with an unrecorded second ask on a miss, a passage of the tutor's own lines (up to 3, about 90 percent taught words), typed Write with the Hebrew hidden, and word order as an ungraded reveal.
+- *Word lesson:* about 4 new words, a grid with Listen, a meaning check with an unrecorded second ask on a miss, a passage of the tutor's own lines (up to 3, about 90 percent taught words), typed Write with the Hebrew hidden, then building that stored sentence. The sentence is one recording of the whole line, played after the check (RSCH-005: the sentence comes after the spelling, and it is not three word clips).
 - *Easy lesson:* no new words. A passage of words being learned, then the same checks. Today offers it when too many words are still in learning or recent accuracy is low.
 Conjugation is the next initiative. Listening waits for a voice Brian accepts. The spelling lesson is cut, because typed Write does that work (RSCH-005).
 
