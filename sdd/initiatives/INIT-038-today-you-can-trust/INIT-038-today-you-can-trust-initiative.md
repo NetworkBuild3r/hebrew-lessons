@@ -251,7 +251,7 @@ If the audit fails, Stage 2's import is not built. Brian adds words through `rec
 
 ## Abandon conditions (fallback: Option D)
 
-If any of these happens, stop building, make the app review-only, and move tutor material to Anki or the worksheet player in `Aharon's code/`:
+If any of these happens, stop building, make the app review-only, and move tutor material to Anki (the standalone worksheet player was removed on 2026-11-11, one platform by Brian's decision):
 - Stage 1 is not finished by 2026-11-30;
 - a second initiative opens before Stage 1 closes;
 - Brian's study time has not reached about 120 minutes a week by week 4;

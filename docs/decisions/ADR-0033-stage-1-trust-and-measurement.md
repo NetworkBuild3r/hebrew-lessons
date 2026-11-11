@@ -203,7 +203,7 @@ These do not judge success; they catch damage. Each is read weekly, and a breach
 
 ### Abandon lines
 
-If any of these fires, stop building, make the app review-only, and move tutor material to Anki or the worksheet player in `Aharon's code/` (BRAIN-001 Option D).
+If any of these fires, stop building, make the app review-only, and move tutor material to Anki (BRAIN-001 Option D). Amended 2026-11-11: Brian decided there is one platform, so the standalone worksheet player that used to sit in `Aharon's code/` was removed and is no longer a fallback.
 
 1. **A1.** The Stage 1 exit is not met by 2026-11-30.
 2. **A2.** A second initiative opens before Stage 1 closes.
