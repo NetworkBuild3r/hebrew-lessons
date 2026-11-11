@@ -73,24 +73,36 @@
 .pknow__skill[data-size="small"] {
   padding-block: var(--space-2);
   background: transparent;
+  border: 1px solid var(--hairline);
 }
 .pknow__skill[data-size="small"] .pknow__skill-label { font-size: var(--fs-small); font-weight: 600; }
 .pknow__of { color: var(--muted); font-size: var(--fs-small); line-height: var(--lh-he-body); margin: 0; }
-.pknow__rungs { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); min-inline-size: 0; }
+.pknow__of > bdi:first-child { color: var(--text); font-weight: 700; margin-inline-end: var(--space-1); }
+.pknow__rungs { display: grid; grid-template-columns: minmax(0, 1fr); margin-block-start: var(--space-1); min-inline-size: 0; }
 .pknow__rung {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-block: var(--space-2);
+  border-block-start: 1px solid var(--hairline);
   color: inherit;
   font-size: var(--fs-small);
   font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
+  text-decoration: none;
   min-inline-size: 0;
   min-block-size: var(--size-tap);
 }
-.pknow__rung bdi { font-weight: 700; font-variant-numeric: tabular-nums; }
+.pknow__rung:first-child { border-block-start: 0; }
+.pknow__rung-label { min-inline-size: 0; }
+.pknow__rung bdi { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pknow__rung:hover .pknow__rung-label,
+.pknow__rung:focus-visible .pknow__rung-label { text-decoration: underline; text-underline-offset: 0.15em; }
+.pknow__rung:focus-visible { outline: 2px solid var(--lamp); outline-offset: 2px; border-radius: var(--radius-control); }
+@media (min-width: 640px) {
+  .pknow__rungs { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-6); }
+  .pknow__rung:nth-child(2) { border-block-start: 0; }
+}
 .pchanged { display: grid; gap: var(--space-2); min-inline-size: 0; }
 .pchanged__nums {
   display: grid;
@@ -100,11 +112,23 @@
   padding: 0;
   margin: 0;
 }
-.pchanged__nums li { display: grid; gap: var(--space-1); min-inline-size: 0; }
-.pchanged__nums bdi { font-weight: 700; font-size: var(--fs-h2); }
+.pchanged__nums li {
+  display: grid;
+  grid-template-columns: minmax(2.5ch, auto) minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-block: var(--space-2);
+  border-block-start: 1px solid var(--hairline);
+  min-inline-size: 0;
+}
+.pchanged__nums li:first-child { border-block-start: 0; }
+.pchanged__nums li > bdi { font-weight: 700; font-size: var(--fs-h2); line-height: 1.2; font-variant-numeric: tabular-nums; }
+.pchanged__nums span { color: var(--muted); font-size: var(--fs-small); font-weight: 600; line-height: var(--lh-he-body); }
 .pchanged__reason { color: var(--muted); font-size: var(--fs-small); line-height: var(--lh-he-body); margin: 0; max-inline-size: var(--player-max); overflow-wrap: anywhere; }
 @media (min-width: 640px) {
-  .pchanged__nums { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pchanged__nums { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+  .pchanged__nums li { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); padding: var(--space-3); border: 1px solid var(--hairline); border-radius: var(--radius-control); }
+  .pchanged__nums li:first-child { border-block-start: 1px solid var(--hairline); }
 }
 .pknow__skill-link {
   display: grid;
@@ -160,7 +184,7 @@
 .pstand__miss { font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
 .pstand__cause { flex-basis: 100%; color: var(--muted); font-size: var(--fs-small); }
 .pstand__practice { inline-size: auto; justify-self: start; padding-inline: var(--space-6); }
-.pchart__title { font-family: var(--font-display); font-size: var(--fs-h2); font-weight: 700; line-height: var(--lh-he-body); }
+.pchart__title { font-family: var(--font-display); font-size: var(--fs-h2); font-weight: 700; line-height: 1.25; text-wrap: balance; }
 .pchart__note, .pweek__none, .pweek__sub { color: var(--muted); font-size: var(--fs-small); line-height: var(--lh-he-body); }
 .pchart__summary { font-size: var(--fs-small); font-weight: 700; line-height: var(--lh-he-body); }
 .pchart__key { list-style: none; padding: 0; color: var(--muted); font-size: var(--fs-small); }

@@ -76,6 +76,9 @@ type Options struct {
 	ShowIsaiah    bool
 	ShowPlacement bool
 	ShowCheckIn   bool
+	// LocalDev is DEV=1. The sign-in page can sign in as local@localhost.
+	// Production leaves this false.
+	LocalDev bool
 	// Speech stores a missing story recording as one clip of the whole text.
 	// Nil, or a generator with no voice, leaves that story without the clip.
 	Speech *audio.Generator
@@ -164,6 +167,7 @@ func newHandler(health http.Handler, sessions *auth.Service, opts Options) http.
 	srv.showIsaiah = opts.ShowIsaiah
 	srv.showPlacement = opts.ShowPlacement
 	srv.showCheckIn = opts.ShowCheckIn
+	srv.localDev = opts.LocalDev
 	mux := srv.routes(health, tokens, sessions != nil, secure)
 	if sessions != nil {
 		sessions.Register(mux)
@@ -240,7 +244,9 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
-		render(w, r, views.SignIn(views.NewPage(chooseLang(w, r, secure), csrfValue(tokens, r), "signin")))
+		page := views.NewPage(chooseLang(w, r, secure), csrfValue(tokens, r), "signin")
+		page.LocalDev = s.localDev
+		render(w, r, views.SignIn(page))
 	})
 	return mux
 }

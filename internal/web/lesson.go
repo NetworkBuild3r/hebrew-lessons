@@ -251,7 +251,8 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 	// as a cloze: askChoiceCount is 0, so Continue advances and nothing is
 	// recorded. INIT-038/SPEC-008.
 	graded := gradedActivity(act.Type) && target.ID != 0
-	if graded {
+	// A Write step is typed, so it never needs three buttons to be a question.
+	if graded && act.Type != units.ActivityProduce {
 		n, countErr := p.askChoiceCount(r.Context(), userID, lesson, run, act, target)
 		if countErr != nil {
 			serverError(w)
@@ -263,7 +264,26 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 			graded = false
 		}
 	}
+	q := lessonQueryFrom(r, page.Lang)
 	switch {
+	case run.Phase == "ask" && graded && act.Type == units.ActivityProduce && answer != "" && answer != "continue" && !digitsOnly(answer):
+		// A typed Write answer. It is read the way review reads a typed card: marks are
+		// ignored, a one-letter slip is a near miss that still counts, and a spelling with
+		// the usual extra ו or י is the word unless that spelling is another word.
+		// INIT-038/SPEC-015.
+		typed := strings.TrimSpace(answer)
+		var correct bool
+		correct, q.typedNote, err = p.readTyped(r.Context(), target, typed)
+		if err != nil {
+			break
+		}
+		q.typed = typed
+		asked := run.AskedAt
+		var applied bool
+		run, applied, err = p.store.AnswerPlayerRun(r.Context(), userID, run.ID, run.ActivityIx, correct)
+		if err == nil && applied {
+			err = p.recordAnswer(r.Context(), userID, lesson, act, target, typed, correct, answerLatency(p.store.Clock(), asked))
+		}
 	case run.Phase == "ask" && graded && answer != "" && answer != "continue":
 		// Grade the lexeme id on the button. Position and label are not the answer.
 		picked, parseErr := strconv.ParseInt(answer, 10, 64)
@@ -282,12 +302,48 @@ func (p player) lessonSubmit(w http.ResponseWriter, r *http.Request, lang, csrf 
 		serverError(w)
 		return
 	}
-	screen, err := p.screenFor(r.Context(), page, lesson, run, lessonQueryFrom(r, page.Lang))
+	screen, err := p.screenFor(r.Context(), page, lesson, run, q)
 	if err != nil {
 		serverError(w)
 		return
 	}
 	p.writeScreen(w, r, page, screen, partial)
+}
+
+// digitsOnly is true for a lexeme id posted by a button. A typed Hebrew answer has no digit.
+func digitsOnly(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// readTyped grades a typed Write answer against the word asked. correct follows review: Good
+// and Hard count, Again does not. note is the one line the reveal adds: a spelling with the
+// usual extra ו or י was read as the word, or one letter is off. Past answers are never
+// re-graded. INIT-038/SPEC-015.
+func (p player) readTyped(ctx context.Context, target db.LexemeView, typed string) (correct bool, note string, err error) {
+	forms, err := p.store.LexemeConsonantForms(ctx)
+	if err != nil {
+		return false, "", err
+	}
+	exact := fsrs.GradeTyped(target.Text, typed)
+	rating := fsrs.GradeTypedAmong(target.Text, typed, forms)
+	switch {
+	case exact == fsrs.Good:
+		return true, "", nil
+	case rating == fsrs.Good:
+		return true, "A spelling with the usual extra ו or י counts, unless that spelling is a different word.", nil
+	case rating == fsrs.Hard:
+		return true, "One letter is off. Look at the spelling below.", nil
+	default:
+		return false, "", nil
+	}
 }
 
 func dialogueSide(act units.Activity, run db.PlayerRun) string {
@@ -703,6 +759,10 @@ func (p player) screenFor(ctx context.Context, page views.Page, lesson db.Course
 		return views.Screen{}, err
 	}
 	screen.Frame = frameFor(page, lesson, run, screen.Activity.Done)
+	screen.Frame.NoStages = easyLesson(lesson)
+	if !screen.Frame.Done && run.ActivityIx >= 0 && run.ActivityIx < len(lesson.Activities) {
+		headFor(&screen.Frame, lesson, lesson.Activities[run.ActivityIx], screen.Activity)
+	}
 	return screen, nil
 }
 
@@ -735,7 +795,9 @@ func frameFor(page views.Page, lesson db.CourseLesson, run db.PlayerRun, done bo
 	}
 	f.Kind = "Practice"
 	if total > 0 {
-		f.Kind = views.LessonLabel(lesson.Activities[run.ActivityIx].Type)
+		typ := lesson.Activities[run.ActivityIx].Type
+		f.Kind = views.LessonLabel(typ)
+		f.Stage = views.LessonStage(typ)
 		for i := range f.Outline {
 			switch {
 			case i < run.ActivityIx:
@@ -811,7 +873,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		return screen, nil
 	}
 	var pool, earlier []db.LexemeView
-	if run.Phase == "ask" && gradedActivity(act.Type) && target.ID != 0 && !unprovableAsk(act, lex) {
+	if run.Phase == "ask" && gradedActivity(act.Type) && act.Type != units.ActivityProduce && target.ID != 0 && !unprovableAsk(act, lex) {
 		pool, earlier, err = p.taughtChoicePools(ctx, run.UserID, lesson.UnitID, lesson.Position)
 		if err != nil {
 			return views.Screen{}, err
@@ -856,6 +918,15 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 		screen.Activity.AudioLabel, screen.Activity.AudioHebrew = phrasePlayLabel(act, phase)
 	}
 	screen.Activity.Spotlight = spotlight(act.Type, screen.Activity)
+	// See: a teach step shows one card for each new word, with its meaning and sound, in
+	// place of tiles that hide the meaning. Figma See (255:112).
+	if act.Type == units.ActivityPattern {
+		if cards := seeCardsFor(screen.Activity.Words); len(cards) > 0 {
+			screen.Activity.See, screen.Activity.SeeCards = true, cards
+			screen.Activity.Words, screen.Activity.Audio = nil, ""
+			screen.Activity.Spotlight, screen.Activity.Follow = false, false
+		}
+	}
 	p.attachHow(ctx, lesson, run, &screen.Activity)
 	p.attachRoots(ctx, &screen.Activity)
 	p.attachAlsoRight(ctx, lesson, run, act, lex, target, &screen.Activity)
@@ -950,6 +1021,7 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 		prompt = ""
 	}
 	activity := views.Activity{
+		Kind:          act.Type,
 		Prompt:        prompt,
 		PromptWord:    promptWord,
 		Progress:      progressText(run.ActivityIx, total),
@@ -991,6 +1063,21 @@ func (p player) step(page views.Page, lesson db.CourseLesson, run db.PlayerRun, 
 	}
 	if !empty && act.Type == units.ActivityListenPick && (run.Phase != "ask" || unprovableAsk(act, lex)) {
 		activity.Prompt = listenRevealPrompt
+	}
+	// Write: the English cue is the title, the learner types the Hebrew, and the reveal
+	// echoes what they typed. Figma Write (255:183).
+	if !empty && act.Type == units.ActivityProduce && target.ID != 0 {
+		activity.Prompt = ""
+		activity.Eyebrow = "Type it"
+		activity.Heading = "Type the Hebrew"
+		if meaning, _, _ := views.SplitGloss(target.Gloss); meaning != "" {
+			activity.Heading = meaning
+		}
+		if run.Phase == "ask" {
+			activity.Typed = true
+			return activity
+		}
+		activity.TypedAnswer, activity.TypedNote = q.typed, q.typedNote
 	}
 	if empty || run.Phase != "ask" || !gradedActivity(act.Type) || target.ID == 0 || unprovableAsk(act, lex) {
 		return activity
@@ -1950,9 +2037,79 @@ func progressText(ix, total int) string {
 
 func continueLabel(ix, total int) string {
 	if total <= 0 || ix+1 >= total {
-		return "Finish"
+		return "Finish lesson"
 	}
 	return "Continue"
+}
+
+// seeCardsFor is the See step's cards: each word the line shows, with its meaning (the
+// grammar note a form carries stays off the card), its part of speech, and its clip.
+func seeCardsFor(words []views.Word) []views.SeeCard {
+	var cards []views.SeeCard
+	for _, w := range words {
+		if w.Plain || w.Gap || w.Text == "" {
+			continue
+		}
+		meaning, _, _ := views.SplitGloss(w.Gloss)
+		cards = append(cards, views.SeeCard{
+			Text:  w.Text,
+			Gloss: meaning,
+			POS:   views.POSLabel(w.POS),
+			Audio: w.Audio,
+		})
+	}
+	return cards
+}
+
+// easyLesson is a lesson with no new words and no pattern to teach: it only reads and
+// checks words the learner already has. Figma Easy lesson (255:231).
+func easyLesson(lesson db.CourseLesson) bool {
+	if len(lesson.NewWords) > 0 {
+		return false
+	}
+	for _, act := range lesson.Activities {
+		if act.Type == units.ActivityPattern {
+			return false
+		}
+	}
+	return true
+}
+
+// headFor sets what the frame prints above the step: the small caps line and the 22px
+// title the Figma lesson screens use. A step that already knows its own (Write) keeps it.
+// The eyebrow says where the lesson is from, the title says what to do. It holds no answer.
+func headFor(f *views.LessonFrame, lesson db.CourseLesson, act units.Activity, a views.Activity) {
+	easy := easyLesson(lesson)
+	f.NoStages = easy
+	name := strings.TrimSpace(lesson.Title)
+	if easy {
+		name = "No new words"
+	}
+	switch act.Type {
+	case units.ActivityPattern:
+		f.Heading = "See the words"
+		if len(lesson.NewWords) == 0 {
+			f.Heading = "See the forms"
+		}
+		f.Eyebrow = name
+	case units.ActivityRecall:
+		f.Heading, f.Eyebrow = "What does it mean?", name
+	case units.ActivityStory:
+		f.Heading, f.Eyebrow = "Read it in a sentence", name
+		if easy {
+			f.Heading = "Read words you already have"
+		} else if name != "" {
+			f.Eyebrow = name + " · not graded"
+		}
+	case units.ActivityOrder:
+		f.Heading, f.Eyebrow = "See it in a sentence", "Shown, not scored"
+	}
+	if a.Heading != "" {
+		f.Heading = a.Heading
+	}
+	if a.Eyebrow != "" {
+		f.Eyebrow = a.Eyebrow
+	}
 }
 
 func (p player) doneScreen(ctx context.Context, page views.Page, userID int64, lesson db.CourseLesson, score float64) (views.Screen, error) {
@@ -2049,6 +2206,10 @@ func lessonPath(unitID int64, lessonIx int) string {
 type lessonQuery struct {
 	meaningsAll  bool
 	meaningsHref string
+	// typed is what the learner just typed on a Write step, and typedNote is the one line
+	// that says how it was read. They live for the one reveal that follows the post; a
+	// reload shows the reveal without them.
+	typed, typedNote string
 }
 
 func lessonQueryFrom(r *http.Request, lang string) lessonQuery {

@@ -412,3 +412,33 @@ func (s *Store) RootCounts(ctx context.Context) (map[string]int, error) {
 	}
 	return out, nil
 }
+
+// LexemeConsonantForms returns every lexeme's consonant spelling for
+// GradeTypedAmong collision checks (INIT-038/SPEC-015). Prefer bare when it
+// is set; otherwise text_nfc. The caller passes the set as otherForms.
+func (s *Store) LexemeConsonantForms(ctx context.Context) ([]string, error) {
+	conn, err := s.connOrErr()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := conn.QueryContext(ctx, `
+		SELECT CASE WHEN bare <> '' THEN bare ELSE text_nfc END
+		FROM lexemes
+		ORDER BY id`)
+	if err != nil {
+		return nil, fmt.Errorf("db: lexeme consonant forms: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var form string
+		if err := rows.Scan(&form); err != nil {
+			return nil, fmt.Errorf("db: lexeme consonant forms: %w", err)
+		}
+		out = append(out, form)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: lexeme consonant forms: %w", err)
+	}
+	return out, nil
+}

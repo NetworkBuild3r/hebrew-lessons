@@ -7,7 +7,7 @@ spec_id: SPEC-010
 initiative_id: INIT-038
 title: "Progress and Today lead with the ladder"
 domain: web
-status: in_review
+status: complete
 primary_prompt: none
 complexity: medium
 complexity_reason: rebuilds the Progress headline and adds a one-time comparison drawn from two rule versions
@@ -59,7 +59,7 @@ The files are `internal/web/progress.go` (`serveProgress` at line 69, `fillSkill
 - [ ] None of the removed elements appears on the page.
 - [ ] The history chart draws points from one rule version only.
 - [ ] Today's count equals Progress's "Hebrew from English" proved count.
-- [ ] The page renders at a phone width with no horizontal scroll, shown by the screenshot.
+- [x] The page renders at a phone width with no horizontal scroll, shown by the screenshot. Phone capture `specs/completion-summaries/shots/progress-390.png` (scroll width did not exceed the screen). Figma frame `257:85` on page `257:71`, [Progress and Today](https://www.figma.com/design/NJ8HfTPCQgrFty2VVQBMhY?node-id=257-85).
 
 ## Verification Strategy
 

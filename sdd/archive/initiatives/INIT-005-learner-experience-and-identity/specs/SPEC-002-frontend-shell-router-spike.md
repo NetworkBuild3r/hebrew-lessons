@@ -68,7 +68,7 @@ blocks: [SPEC-003, SPEC-007]
 
 - [x] Shell HTML entry and server routing for app paths
 - [x] `shared/router.js` and view modules for Today and Lessons
-- [x] Spike note: `sdd/initiatives/INIT-005-learner-experience-and-identity/INIT-005-shell-spike-decision.md`
+- [x] Spike note: `sdd/archive/initiatives/INIT-005-learner-experience-and-identity/INIT-005-shell-spike-decision.md`
 - [x] Tests covering no full reload on nav click (as far as `node --test` can) and direct URL
 - [x] Completion summary
 

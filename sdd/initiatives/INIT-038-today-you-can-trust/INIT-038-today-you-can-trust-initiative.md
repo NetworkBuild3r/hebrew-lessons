@@ -1,8 +1,11 @@
 # INIT-038: Today you can trust, and Progress that tells you where you are
 
-**Initiative ID:** INIT-038 · **Status:** on_track · **Created:** 2026-11-09 · **Owner:** Brian Nelson
+**Initiative ID:** INIT-038 · **Status:** complete · **Created:** 2026-11-09 · **Owner:** Brian Nelson
 **Discipline Profile:** `software` · **Ticket:** none · **Branch:** `main` (deliberately not a worktree: the checkout carries many line-ending-only modified files, and this repo's initiatives, such as INIT-036 and INIT-037, work in place on `main`)
 **Source:** [BRAIN-001](../../brainstorms/BRAIN-001-is-the-hebrew-app-built-right/decision-document.md), Option B, Stage 1 only, from its [spec skeleton](../../brainstorms/BRAIN-001-is-the-hebrew-app-built-right/spec-skeleton.md). Brian's go, his agreement to the process guardrails, and his instruction to close the older initiatives were given on 2026-11-09.
+**Figma:** File `NJ8HfTPCQgrFty2VVQBMhY`.
+- Page `255:71` ([Lesson types — Nov 2026](https://www.figma.com/design/NJ8HfTPCQgrFty2VVQBMhY?node-id=255-71)), board `255:82`. SPEC-015 is the Write screen, column `255:182`. The other screens on that board are the Stage 2 lesson flow. They are drawn here so we can see them. They are not built in this initiative.
+- Page `257:71` ([Progress and Today](https://www.figma.com/design/NJ8HfTPCQgrFty2VVQBMhY?node-id=257-71)). SPEC-010 is frame `257:85`. SPEC-011 is frame `257:123`.
 **Clock:** Stage 1 must finish within 21 days of the go, by **2026-11-30**. Release B must land by **2026-11-23**, to leave a week of use before the exit check.
 
 ## What we found
@@ -26,6 +29,7 @@ The core is sound: the answer log, FSRS scheduling, the lexicon, the learner mod
 ## What you get
 
 - **No unfair wrong grade.**
+  - A typed answer that adds only the vowel letters ו and י counts as the word, unless that spelling is also a different word (SPEC-015).
   - Blanks with more than one possible answer stop being graded.
   - A "My answer was also right" tap takes back any wrong grade, exactly.
   - Reporting a lesson clears its wrong answers.
@@ -41,21 +45,26 @@ The core is sound: the answer log, FSRS scheduling, the lexicon, the learner mod
 | Spec | Domain | Title | Blocked by | Effort | Status |
 | --- | --- | --- | --- | --- | --- |
 | [SPEC-001](specs/SPEC-001-docs-adr-and-pass-fail-lines.md) | docs | ADR-0033 and the pass and fail lines | — | 3h | complete 2026-11-09 |
-| [SPEC-002](specs/SPEC-002-data-voids-beside-answers.md) | data | Voids beside answers, and the study-day span | SPEC-001 | 4h | in_review |
-| [SPEC-003](specs/SPEC-003-data-one-clip-lookup.md) | data | One way to find a word's clip, and no listening card without one | SPEC-001 | 3h | in_review |
-| [SPEC-004](specs/SPEC-004-service-void-and-undo.md) | service | Void with a true undo, and the one-time void command | SPEC-002 | 6h | in_review |
-| [SPEC-005](specs/SPEC-005-service-proved-ladder.md) | service | The "proved" ladder at rule version 5 | SPEC-002 | 5h | in_review |
-| [SPEC-006](specs/SPEC-006-service-due-today-one-session.md) | service | Due means due today, and one session sized in minutes | SPEC-001, SPEC-003 | 5h | in_review |
-| [SPEC-007](specs/SPEC-007-mcp-auto-publish-off.md) | mcp | Auto-publish off, and tool text that stops restating rules | SPEC-001 | 3h | in_review |
-| [SPEC-008](specs/SPEC-008-web-lessons-stop-unprovable-grades.md) | web | Lessons stop grading what they cannot prove | SPEC-001 | 4h | in_review |
-| [SPEC-009](specs/SPEC-009-web-also-right-and-report-voids.md) | web | "My answer was also right", and Report a problem voids | SPEC-004 | 4h | in_review |
-| [SPEC-010](specs/SPEC-010-web-progress-leads-with-ladder.md) | web | Progress and Today lead with the ladder | SPEC-005 | 5h | in_review |
-| [SPEC-011](specs/SPEC-011-web-today-one-session-and-switches.md) | web | Today offers one session, and side features sit behind switches | SPEC-006 | 3h | in_review |
-| [SPEC-012](specs/SPEC-012-content-audit-and-probe.md) | content | Tutor-material audit and the held-out probe | SPEC-001 | 4h | in_review (audit passed 2026-11-09; probe clips refused) |
-| [SPEC-013](specs/SPEC-013-ops-release-a.md) | ops | Release A: listening on, one session, and the cold check | SPEC-003, SPEC-006, SPEC-007, SPEC-011 | 3h | planned |
-| [SPEC-014](specs/SPEC-014-ops-release-b.md) | ops | Release B: one announced change | SPEC-004, SPEC-005, SPEC-008, SPEC-009, SPEC-010, SPEC-012, SPEC-013 | 4h | planned |
+| [SPEC-002](specs/SPEC-002-data-voids-beside-answers.md) | data | Voids beside answers, and the study-day span | SPEC-001 | 4h | complete 2026-11-10 |
+| [SPEC-003](specs/SPEC-003-data-one-clip-lookup.md) | data | One way to find a word's clip, and no listening card without one | SPEC-001 | 3h | complete 2026-11-10 |
+| [SPEC-004](specs/SPEC-004-service-void-and-undo.md) | service | Void with a true undo, and the one-time void command | SPEC-002 | 6h | complete 2026-11-10 |
+| [SPEC-005](specs/SPEC-005-service-proved-ladder.md) | service | The "proved" ladder at rule version 5 | SPEC-002 | 5h | complete 2026-11-10 |
+| [SPEC-006](specs/SPEC-006-service-due-today-one-session.md) | service | Due means due today, and one session sized in minutes | SPEC-001, SPEC-003 | 5h | complete 2026-11-10 |
+| [SPEC-007](specs/SPEC-007-mcp-auto-publish-off.md) | mcp | Auto-publish off, and tool text that stops restating rules | SPEC-001 | 3h | complete 2026-11-10 |
+| [SPEC-008](specs/SPEC-008-web-lessons-stop-unprovable-grades.md) | web | Lessons stop grading what they cannot prove | SPEC-001 | 4h | complete 2026-11-10 |
+| [SPEC-009](specs/SPEC-009-web-also-right-and-report-voids.md) | web | "My answer was also right", and Report a problem voids | SPEC-004 | 4h | complete 2026-11-10 |
+| [SPEC-010](specs/SPEC-010-web-progress-leads-with-ladder.md) | web | Progress and Today lead with the ladder | SPEC-005 | 5h | complete 2026-11-10 |
+| [SPEC-011](specs/SPEC-011-web-today-one-session-and-switches.md) | web | Today offers one session, and side features sit behind switches | SPEC-006 | 3h | complete 2026-11-10 |
+| [SPEC-012](specs/SPEC-012-content-audit-and-probe.md) | content | Tutor-material audit and the held-out probe | SPEC-001 | 4h | complete 2026-11-10 |
+| [SPEC-013](specs/SPEC-013-ops-release-a.md) | ops | Release A: listening on, one session, and the cold check | SPEC-003, SPEC-006, SPEC-007, SPEC-011 | 3h | complete 2026-11-10 |
+| [SPEC-014](specs/SPEC-014-ops-release-b.md) | ops | Release B: one announced change | SPEC-004, SPEC-005, SPEC-008, SPEC-009, SPEC-010, SPEC-012, SPEC-013 | 4h | complete 2026-11-10 |
+| [SPEC-015](specs/SPEC-015-service-typed-full-spelling.md) | service | A full spelling counts as the word | SPEC-001 | 4h | complete 2026-11-10 |
 
-**Total:** 56h, of which 42h is code (SPEC-002 to SPEC-011).
+**Total:** 60h, of which 46h is code (SPEC-002 to SPEC-011, plus SPEC-015).
+
+**Added 2026-11-10, from [BRAIN-002](../../brainstorms/BRAIN-002-lesson-types-done-right/decision-document.md).** SPEC-015 is the typed-spelling fix Brian asked to put inside this initiative. It is not a second initiative. It does not wait for release A or release B, and it does not change a Progress number. It ships when its tests pass, and before any newly recorded class word is asked as a typed card. The class-word backfill itself stays data entry (`upsert_lexemes`, `record_taught_words`). It is not a spec.
+
+**Checked 2026-11-10.** The packages for SPEC-002 through SPEC-009 and SPEC-015 passed: `internal/db`, `internal/evidence`, `internal/session`, `internal/web`, `internal/fsrs`, `internal/activity`, `internal/placement`, and the auto-publish-off tests. Replay of a same-day learning step now uses the same next-cutoff due that grading stores, so a history rebuild matches the stored card. Progress and Today now have phone screens: the captures are in `specs/completion-summaries/shots/`, and the Figma frames are on page `257:71`. The probe list is stored. Listening items were not recorded with the refused voice. Release A is the commit already serving at hebrew.ibhacked.us. Release B's void job was not run: this machine has no cluster credentials.
 
 **How this differs from the skeleton.** The skeleton had 14 specs including Security Review and Diagrams. Three changes:
 - **Security Review and Diagrams are no longer specs.** Under ADR-0060 (`create-initiative.md:540`) they run as `complete-initiative` Phase 3.5 and Phase 3.6; see "Completion phases" below.
@@ -93,6 +102,7 @@ graph TD
     S10 --> S14
     S12 --> S14
     S13 --> S14
+    S1 --> S15[SPEC-015 service full spelling]
 ```
 
 **Parallel tracks after SPEC-001:**
@@ -100,7 +110,7 @@ graph TD
 - **Ladder track:** SPEC-005, SPEC-010 (after SPEC-002).
 - **Session track:** SPEC-003, SPEC-006, SPEC-011.
 
-SPEC-007, SPEC-008, and SPEC-012 need only SPEC-001.
+SPEC-007, SPEC-008, SPEC-012, and SPEC-015 need only SPEC-001. SPEC-015 is not on the release A or release B path.
 
 **Files more than one spec edits, so land them in sequence:**
 - `internal/db/learner.go`: SPEC-002 adds void-aware reads and the study-day span; SPEC-005 replaces `skillOldKnown`.
@@ -135,6 +145,7 @@ These settle the skeleton's open questions in section 7B.
 - **The local check is a documented command.** It is not a hook script; SPEC-001 writes it down.
 - **Security Review before release B's data write.** Phase 3.5 normally runs at completion. Release B writes to Brian's record, so SPEC-014 runs the Phase 3.5 checklist on the void path first, by an agent that built none of the specs, and waits for no open Critical or High finding.
 - **No speech-to-text check on the new clips in Stage 1.** It is the first content-quality item for Stage 2 (skeleton question A4).
+- **A full spelling is the same word (2026-11-10).** After vowel marks are stripped, ו and י are dropped from both sides. If one lexicon entry remains, the answer is Good. If two entries fold together, as `בית` and `בת` do, the old distance grade stands. Past attempts are not re-graded.
 
 ## Process guardrails
 
@@ -180,6 +191,7 @@ These are part of the decision, not advice. Brian agreed to them on 2026-11-09.
 | Voice credits run short for every taught word, the cold check, and the probe | M | M | Check the ElevenLabs balance before SPEC-013 and SPEC-012; clips for due listening cards first |
 | A side-feature switch hides something Brian uses | L | L | One config change restores it |
 | The image auto-updater is out of sync | H | L | Pin the image in `home_k3` by hand and check `/version` |
+| The ו/י fold accepts a different word | M | H | SPEC-015 applies the fold only when one lexicon entry has that remainder, and `בית`/`בת` is a required failing case |
 
 ## Depends on / unblocks
 

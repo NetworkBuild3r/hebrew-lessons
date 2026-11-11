@@ -7,7 +7,7 @@ spec_id: SPEC-004
 initiative_id: INIT-038
 title: "Void with a true undo, and the one-time void command"
 domain: service
-status: in_review
+status: complete
 primary_prompt: none
 complexity: high
 complexity_reason: the replay must reproduce every scheduler field exactly, and the command writes to production evidence

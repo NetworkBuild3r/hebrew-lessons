@@ -279,7 +279,7 @@ func simulate(t testing.TB, e *Engine, seed int64, sc script) (RunResult, []db.P
 					continue
 				}
 				stored, _ := parseStored(rc.items[j].Options)
-				outcome, picked, _, err := judge(d, rc.items[j], stored, state.answer(d, rc.items[j]))
+				outcome, picked, _, err := judge(d, rc.items[j], stored, state.answer(d, rc.items[j]), nil)
 				if err != nil {
 					t.Fatalf("seed %d: %v", seed, err)
 				}

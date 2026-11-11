@@ -288,20 +288,45 @@ Direction, from the transcript:
 - One question engine. The authoring docs are generated from the rule catalog. Replays, playback speed, and the number of options are logged.
 - The unit pipeline retires after two to three weeks of use. Units are archived, never deleted.
 
+**Superseded 2026-11-10 by [BRAIN-002](../BRAIN-002-lesson-types-done-right/decision-document.md).** BRAIN-002 changed the Stage 2 plan:
+- **First build:** the word lesson and the easy lesson, on a new thin player.
+- **Word source:** words come from every loaded class sheet, not only the newest class.
+- **Today:** it always offers a lesson.
+- **Deferred or cut:** listening waits for a voice, and the spelling lesson is cut.
+
+Its [`spec-skeleton.md`](../BRAIN-002-lesson-types-done-right/spec-skeleton.md) replaces P-01 to P-13 below and maps each one to kept, merged, or cut. The text below is kept for history.
+
+**Revised 2026-11-10, with Brian.** The lessons Stage 2 builds are the five lesson types in [`docs/design/lesson-architecture.md`](../../../docs/design/lesson-architecture.md): word, conjugation, listening, easy, and spelling. **Code assembles every lesson.** The AI writes one thing, the story, and the story is never graded. Brian chose this over keeping AI-written units under a stricter validator ([ASMT-006](../../assessments/ASMT-006-hebrew-lesson-types/ASMT-006-hebrew-lesson-types-assessment-report.md), Part B). An outside AI cannot get a lesson's shape wrong, because it never supplies the shape. Where each part of a lesson comes from:
+
+| Lesson step | Built from | Graded? |
+| --- | --- | --- |
+| Word grid: pointed form, Listen, part of speech, binyan, meaning, verb forms closed | The class pack's taught words, 4 at a time, and the lexicon | No |
+| Meaning check | Lexicon glosses as the buttons. A miss shows the meaning and asks once more. | Yes. The key is the lexicon. |
+| Story, tap a word, repeat the line | One story the AI writes for that lesson, checked for pointing, lexicon, coverage, and length | No |
+| Write it: type the word, Hebrew hidden | The lexicon spelling, compared unpointed, full and short spellings | Yes |
+| Use it in a sentence: order, dictation, "which line did you hear" | The tutor's sentence bank | Yes. The key is the tutor's line. |
+| Conjugation forms and practice | `verb_forms` of verbs already taught | Yes. The key is the stored form. |
+| Comprehension on a story | A question whose answer is a span of the story | Yes, only when it is a span |
+
+If the audit fails (G2), the word, easy, and spelling lessons still work from words added with `record_taught_words`. The sentence steps become ungraded reveals, because there is no tutor sentence bank.
+
 | Provisional spec | Domain | Provisional title |
 | --- | --- | --- |
-| P-01 | docs | ADR: class packs, trusted keys, and what the AI may write |
+| P-01 | docs | ADR: class packs, trusted keys, the five lesson types assembled by code, and the AI writes only the story. It supersedes ADR-0026's lesson-shape decisions. |
 | P-02 | data | Class pack tables: a tutor lesson record and a sentence bank with separate tutor and learner text fields, source, token-to-word links, target, and a retired time |
 | P-03 | mcp | Import a class from Drive into a pack, with per-item checks; add and retire single items |
 | P-04 | content | Backfill the last 8 to 10 classes into packs |
-| P-05 | service | Sentence items as a new kind in the existing review and session code (dictation, "which line did you hear", sentence order) |
-| P-06 | service | Typed production graded on target words, unpointed, with full and short spellings |
-| P-07 | web | Class practice inside Today's session, and an ungraded reading view with span-graded comprehension |
-| P-08 | data | Log playback speed, replays, and the number of options per answer |
-| P-09 | mcp | Authoring docs and tool descriptions generated from the rule catalog, with a test |
-| P-10 | service | The weekly note for the tutor in the digest |
-| P-11 | ops | Archive units 12 to 34, then retire the unit pipeline after two to three weeks of use |
-| P-12 | docs | Security Review, and Architecture and Design Diagrams (as the convention in open question B1 settles) |
+| P-05 | service | The lesson picker. It chooses the type and the words: a word lesson with 4 taught words not yet introduced (up to 8 past the beginner tier); easy when accuracy is low or too many words are learning; conjugation when taught verbs have forms not yet taught; listening when listening is weakest; spelling after the letters check. It replaces `internal/brief`. |
+| P-06 | service | One question engine for lessons and review: the meaning check with a second ask, typed production graded on target words (unpointed, full and short spellings), dictation, "which line did you hear", sentence order, and the conjugation form pick |
+| P-07 | web | The five lesson screens: the word grid, the meaning check, the story with tap and repeat, typed writing, the sentence steps, the forms screen, an ungraded reading view with span-graded comprehension, and a lesson-type label on Today |
+| P-08 | mcp | The story slot: the AI reads a planned lesson and writes its one story, checked by the existing pointing, lexicon, coverage, length, and taught-word rules. Authoring docs and tool descriptions are generated from the rule catalog, with a test. The worksheet templates, `topic-conversation` included, retire. |
+| P-09 | service | Record the letters check, so the picker can choose a spelling lesson |
+| P-10 | data | Log playback speed, replays, and the number of options per answer |
+| P-11 | service | The weekly note for the tutor in the digest |
+| P-12 | ops | Archive units 12 to 34. After two to three weeks of use, retire the unit pipeline: `put_unit`, `publish_unit`, `get_lesson_brief`, the unit shape rules, and the author and reviser skills. |
+| P-13 | docs | Security Review, and Architecture and Design Diagrams (as the convention in open question B1 settles) |
+
+Order: P-01, then P-02 to P-04 (the packs), then P-05 and P-06 together, then P-07 (screens) before P-08 (the story slot), then P-12 last. P-09 to P-11 can go at any point after P-02. [ASMT-006](../../assessments/ASMT-006-hebrew-lesson-types/ASMT-006-hebrew-lesson-types-assessment-report.md) Part A has the file-level findings for P-05 to P-07: for example, lesson `produce` is buttons today, not typing.
 
 ---
 

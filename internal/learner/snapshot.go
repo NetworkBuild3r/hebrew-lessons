@@ -96,6 +96,10 @@ func (m *Model) evaluateSnapshot(ctx context.Context, userID int64, at, asOf tim
 		return Snapshot{}, err
 	}
 
+	zone, err := m.store.StudyZone(ctx, userID)
+	if err != nil {
+		return Snapshot{}, err
+	}
 	mismatch := 0
 	if live {
 		mismatch, err = countReplayMismatches(histories, zone)

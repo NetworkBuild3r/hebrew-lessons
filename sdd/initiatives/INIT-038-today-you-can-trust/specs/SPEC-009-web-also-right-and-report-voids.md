@@ -7,7 +7,7 @@ spec_id: SPEC-009
 initiative_id: INIT-038
 title: "\"My answer was also right\", and Report a problem voids"
 domain: web
-status: in_review
+status: complete
 primary_prompt: none
 complexity: medium
 complexity_reason: a learner action that changes the learner's own record, which must be limited to their own answers

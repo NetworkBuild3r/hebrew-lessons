@@ -94,7 +94,7 @@ Independent verifier dispatch (fresh agent, no researcher context): PASS after 2
 [16] RSCH-006 — sdd/research/README.md row (learner-interface rules; word+meaning+picture Moderate, WCAG High)
 [17] ADR-0006 — docs/decisions/ADR-0006-visual-language-and-interface-rules.md (rules 10, 11, 14, 16, 17; hook contract)
 [18] ADR-0007 context — shared/app-shell.js NAV/renderHtml; shared/layout.js page(); shared/today-page.js cards; server/web.js handleStatic (login gating)
-[19] INIT-005 — sdd/initiatives/INIT-005-learner-experience-and-identity/INIT-005-learner-experience-and-identity-initiative.md (REQ-010–017; SPEC-005 RSCH-007 plan — note: this standalone RSCH-007 now occupies that number; SPEC-005's planned session should take RSCH-008)
+[19] INIT-005 — sdd/archive/initiatives/INIT-005-learner-experience-and-identity/INIT-005-learner-experience-and-identity-initiative.md (REQ-010–017; SPEC-005 RSCH-007 plan — note: this standalone RSCH-007 now occupies that number; SPEC-005's planned session should take RSCH-008)
 
 Provenance: INIT-005-adjacent standalone research; prior_art_review; narrative_bluf.
 

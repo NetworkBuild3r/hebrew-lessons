@@ -9,7 +9,7 @@
 **Ticket:** None (`branch_naming.ticket_system: none`)
 **Branch:** `design-and-usability` (not yet created — ASMT-002 is uncommitted in this checkout, so a worktree from HEAD would not contain the source assessment. Planning stays here. No commit unless the operator asks.)
 **Target Completion:** not a promise. The spec table is an estimate that starts when the operator says to execute.
-**Source:** [ASMT-002](../../assessments/ASMT-002-hebrew-web-app/ASMT-002-hebrew-web-app-assessment-report.md) (design and usability, eval PASS). Standards cited there: RSCH-006, RSCH-007, RSCH-008, RSCH-010, WCAG 2.2 AA, Nielsen heuristics. This initiative does not absorb ASMT-001's learning-loop work. ASMT-001's front-door spec is covered here by SPEC-004, SPEC-005, and SPEC-006.
+**Source:** [ASMT-002](../../../assessments/ASMT-002-hebrew-web-app/ASMT-002-hebrew-web-app-assessment-report.md) (design and usability, eval PASS). Standards cited there: RSCH-006, RSCH-007, RSCH-008, RSCH-010, WCAG 2.2 AA, Nielsen heuristics. This initiative does not absorb ASMT-001's learning-loop work. ASMT-001's front-door spec is covered here by SPEC-004, SPEC-005, and SPEC-006.
 
 ---
 

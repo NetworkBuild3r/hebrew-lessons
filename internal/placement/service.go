@@ -279,7 +279,14 @@ func (e *Engine) Answer(ctx context.Context, userID, runID int64, itemID string,
 	if err != nil {
 		return Step{}, err
 	}
-	outcome, picked, chosen, err := judge(d, *open, stored, in)
+	var otherForms []string
+	if open.Part == string(PartTyping) {
+		otherForms, err = e.store.LexemeConsonantForms(ctx)
+		if err != nil {
+			return Step{}, err
+		}
+	}
+	outcome, picked, chosen, err := judge(d, *open, stored, in, otherForms)
 	if err != nil {
 		return Step{}, err
 	}
@@ -340,7 +347,9 @@ func (e *Engine) Answer(ctx context.Context, userID, runID int64, itemID string,
 
 // judge decides the outcome of an answer from the item the server stored, and returns what was picked
 // or typed and the fixture id of the word a wrong pick names. It refuses an answer that does not fit.
-func judge(d *deckV3, it db.PlacementItem, stored storedItem, in AnswerIn) (outcome, picked, chosen string, err error) {
+// otherForms are the other lexicon consonant spellings for GradeTypedAmong (INIT-038/SPEC-015);
+// placement accepts Good only.
+func judge(d *deckV3, it db.PlacementItem, stored storedItem, in AnswerIn, otherForms []string) (outcome, picked, chosen string, err error) {
 	typed := strings.TrimSpace(in.Typed)
 	set := 0
 	for _, on := range []bool{in.Option != "", typed != "", in.DontKnow} {
@@ -359,7 +368,7 @@ func judge(d *deckV3, it db.PlacementItem, stored storedItem, in AnswerIn) (outc
 			return "", "", "", ErrBadAnswer
 		}
 		w := d.byID[it.ItemID]
-		if fsrs.GradeTyped(w.Text, typed) == fsrs.Good {
+		if fsrs.GradeTypedAmong(w.Text, typed, otherForms) == fsrs.Good {
 			return OutcomeRight, typed, "", nil
 		}
 		return OutcomeWrong, typed, "", nil

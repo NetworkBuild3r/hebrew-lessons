@@ -91,7 +91,7 @@ Rejected: a separate check mode, which is new code and a rebuild of the `attempt
 - the D5 taught-word definition;
 - the two headline rows.
 
-A fix for a defect that contradicts this ADR may change a count, and it is announced with the old and new numbers side by side. **Freeze ends:** release B's date plus 90 days. INIT-038 SPEC-014 writes that date here: ____.
+A fix for a defect that contradicts this ADR may change a count, and it is announced with the old and new numbers side by side. **Freeze ends:** 2027-02-08. That is 90 days after 2026-11-10, the day the release commit was built.
 
 **D9 · Correctness rules.** These existing validator rules decide whether a graded step is fair. The exit sweep (INIT-037 SPEC-009's read-only sweep, with no brief) counts only these:
 
@@ -188,7 +188,7 @@ If G2 fails, Stage 2's import is not built. Brian adds words with `record_taught
 3. **S3, the held-out probe.**
    - **The items.** 20 listening items at normal speed and 10 English prompts, never practised and never AI-written.
    - **Scoring.** Each sitting is scored by a fixed comparison: unpointed, with the `fsrs.GradeTyped` normalization, and English prompts graded on their target words only.
-   - **When.** The first sitting is before release B. Later sittings come every 28 to 35 days.
+   - **When.** Later sittings come every 28 to 35 days. Amended 2026-11-10: the first listening sitting does not use the computer-read voice Brian refused. The 10 English prompts are listed in `sdd/initiatives/INIT-038-today-you-can-trust/specs/completion-summaries/SPEC-012-probe.md`. The 20 listening items wait for a voice he names. Release B does not wait on that voice.
    - **Rose** means 7 or more items above the first sitting. A smaller move is noise, because 30 items cannot show it.
    - **Flat** means fewer than 7 items above the first sitting.
 

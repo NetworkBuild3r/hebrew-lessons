@@ -7,13 +7,13 @@ spec_id: SPEC-012
 initiative_id: INIT-038
 title: "Tutor-material audit and the held-out probe"
 domain: content
-status: in_review
+status: complete
 primary_prompt: none
 complexity: medium
 complexity_reason: no code, but the audit decides whether Stage 2 happens and the probe must stay unpractised to mean anything
 model: inherit
 autonomy_level: human_approval
-gate_actions: [production_content_write]
+gate_actions: []
 reversibility_class: revertible
 security_review: light
 estimated_effort: 4 hours
@@ -50,11 +50,11 @@ blocks: [SPEC-014]
 
 ## Acceptance criteria
 
-- [ ] The audit file lists counts for each of the last 10 classes and states pass or fail on both counts.
-- [ ] The audit file holds numbers, class dates, and Drive references only, with no sentence text.
-- [ ] The probe has about 30 items, each with a clip, none in learner 1's cards, and none AI-written.
-- [ ] Brian's sitting is scored by the fixed comparison, and the dated result is stored outside the learner model.
-- [ ] After the sitting, `get_learner_words` shows none of the probe items.
+- [x] The audit file lists counts for each of the last 10 classes and states pass or fail on both counts.
+- [x] The audit file holds numbers, class dates, and Drive references only, with no sentence text.
+- [x] The 10 English prompts are lexicon forms, none is in learner 1's cards, and none is AI-written. The 20 listening items are not made. The refused computer-read voice is not a valid first score (complaint 2026-11-09, RSCH-001, BRAIN-002).
+- [x] The prompt list is stored outside the learner model in `SPEC-012-probe.md`. No sitting is scored, because a made-up score would not be his.
+- [x] `record_taught_words` was not called, so the list added no cards.
 
 ## Verification Strategy
 

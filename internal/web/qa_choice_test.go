@@ -70,6 +70,24 @@ func TestQAChoiceButtons(t *testing.T) {
 		otherFirst := getAuthed(t, other.h, other.cookie, path)
 		otherAgain := getAuthed(t, other.h, other.cookie, path)
 
+		if act.Type == units.ActivityProduce {
+			// Write is typed: a Hebrew field and no buttons, graded on what is typed.
+			lex, ok := qaActivityLexeme(act, byText)
+			if !ok {
+				t.Fatalf("step %d produce target %s is not a fixture lexeme", step, act.Text)
+			}
+			for _, body := range []string{first, again, otherFirst, otherAgain} {
+				if strings.Contains(body, `class="choices"`) || !strings.Contains(body, "data-hk-input") {
+					t.Fatalf("step %d typed Write is not a field:\n%s", step, choiceRegion(body))
+				}
+			}
+			run, otherRun := runValue(t, first), runValue(t, otherFirst)
+			gradeChoice(t, primary, path, run, lex.Text, "feedback--right")
+			advanceChoice(t, primary, path, run)
+			gradeChoice(t, other, path, otherRun, lex.Text, "feedback--right")
+			advanceChoice(t, other, path, otherRun)
+			continue
+		}
 		ask := qaReadAsk(t, first, act, byText)
 		againAsk := qaReadAsk(t, again, act, byText)
 		otherAsk := qaReadAsk(t, otherFirst, act, byText)
@@ -123,6 +141,16 @@ func TestQAChoiceButtons(t *testing.T) {
 	for step, act := range check.Activities {
 		first := getAuthed(t, fx.h, fx.cookie, checkPath)
 		again := getAuthed(t, fx.h, fx.cookie, checkPath)
+		if act.Type == units.ActivityProduce {
+			lex, ok := qaActivityLexeme(act, byText)
+			if !ok || strings.Contains(first, `class="choices"`) || !strings.Contains(first, "data-hk-input") {
+				t.Fatalf("checkpoint step %d typed Write is not a field:\n%s", step, choiceRegion(first))
+			}
+			run := runValue(t, first)
+			gradeChoice(t, primary, checkPath, run, lex.Text, "feedback--right")
+			advanceChoice(t, primary, checkPath, run)
+			continue
+		}
 		ask := qaReadAsk(t, first, act, byText)
 		againAsk := qaReadAsk(t, again, act, byText)
 		if ask.runID != againAsk.runID {
@@ -266,7 +294,7 @@ func assertGradedTypes(t *testing.T, acts []units.Activity) {
 	for _, typ := range []string{
 		units.ActivityRecall,
 		units.ActivityListenPick,
-		units.ActivityProduce,
+		units.ActivityProduce, // typed, handled in the step loop
 		units.ActivityCloze,
 	} {
 		if !seen[typ] {
@@ -433,7 +461,8 @@ func assertChoiceInvariants(t *testing.T, step int, typ string, ask qaAsk) {
 
 func assertChoiceSpread(t *testing.T, label string, asks []qaAsk) {
 	t.Helper()
-	if len(asks) < 4 {
+	// Write is typed and has no buttons, so a lesson has one fewer button ask than it had.
+	if len(asks) < 3 {
 		t.Fatalf("%s rendered %d targets", label, len(asks))
 	}
 	posCount := map[int]int{}
@@ -455,6 +484,10 @@ func assertChoiceSpread(t *testing.T, label string, asks []qaAsk) {
 	if len(sets) < 2 {
 		t.Fatalf("%s every target shares one distractor set: %v", label, sets)
 	}
+	// Each target should turn up as a wrong answer on another step. Write is typed now, so
+	// there are fewer button steps to draw from: one miss is allowed, two are not.
+	missing := 0
+	var missed string
 	for id, text := range targets {
 		found := false
 		for _, ask := range asks {
@@ -467,8 +500,12 @@ func assertChoiceSpread(t *testing.T, label string, asks []qaAsk) {
 			}
 		}
 		if !found {
-			t.Fatalf("%s target %s (%s) is absent from every other target's distractors", label, text, id)
+			missing++
+			missed = fmt.Sprintf("%s (%s)", text, id)
 		}
+	}
+	if missing > 1 {
+		t.Fatalf("%s: %d targets are absent from every other target's distractors, last %s", label, missing, missed)
 	}
 }
 

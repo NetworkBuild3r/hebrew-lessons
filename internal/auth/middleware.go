@@ -150,6 +150,9 @@ func (s *Service) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /auth/google/start", s.handleGoogleStart)
 	mux.HandleFunc("GET /auth/google/callback", s.handleGoogleCallback)
 	mux.HandleFunc("POST /auth/logout", s.handleLogout)
+	if s.localDev {
+		mux.HandleFunc("POST /auth/local", s.handleLocalSignIn)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, code string) {

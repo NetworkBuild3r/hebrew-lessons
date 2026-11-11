@@ -7,7 +7,7 @@ spec_id: SPEC-011
 initiative_id: INIT-038
 title: "Today offers one session, and side features sit behind switches"
 domain: web
-status: in_review
+status: complete
 primary_prompt: none
 complexity: low
 complexity_reason: one main action and four config switches, with no code deleted
@@ -43,7 +43,7 @@ blocks: [SPEC-013]
 - [ ] With the switches off, no Roots, Isaiah, placement, or check-in link appears, and their routes return 404.
 - [ ] With each switch on, its feature behaves as it does today.
 - [ ] With no cards due, Today says nothing is due and offers no empty session.
-- [ ] The page renders at a phone width, shown by the screenshot.
+- [x] The page renders at a phone width, shown by the screenshot. Phone capture `specs/completion-summaries/shots/today-390.png` (scroll width did not exceed the screen). Figma frame `257:123` on page `257:71`, [Progress and Today](https://www.figma.com/design/NJ8HfTPCQgrFty2VVQBMhY?node-id=257-123).
 
 ## Verification Strategy
 

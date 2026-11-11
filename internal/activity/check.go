@@ -57,7 +57,16 @@ func (e *Engine) Check(ctx context.Context, userID int64, token string, resp Res
 	}
 
 	lookup := func(text string) (Word, bool) { return e.wordByText(ctx, userID, p.lexeme, text) }
-	g, err := grade(p, resp, now.Sub(p.builtAt), lookup)
+	var others []string
+	if spec, _ := SpecOf(p.kind); spec.Typed {
+		var formErr error
+		others, formErr = e.otherConsonantForms(ctx, userID, p.lexeme)
+		if formErr != nil {
+			e.pending.release(p)
+			return Result{}, formErr
+		}
+	}
+	g, err := grade(p, resp, now.Sub(p.builtAt), lookup, others)
 	if err != nil {
 		e.pending.release(p)
 		return Result{}, err
@@ -110,6 +119,24 @@ func (e *Engine) wordByText(ctx context.Context, userID, except int64, text stri
 	return Word{}, false
 }
 
+// otherConsonantForms returns every other lexeme's pointed text for the mater
+// fold check in GradeTypedAmong (INIT-038/SPEC-015). ActivityPool already
+// holds the whole lexicon, so this reuses that set.
+func (e *Engine) otherConsonantForms(ctx context.Context, userID, except int64) ([]string, error) {
+	words, err := e.loadWords(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(words))
+	for _, w := range words {
+		if w.ID == except {
+			continue
+		}
+		out = append(out, w.Text)
+	}
+	return out, nil
+}
+
 // graded is what grade works out before anything is written.
 type graded struct {
 	attempts []evidence.Attempt
@@ -119,9 +146,10 @@ type graded struct {
 }
 
 // grade turns a response into the attempts to write and the result. It reads no store: lookup
-// finds the word a typed answer spells when it is another word. It validates the response
-// against the item and returns ErrBadResponse when it does not fit.
-func grade(p *pending, resp Response, elapsed time.Duration, lookup func(string) (Word, bool)) (graded, error) {
+// finds the word a typed answer spells when it is another word. otherForms are the other
+// lexicon consonant spellings for GradeTypedAmong (INIT-038/SPEC-015). It validates the
+// response against the item and returns ErrBadResponse when it does not fit.
+func grade(p *pending, resp Response, elapsed time.Duration, lookup func(string) (Word, bool), otherForms []string) (graded, error) {
 	if elapsed < 0 {
 		elapsed = 0
 	}
@@ -130,7 +158,7 @@ func grade(p *pending, resp Response, elapsed time.Duration, lookup func(string)
 	case spec.Multi:
 		return gradeMatch(p, resp, elapsed)
 	case spec.Typed:
-		return gradeTyped(p, resp, elapsed, lookup)
+		return gradeTyped(p, resp, elapsed, lookup, otherForms)
 	default:
 		return gradePick(p, resp, elapsed)
 	}
@@ -177,7 +205,7 @@ func gradePick(p *pending, resp Response, elapsed time.Duration) (graded, error)
 	return graded{attempts: []evidence.Attempt{a}, result: res}, nil
 }
 
-func gradeTyped(p *pending, resp Response, elapsed time.Duration, lookup func(string) (Word, bool)) (graded, error) {
+func gradeTyped(p *pending, resp Response, elapsed time.Duration, lookup func(string) (Word, bool), otherForms []string) (graded, error) {
 	text := strings.TrimSpace(resp.Text)
 	if !resp.DontKnow && (text == "" || len(resp.Text) > MaxResponseBytes) {
 		return graded{}, ErrBadResponse
@@ -187,7 +215,7 @@ func gradeTyped(p *pending, resp Response, elapsed time.Duration, lookup func(st
 	res := Result{Answer: anchor.Text, Text: anchor.Text, Gloss: anchor.Gloss, AudioID: anchor.AudioID}
 	if !resp.DontKnow {
 		a.Response = text
-		rating := fsrs.GradeTyped(p.expected, text)
+		rating := fsrs.GradeTypedAmong(p.expected, text, otherForms) // INIT-038/SPEC-015
 		a.Correct = rating != fsrs.Again
 		a.NearMiss = rating == fsrs.Hard
 		res.NearMiss = a.NearMiss

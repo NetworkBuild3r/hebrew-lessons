@@ -50,6 +50,7 @@ type server struct {
 	showIsaiah    bool
 	showPlacement bool
 	showCheckIn   bool
+	localDev      bool
 	zones         *studyday.Resolver
 	speech        *audio.Generator
 

@@ -1,6 +1,6 @@
 # INIT-038/SPEC-011 completion summary: Today offers one session
 
-**Status:** in_review, 2026-11-09. Written by the orchestrator from [Today one session](c5a2aaf0-977e-4043-87dc-1b0a71235c6f)'s return. Not independently verified.
+**Status:** complete, 2026-11-10. Written by the orchestrator from [Today one session](c5a2aaf0-977e-4043-87dc-1b0a71235c6f)'s return. Phone capture `shots/today-390.png` does not scroll sideways. Figma frame `257:123`.
 
 ## What changed
 

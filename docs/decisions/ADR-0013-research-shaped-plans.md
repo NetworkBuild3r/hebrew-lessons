@@ -193,7 +193,7 @@ No new trust boundary. Authoring stays admin-only and MCP-only on the server, as
 - [ADR-0003: Course and lesson-plan language](ADR-0003-course-and-lesson-plan-language.md)
 - [ADR-0011: AI-first plan builder](ADR-0011-ai-first-plan-builder.md)
 - [ADR-0012: Custom lesson stack](ADR-0012-custom-lesson-stack.md)
-- `sdd/initiatives/INIT-010-research-plan-authoring/INIT-010-research-plan-authoring-initiative.md`
+- `sdd/archive/initiatives/INIT-010-research-plan-authoring/INIT-010-research-plan-authoring-initiative.md`
 
 ## Changelog
 

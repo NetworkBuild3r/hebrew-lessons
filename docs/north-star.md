@@ -253,6 +253,12 @@ Transliteration fading is an opt-in learner setting (`fade_translit`, off by def
 
 ## 7. From static lessons to lessons built for me
 
+### 7.0 Lesson types
+
+The target shapes are specified in [Lesson types](design/lesson-architecture.md). Five types: **word** (about 4 new dictionary words, then a meaning check, a story, and writing), **conjugation** (one new set of forms on verbs they already know), **listening** (a passage they hear, no new words), **easy** (nothing new, a longer passage of words they are learning), and **spelling** (type known words with the Hebrew hidden). Spoken conversation is not a lesson type. Review on a later day, and the optional flashcard deck, stay outside the lesson.
+
+In the design, the app assembles each lesson from the tutor's classes and the lexicon. The AI writes only the ungraded story. This is built in Stage 2 (BRAIN-001), after the Stage 1 gate. Until then, section 7.1 describes the brief the code builds today. A word lesson in the design aims at 4 new words. The brief's 5 to 8, and 3 to 4 under 100 known words, remain the current caps.
+
 ### 7.1 The lesson brief (code)
 
 A new service function, `LessonBrief(learner, theme?)`, returns the word plan for the next lesson:

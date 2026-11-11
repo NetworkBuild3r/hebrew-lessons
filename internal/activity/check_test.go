@@ -390,6 +390,34 @@ func TestTypedAnswersAreGradedAndRecorded(t *testing.T) {
 	}
 }
 
+// INIT-038/SPEC-015: a unique mater fold is Good and not a near miss.
+func TestTypedMaterFoldIsGoodNotNearMiss(t *testing.T) {
+	w := newWorld(t)
+	id := addWord(t, w.store, "כָּתַב", "wrote", "verb", true)
+	b := w.build(t, id, TypeIt)
+	res := w.check(t, b, Response{Text: "כותב"})
+	if !res.Correct || res.NearMiss || res.Rating != fsrs.Good {
+		t.Fatalf("mater fold = %+v, want Good not near miss", res)
+	}
+	got, err := w.store.ListAttemptsBySkill(context.Background(), w.user, id, fsrs.SkillRecall)
+	mustf(t, err, "attempts")
+	if len(got) != 1 || !got[0].Correct || got[0].Response != "כותב" {
+		t.Fatalf("attempt = %+v", got)
+	}
+}
+
+// INIT-038/SPEC-015: בית and בת fold together, so the distance grade stands.
+func TestTypedMaterFoldCollisionStaysHard(t *testing.T) {
+	w := newWorld(t)
+	bat := addWord(t, w.store, "בַּת", "daughter", "noun", true)
+	_ = addWord(t, w.store, "בַּיִת", "house", "noun", true)
+	b := w.build(t, bat, TypeIt)
+	res := w.check(t, b, Response{Text: "בית"})
+	if !res.Correct || !res.NearMiss || res.Rating != fsrs.Hard {
+		t.Fatalf("collision = %+v, want Hard near miss", res)
+	}
+}
+
 // INIT-027/SPEC-003 ac-5: typed slips log only confusable pairs; a wrong pick still logs.
 func TestTypedConfusableLetterPairs(t *testing.T) {
 	t.Run("vav to mem logs nothing", func(t *testing.T) {

@@ -109,6 +109,10 @@ Recorded as [ADR-0019](../decisions/ADR-0019-hybrid-learning-model.md).
 - **Two mistakes lists**: general for the shared course, personal and private for the tuned path.
 - **Content is our own**: same structure and order as the class sheets, not the sheets themselves, unless the author agrees.
 
+## Lesson design & authoring
+
+Lesson authoring follows [Lesson types](lesson-architecture.md) and [North Star §7.0](../north-star.md). The five types are word, conjugation, listening, easy, and spelling. Spoken conversation is not one of them. In Stage 2 the app assembles these lessons from the tutor's classes, and the AI writes only the story (BRAIN-001). The brief in the code does not yet name these types.
+
 ## Roadmap
 
 Six small initiatives, each with a one-screen plan under `sdd/initiatives/`. Each ships on its own and gives the learner something visible.

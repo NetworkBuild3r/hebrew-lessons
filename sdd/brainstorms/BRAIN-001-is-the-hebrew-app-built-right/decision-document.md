@@ -255,6 +255,8 @@ Stage 2 is a separate initiative, opened only after the gate.
 - Lessons and review share one question engine, the authoring docs are generated from the rule catalog, and replays, playback speed, and the number of options are logged.
 - The unit pipeline retires after two to three weeks of use. Units are archived, never deleted.
 
+**Revised 2026-11-10 (Brian).** Stage 2's lessons take the five lesson types in [`docs/design/lesson-architecture.md`](../../../docs/design/lesson-architecture.md): word, conjugation, listening, easy, and spelling. Code assembles each lesson from the class packs and the lexicon. The AI writes only the story, and the story is never graded. The provisional spec list is in [`spec-skeleton.md`](spec-skeleton.md) §5. The gate is unchanged.
+
 ### Process Guardrails
 
 These are part of the decision, not advice.

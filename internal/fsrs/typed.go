@@ -28,6 +28,58 @@ func GradeTyped(expected, got string) Rating {
 	}
 }
 
+// GradeTypedAmong grades like GradeTyped, then treats a spelling that differs
+// only by ו and י as Good when that fold is unique among otherForms.
+// After normalizeAnswer, ו and י are dropped from both sides. When the remainders
+// match, have at least two letters, and no other form folds to the same
+// remainder, the rating is Good. A collision (בית and בת) leaves the distance
+// grade in place. An empty otherForms means the fold is unique.
+// Final letters stay distinct. INIT-038/SPEC-015.
+func GradeTypedAmong(expected, got string, otherForms []string) Rating {
+	rating := GradeTyped(expected, got)
+	if rating == Good {
+		return Good
+	}
+	expN := normalizeAnswer(expected)
+	gotN := normalizeAnswer(got)
+	expFold := dropMatres(expN)
+	gotFold := dropMatres(gotN)
+	if expFold != gotFold || runeCount(expFold) < 2 {
+		return rating
+	}
+	for _, other := range otherForms {
+		otherN := normalizeAnswer(other)
+		if otherN == expN {
+			continue
+		}
+		if dropMatres(otherN) == expFold {
+			return rating
+		}
+	}
+	return Good
+}
+
+// dropMatres removes ו and י after normalizeAnswer. INIT-038/SPEC-015.
+func dropMatres(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r == 'ו' || r == 'י' {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+func runeCount(s string) int {
+	n := 0
+	for range s {
+		n++
+	}
+	return n
+}
+
 func normalizeAnswer(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))

@@ -7,7 +7,7 @@ spec_id: SPEC-007
 initiative_id: INIT-038
 title: "Auto-publish off, and tool text that stops restating rules"
 domain: mcp
-status: in_review
+status: complete
 primary_prompt: none
 complexity: low
 complexity_reason: a config switch on one publish path and text removals

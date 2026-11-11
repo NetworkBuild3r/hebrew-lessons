@@ -22,6 +22,16 @@ func NewAccess(allowed, admins []string) *Access {
 	return a
 }
 
+// Allow adds one learner address. DEV uses it for the local account.
+func (a *Access) Allow(email string) {
+	if a == nil || strings.TrimSpace(email) == "" {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.allowed = append(a.allowed, email)
+}
+
 // Set replaces both lists. The slices are copied.
 func (a *Access) Set(allowed, admins []string) {
 	if a == nil {

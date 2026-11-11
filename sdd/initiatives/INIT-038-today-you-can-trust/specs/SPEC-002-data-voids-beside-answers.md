@@ -7,7 +7,7 @@ spec_id: SPEC-002
 initiative_id: INIT-038
 title: "Voids beside answers, and the study-day span"
 domain: data
-status: in_review
+status: complete
 primary_prompt: none
 complexity: medium
 complexity_reason: an additive table, plus a filter in every evidence read, where a missed reader would keep counting a voided answer

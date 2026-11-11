@@ -102,12 +102,17 @@
 .today-hero { gap: var(--space-3); }
 /* The session button is the one action. On a phone it fills the column and the label wraps. */
 .today-session .btn {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
   white-space: normal;
   text-align: center;
   block-size: auto;
   min-block-size: var(--size-cta);
 }
+.today-session .btn .icon { flex: none; }
+.today-session .btn span { min-inline-size: 0; }
 .today-empty { margin: 0; font-size: var(--fs-body); line-height: var(--lh-he-body); }
 .today-hero__title {
   display: grid;
@@ -327,9 +332,22 @@
 .lesson-frame .activity__done { display: flex; flex-direction: column; gap: var(--space-3); margin-block-start: auto; }
 .lesson-frame .activity__done .btn { margin-block-start: 0; }
 .lesson-frame .activity > form { flex: 1 1 auto; display: flex; flex-direction: column; gap: var(--space-4); }
-.lf-head { display: grid; gap: var(--space-2); padding-block-start: var(--space-3); }
-.lf-head .eyebrow { text-transform: uppercase; letter-spacing: .06em; font-size: var(--fs-caption); }
-.lf-title { font-family: var(--font-display); font-size: var(--fs-h1); font-weight: 700; line-height: var(--lh-he-body); }
+.lf-stages { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.lf-stage {
+  padding: 6px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-soft);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: normal;
+}
+.lf-stage[data-state="now"] { background: var(--ink); color: var(--surface); font-weight: 700; }
+.lf-head { display: grid; gap: var(--space-2); padding-block-start: 0; }
+.lf-head .eyebrow { text-transform: uppercase; letter-spacing: .06em; font-size: 13px; font-weight: 700; color: var(--muted); }
+.lf-title { font-family: var(--font-ui); font-size: 22px; font-weight: 700; line-height: normal; }
+.lesson-frame .btn { border-radius: 12px; min-block-size: var(--size-cta); }
+.lesson-frame .recall-prompt { font-size: 32px; font-weight: 700; line-height: normal; }
 .lf-unit { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); font-family: var(--font-display); font-size: var(--fs-he-md); line-height: var(--lh-he-display); }
 .lf-outline { display: none; }
 .lf-steps { display: grid; gap: var(--space-1); list-style: none; padding: 0; }
@@ -353,12 +371,123 @@
 .lf-step[data-state="done"] .lf-step__dot { background: var(--text); border-color: var(--text); }
 .lf-step[data-state="current"] { background: var(--surface-soft); color: var(--text); font-weight: 700; }
 .lf-step[data-state="current"] .lf-step__dot { background: var(--ink); border-color: var(--ink); }
-.lesson-frame .choices { gap: var(--space-3); }
+.lesson-frame .choices { gap: var(--space-4); grid-template-columns: 1fr; }
+.lesson-frame .c-answer {
+  border-width: 1px;
+  border-color: var(--hairline-strong);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+}
 .lesson-frame .c-answer .word-block--choice,
 .lesson-frame .c-answer .wb { background: transparent; padding: 0; }
 .lf-result { position: sticky; inset-block-end: var(--space-4); z-index: var(--z-sticky); margin-block-start: auto; }
 .lf-result .c-sheet { gap: var(--space-3); border-radius: var(--radius-card); padding-block-end: var(--space-5); }
 .lf-result .btn { inline-size: 100%; margin-block-start: 0; }
+
+/* The Figma lesson screens, one block for each step. Figma 255:112 See, 255:149 Check,
+   255:171 Read, 255:183 Write, 255:205 Use, 255:231 Easy. Tokens only. */
+
+/* See: a card for each new word. On a phone seecards.js shows one at a time. */
+.see__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr));
+}
+.see__card {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-4);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 16px;
+  background: var(--surface);
+  text-align: center;
+}
+.see__he { font-family: var(--font-he); font-size: 36px; font-weight: 700; line-height: var(--lh-he-display); }
+.see__en { margin: 0; font-size: 20px; font-weight: 700; line-height: 1.3; }
+.see__meta { margin: 0; color: var(--muted); font-size: var(--fs-caption); }
+.see[data-see-one] .see__card:not([data-current]) { display: none; }
+
+/* Check: the Hebrew stands alone above the answers, with no tile around it. */
+.activity[data-kind="recall"] .spotlight {
+  padding-block: var(--space-2);
+  background: transparent;
+  border: 0;
+}
+.activity[data-kind="recall"] .wcard__face {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.activity[data-kind="recall"] .wcard__new { display: none; }
+.activity[data-kind="recall"] .wcard__he { font-size: 32px; }
+
+/* Write, after Check: the typed echo and the sheet say it. The word shows with its sound,
+   without the tap hint or the New badge. */
+.activity[data-kind="produce"] .wprompt-hint,
+.activity[data-kind="produce"] .wcard__new { display: none; }
+
+/* Read: the sentence sits in one white card. Each word still opens its meaning. */
+.activity[data-kind="story"] .wline {
+  gap: var(--space-2) var(--space-3);
+  padding: 16px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.activity[data-kind="story"] .wcard__face {
+  min-block-size: 0;
+  padding: var(--space-1);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.activity[data-kind="story"] .wcard__new { display: none; }
+.activity[data-kind="story"] .wcard__he { font-size: 22px; }
+
+/* Use: small word chips. */
+.activity[data-kind="order"] .order-chip {
+  padding: 8px 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 18px;
+}
+
+/* The same chips when Use is shown, not scored: the words are cards that open a meaning. */
+.activity[data-kind="order"] .wline .wcard { min-inline-size: 0; }
+.activity[data-kind="order"] .wcard__face {
+  min-block-size: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: none;
+}
+.activity[data-kind="order"] .wcard__new { display: none; }
+.activity[data-kind="order"] .wcard__he { font-size: 18px; }
+
+/* Write: the learner types the Hebrew. */
+.write { display: grid; gap: var(--space-4); }
+.write .btn { inline-size: 100%; }
+.write__typed {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+  font-family: var(--font-he);
+  font-size: var(--fs-he-md);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  text-align: center;
+}
+.write__typed[data-state=correct] { border-color: var(--go); background: color-mix(in oklch, var(--go) 12%, transparent); }
+.write__typed[data-state=wrong] { border-color: var(--stop); background: color-mix(in oklch, var(--stop) 12%, transparent); }
+.write__note { margin: 0; color: var(--muted); font-size: var(--fs-small); line-height: var(--lh-body); }
 @media (min-width: 1024px) {
   .lf-back { padding-inline: var(--space-4); background: var(--surface-soft); }
   .lf-back__label { display: inline; }
@@ -371,8 +500,7 @@
     background: var(--surface);
     border: 1px solid var(--hairline);
   }
-  .lf-result .btn { inline-size: auto; justify-self: end; }
-  .lesson-frame .choices { grid-template-columns: 1fr 1fr; }
+  .lf-result .btn { inline-size: 100%; justify-self: stretch; }
 }
 
 /* Report a problem. A dialog is the sheet; without script the flag is a link to the page. */
@@ -434,6 +562,8 @@
   .today__head { display: grid; }
   .today__grid { align-items: start; }
   .today__grid[data-hero="true"] { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+  /* With nothing beside it, the action takes the whole row instead of leaving a blank column. */
+  .today__grid[data-hero="true"]:not(:has(> .today__side)) { grid-template-columns: minmax(0, 1fr); }
   .today__grid[data-hero="false"] { grid-template-columns: 1fr 1fr; }
   .today__grid[data-hero="false"] .today__side { display: contents; }
   .today .ink-card,

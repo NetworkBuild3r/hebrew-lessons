@@ -7,7 +7,7 @@ spec_id: SPEC-006
 initiative_id: INIT-038
 title: "Due means due today, and one session sized in minutes"
 domain: service
-status: in_review
+status: complete
 primary_prompt: none
 complexity: medium
 complexity_reason: changes when a card is due and how many are asked, which every review reads

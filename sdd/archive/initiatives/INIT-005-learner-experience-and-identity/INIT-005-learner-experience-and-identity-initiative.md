@@ -1,7 +1,7 @@
 # Initiative: Learner experience and identity
 
 **Initiative ID:** INIT-005
-**Status:** closed 2026-11-09, not needed. The single-page shell and restyle were built for the Node app, which the Go port replaced (ADR-0016, INIT-015). SPEC-002's click-through can no longer happen, and no completion report will be run. Decided in [BRAIN-001](../../brainstorms/BRAIN-001-is-the-hebrew-app-built-right/decision-document.md). Earlier status: executed 2026-10-12; SPEC-001, 003 to 006 and 008 to 013 complete; SPEC-007 superseded; SPEC-002 `in_review`.
+**Status:** closed 2026-11-09, not needed. The single-page shell and restyle were built for the Node app, which the Go port replaced (ADR-0016, INIT-015). SPEC-002's click-through can no longer happen, and no completion report will be run. Decided in [BRAIN-001](../../../brainstorms/BRAIN-001-is-the-hebrew-app-built-right/decision-document.md). Earlier status: executed 2026-10-12; SPEC-001, 003 to 006 and 008 to 013 complete; SPEC-007 superseded; SPEC-002 `in_review`.
 **Slug:** INIT-005-learner-experience-and-identity
 **Created:** 2026-10-09
 **Updated:** 2026-10-09 (added the app-structure work after the navigation complaint)

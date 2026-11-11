@@ -82,6 +82,9 @@ type Config struct {
 	OAuthRedirectURIs []string
 	Clock             clock.Clock
 	Store             *db.Store
+	// LocalDev is DEV=1. It allows POST /auth/local to sign in as
+	// LocalLearnerEmail. Production leaves this false, and that route is not registered.
+	LocalDev bool
 }
 
 // Service is Google sign-in, sessions, and CSRF for one process.
@@ -99,6 +102,7 @@ type Service struct {
 	issuer           string
 	access           *Access
 	oauthRedirects   []string
+	localDev         bool
 	stateKey         []byte
 	rateMu           sync.Mutex
 	rate             map[string]rateWindow
@@ -144,6 +148,7 @@ func New(cfg Config) (*Service, error) {
 		jwksURL:        strings.TrimSpace(cfg.GoogleJWKSURL),
 		issuer:         strings.TrimSpace(cfg.GoogleIssuer),
 		access:         access,
+		localDev:       cfg.LocalDev,
 		oauthRedirects: append([]string(nil), cfg.OAuthRedirectURIs...),
 		stateKey:       stateKey,
 		httpClient: &http.Client{

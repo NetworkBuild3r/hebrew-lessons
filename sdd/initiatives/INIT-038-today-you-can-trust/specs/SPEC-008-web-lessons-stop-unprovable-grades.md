@@ -7,7 +7,7 @@ spec_id: SPEC-008
 initiative_id: INIT-038
 title: "Lessons stop grading what they cannot prove"
 domain: web
-status: in_review
+status: complete
 primary_prompt: none
 complexity: medium
 complexity_reason: turns three step kinds into ungraded reveals on both the render and post paths, which must keep agreeing

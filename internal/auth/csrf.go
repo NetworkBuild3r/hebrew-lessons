@@ -104,10 +104,17 @@ func csrfRequired(r *http.Request) bool {
 }
 
 // csrfExempt is the list of mutating paths that skip the CSRF check.
-// There are none. Logout, /_hx/, and every other non-safe method on the
-// learner mux must present Origin or Referer and the session token.
+// POST /auth/local is the only one: it has no session yet. The route is
+// registered only when LocalDev is set, and the handler still checks Origin.
+// Logout, /_hx/, and every other non-safe method on the learner mux must
+// present Origin or Referer and the session token.
 func csrfExempt(path string) bool {
 	switch path {
+	case "/auth/local":
+		// Dev sign-in has no session yet, so it has no CSRF token.
+		// The handler is registered only when LocalDev is set, and it
+		// still checks Origin.
+		return true
 	default:
 		return false
 	}

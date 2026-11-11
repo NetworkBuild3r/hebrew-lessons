@@ -207,7 +207,7 @@ func TestTaughtButtonsFiftySeedsAndRenderPostAgree(t *testing.T) {
 		{Type: units.ActivityRecall, Text: tbGar},
 		{Type: units.ActivityCloze, Text: tbGar, Translation: "lives", Target: tbGar},
 		{Type: units.ActivityListenPick, Text: tbRoeh, Translation: "sees"},
-		{Type: units.ActivityProduce, Text: tbOkhel},
+		// Write is typed now, so it has no buttons to count. lesson_typed_test.go covers it.
 	}
 	// One published unit per graded type so each ask is activity 0 (no walk).
 	unitIDs := make([]int64, len(gradedActs))

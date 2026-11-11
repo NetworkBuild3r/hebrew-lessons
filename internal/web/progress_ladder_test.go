@@ -274,8 +274,12 @@ func TestLadderCompareIsGoneAfter14Days(t *testing.T) {
 
 func TestProgressLadderCSSWrapsOnAPhone(t *testing.T) {
 	css := readProgressCSS(t)
-	if !strings.Contains(css, ".pknow__rungs { display: flex; flex-wrap: wrap;") {
-		t.Fatal("ladder counts do not wrap")
+	// One row per count on a phone, label left and share right, two columns from 640px.
+	if !strings.Contains(css, ".pknow__rungs { display: grid; grid-template-columns: minmax(0, 1fr);") {
+		t.Fatal("ladder counts do not stack one to a row on a phone")
+	}
+	if !strings.Contains(css, ".pknow__rungs { grid-template-columns: repeat(2, minmax(0, 1fr));") {
+		t.Fatal("ladder counts do not use two columns on a wide screen")
 	}
 	if !strings.Contains(css, ".pchanged__nums {\n  display: grid;\n  grid-template-columns: 1fr;") {
 		t.Fatal("the comparison panel does not stack on a narrow screen")

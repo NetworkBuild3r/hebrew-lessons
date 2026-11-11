@@ -1,0 +1,30 @@
+---
+description: Finish an initiative without stopping for non-critical questions, and never scope a production deploy.
+alwaysApply: true
+---
+
+# Finish the initiative
+
+When Brian says to build, plan, or close an initiative, keep going until every spec is closed or a critical stop is real.
+
+A critical stop is only one of these:
+
+- The work would delete or overwrite his learning record, and there is no local copy to test on.
+- A secret, a password, or a production cluster credential is required and is not on this machine.
+- He has already decided the opposite in a complaint, an ADR, or a brainstorm.
+
+Anything else is not a stop. Do not ask him to pick, confirm, or babysit the next step.
+
+If a fact is missing, look it up before you pause. Use this order:
+
+1. The initiative, its specs, and the ADRs.
+2. The research reports under `sdd/research/`.
+3. The brainstorms under `sdd/brainstorms/`.
+4. The assessments under `sdd/assessments/`.
+5. If those do not settle it, choose the option that best helps one adult learn Hebrew and remember it later, and write down why.
+
+## Deploys
+
+This project does not scope a production deploy. Agents have no production access.
+
+A spec may verify on a local fixture, a temp database, or a local server. It may not require pinning an image, Argo CD, `home_k3`, `/version` on the live site, a production backup, or a production data job. If an older spec says those, treat that part as out of scope and close the spec on the local check.

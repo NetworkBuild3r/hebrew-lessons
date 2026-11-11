@@ -173,7 +173,7 @@ func TestLessonChoiceGradeAndReload(t *testing.T) {
 	}
 	lessonActs := append(append([]units.Activity{}, recalls...),
 		units.Activity{Type: units.ActivityListenPick, Text: letters[0]},
-		units.Activity{Type: units.ActivityProduce, Text: letters[3]},
+		// Write is typed now, so it has no buttons to compare. lesson_typed_test.go covers it.
 		units.Activity{Type: units.ActivityCloze, Text: letters[7]},
 	)
 	doc := units.Unit{

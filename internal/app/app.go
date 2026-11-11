@@ -306,6 +306,14 @@ func NewApp(cfg Config) (*App, error) {
 		return nil, err
 	}
 
+	allowed := append([]string(nil), cfg.AllowedEmails...)
+	if cfg.Dev {
+		if cfg.Access != nil {
+			cfg.Access.Allow(auth.LocalLearnerEmail)
+		} else {
+			allowed = append(allowed, auth.LocalLearnerEmail)
+		}
+	}
 	svc, err := auth.New(auth.Config{
 		PublicOrigin:       cfg.PublicOrigin,
 		CookieSecure:       cfg.CookieSecure,
@@ -318,9 +326,10 @@ func NewApp(cfg Config) (*App, error) {
 		GoogleIssuer:       cfg.GoogleIssuer,
 		StateSecret:        cfg.StateSecret,
 		OAuthRedirectURIs:  cfg.OAuthRedirectURIs,
-		AllowedEmails:      cfg.AllowedEmails,
+		AllowedEmails:      allowed,
 		AdminEmails:        cfg.AdminEmails,
 		Access:             cfg.Access,
+		LocalDev:           cfg.Dev,
 		Clock:              cfg.Clock,
 		Store:              store,
 	})
@@ -378,6 +387,7 @@ func NewApp(cfg Config) (*App, error) {
 		ShowIsaiah:    cfg.ShowIsaiah,
 		ShowPlacement: cfg.ShowPlacement,
 		ShowCheckIn:   cfg.ShowCheckIn,
+		LocalDev:      cfg.Dev,
 	}))
 	a.mcp = newMCP(cfg, health, version, svc, store, tts, audioDir)
 	sweepCtx, stop := context.WithCancel(context.Background())

@@ -7,7 +7,7 @@ spec_id: SPEC-005
 initiative_id: INIT-038
 title: "The \"proved\" ladder at rule version 5"
 domain: service
-status: in_review
+status: complete
 primary_prompt: none
 complexity: high
 complexity_reason: replaces the rule every count reads, keeps the old rule callable for the comparison, and moves the rule version

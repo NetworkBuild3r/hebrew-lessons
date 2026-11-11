@@ -190,6 +190,8 @@ type Page struct {
 	CSRF     string
 	Current  string
 	Sections []SectionLink
+	// LocalDev shows the dev-only local learner button on the sign-in page.
+	LocalDev bool
 }
 
 // NewPage builds a shell page. lang "he" selects the Hebrew UI. Any other

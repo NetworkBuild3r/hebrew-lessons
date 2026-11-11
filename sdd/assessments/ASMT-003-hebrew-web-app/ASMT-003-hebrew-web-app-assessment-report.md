@@ -110,7 +110,7 @@ The question asked was "How do we improve the learning experience even further?"
 - **Reminders and reading.** `notification`, `remind`, `webpush`, `graded reader` and `extensive` found no product code.
 - **Study time.** Minutes studied exist only in the coach digest (`internal/mcpstore/digest.go`, `internal/jobs/weekly.go`), not on any learner page. `internal/web` shows minutes only as a time estimate for today's reviews (`internal/web/views/today.go:114-136`).
 
-**In flight, no overlap.** [INIT-031](../../initiatives/INIT-031-expose-revision-workflow/INIT-031-expose-revision-workflow-initiative.md) covers the revision workflow and [INIT-032](../../initiatives/INIT-032-one-right-answer/INIT-032-one-right-answer-initiative.md) one right answer per question. INIT-032 SPEC-001 targets `ADR-0028-one-right-answer.md`, but ADR-0028 is already taken (`ADR-0028-where-you-stand.md`), so INIT-032 will likely take ADR-0029, the lowest free number today. The ADR proposed here should take the next free number when it is written, likely ADR-0031.
+**In flight, no overlap.** [INIT-031](../../archive/initiatives/INIT-031-expose-revision-workflow/INIT-031-expose-revision-workflow-initiative.md) covers the revision workflow and [INIT-032](../../initiatives/INIT-032-one-right-answer/INIT-032-one-right-answer-initiative.md) one right answer per question. INIT-032 SPEC-001 targets `ADR-0028-one-right-answer.md`, but ADR-0028 is already taken (`ADR-0028-where-you-stand.md`), so INIT-032 will likely take ADR-0029, the lowest free number today. The ADR proposed here should take the next free number when it is written, likely ADR-0031.
 
 ---
 

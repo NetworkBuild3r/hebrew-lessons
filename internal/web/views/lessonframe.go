@@ -16,6 +16,16 @@ type LessonFrame struct {
 	Value int
 	// Kind is the learner's name for the step ("Listen and pick").
 	Kind string
+	// Eyebrow and Heading are what the Figma lesson screens print above the step: a small
+	// caps line and a 22px title. When they are empty the frame falls back to "Step 3 of 8"
+	// and Kind. Neither ever holds an answer.
+	Eyebrow, Heading string
+	// NoStages hides the See, Check, Read, Write, Use row. An easy lesson has no new words,
+	// so the row would promise a lesson shape it does not have. Figma Easy lesson (255:231).
+	NoStages bool
+	// Stage is the Figma stage for this step: See, Check, Read, Write, or Use.
+	// Empty on the completion panel, where no stage is current.
+	Stage string
 	// Outline is one entry per step.
 	Outline []OutlineStep
 	// BackHref is Today. ReportHref is the no-script page of the report form, and
@@ -74,6 +84,48 @@ func ValidReason(code string) bool {
 // StepText is "Step 3 of 8".
 func StepText(step, total int) string {
 	return "Step " + strconv.Itoa(step) + " of " + strconv.Itoa(total)
+}
+
+// LessonStages is the stage row on a lesson, in the order the Figma board shows.
+var LessonStages = []string{"See", "Check", "Read", "Write", "Use"}
+
+// LessonStageChip is one pill in that row. State is "now" or "idle".
+type LessonStageChip struct {
+	Label string
+	State string
+}
+
+// LessonStage maps an activity type onto the Figma stage row.
+// See is the words, Check is a meaning question, Read is a line to read,
+// Write is making the Hebrew, and Use is a sentence that is shown.
+func LessonStage(typ string) string {
+	switch typ {
+	case "pattern", "say":
+		return "See"
+	case "recall", "listen_pick":
+		return "Check"
+	case "story", "dialogue", "shadow":
+		return "Read"
+	case "produce", "cloze":
+		return "Write"
+	case "order":
+		return "Use"
+	default:
+		return ""
+	}
+}
+
+// LessonStageChips marks the current stage. An empty current leaves every pill idle.
+func LessonStageChips(current string) []LessonStageChip {
+	out := make([]LessonStageChip, len(LessonStages))
+	for i, label := range LessonStages {
+		state := "idle"
+		if label == current {
+			state = "now"
+		}
+		out[i] = LessonStageChip{Label: label, State: state}
+	}
+	return out
 }
 
 // LessonLabel is the learner's name for an activity type. An unknown type is shown as

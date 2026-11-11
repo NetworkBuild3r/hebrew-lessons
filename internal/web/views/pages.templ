@@ -45,7 +45,8 @@ templ ReviewBody(c ReviewCard) {
 // Progress moved to progress.templ (INIT-015/SPEC-018).
 
 // SignIn is the signed-out page. No rail, dock, or other navigation:
-// logout lands here, and the only action is auth's Google start route.
+// logout lands here. The action is auth's Google start route.
+// When LocalDev is set, a second button posts to /auth/local.
 // Copy follows the interface language. The button is Google's sign-in
 // control, not the app's primary button.
 templ SignIn(p Page) {
@@ -99,6 +100,11 @@ templ SignIn(p Page) {
 							}
 						</span>
 					</a>
+					if p.LocalDev {
+						<form method="post" action="/auth/local">
+							<button type="submit" class="btn btn-primary">Continue as local learner</button>
+						</form>
+					}
 				</section>
 			</main>
 		</body>

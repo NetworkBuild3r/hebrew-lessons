@@ -916,8 +916,10 @@ func TestLessonFrame(t *testing.T) {
 	body := getLearner(t, h, l, link)
 	for _, want := range []string{
 		`<progress class="c-progress" value="0" max="3" aria-label="Lesson progress">`,
-		`data-step="1" data-total="3"`, `<h1 class="lf-title" lang="en" dir="ltr">Read the story</h1>`, "Step 1 of 3",
-		`<bdi lang="en" dir="ltr">Greetings</bdi>`,
+		`data-step="1" data-total="3"`, `<h1 class="lf-title" lang="en" dir="ltr">Read it in a sentence</h1>`,
+		`<span class="lf-stage" data-state="now" aria-current="step"><bdi lang="en" dir="ltr">Read</bdi></span>`,
+		`<span class="lf-stage" data-state="idle"><bdi lang="en" dir="ltr">See</bdi></span>`,
+		`<bdi lang="en" dir="ltr">Greetings · not graded</bdi>`,
 		`href="/lessons/` + itoa(id) + `/report" hx-boost="false" data-sheet="report-sheet"`, `aria-label="Report a problem"`,
 		`<dialog id="report-sheet"`, `maxlength="500"`, `aria-label="Back to Today"`,
 	} {
@@ -942,7 +944,7 @@ func TestLessonFrame(t *testing.T) {
 	// A step swap brings the whole frame back, so the bar and the outline move.
 	run := runValue(t, body)
 	step2 := postLesson(t, h, l.cookie, link, run, "continue", true, l.csrf).Body.String()
-	for _, want := range []string{`value="1" max="3"`, `data-step="2" data-total="3"`, "Step 2 of 3", "Recall the meaning", `<article id="lesson-frame"`, `hx-target="#lesson-frame"`, `hx-select="unset"`, `data-no-transition`} {
+	for _, want := range []string{`value="1" max="3"`, `data-step="2" data-total="3"`, "What does it mean?", "Recall the meaning", `<span class="lf-stage" data-state="now" aria-current="step"><bdi lang="en" dir="ltr">Check</bdi></span>`, `<article id="lesson-frame"`, `hx-target="#lesson-frame"`, `hx-select="unset"`, `data-no-transition`} {
 		if !strings.Contains(step2, want) {
 			t.Errorf("second step lacks %s", want)
 		}

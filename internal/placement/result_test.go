@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/audio"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 )
 
@@ -188,6 +189,26 @@ func TestResultIsReadableThroughTheStoreReads(t *testing.T) {
 	}
 	if words == 0 {
 		t.Fatal("no words")
+	}
+}
+
+// INIT-038/SPEC-015: placement accepts a unique mater fold as Good only.
+func TestJudgeTypingAcceptsMaterFold(t *testing.T) {
+	d, err := newDeckV3([]fixtureItem{{
+		ID: "w1", TextNFC: "כתב", GlossEN: "wrote", Band: 0, POS: "verb",
+	}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	it := db.PlacementItem{Part: string(PartTyping), ItemID: "w1"}
+	stored := storedItem{}
+	out, picked, _, err := judge(d, it, stored, AnswerIn{Typed: "כותב"}, nil)
+	if err != nil || out != OutcomeRight || picked != "כותב" {
+		t.Fatalf("unique fold: outcome=%s picked=%q err=%v", out, picked, err)
+	}
+	out, _, _, err = judge(d, it, stored, AnswerIn{Typed: "כותב"}, []string{"כיתב"})
+	if err != nil || out != OutcomeWrong {
+		t.Fatalf("collision fold: outcome=%s err=%v, want Wrong", out, err)
 	}
 }
 

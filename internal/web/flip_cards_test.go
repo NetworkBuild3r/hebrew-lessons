@@ -284,7 +284,12 @@ func TestFlipCardsOnTeachSteps(t *testing.T) {
 	} {
 		hh, ck, p, _ := flipLesson(t, c.doc, false)
 		page := activityHTML(t, getAuthed(t, hh, ck, p))
-		if !strings.Contains(page, "<details class=\"wcard") || !strings.Contains(page, c.prompt) {
+		// A pattern is the See step now: a card for each word, shown flat. Shadow still flips.
+		marker := "<details class=\"wcard"
+		if c.doc.Title == "Pattern" {
+			marker = `data-see-card`
+		}
+		if !strings.Contains(page, marker) || !strings.Contains(page, c.prompt) {
 			t.Fatalf("teach step missing cards or prompt %q:\n%s", c.prompt, page)
 		}
 	}

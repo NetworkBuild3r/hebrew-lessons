@@ -151,6 +151,21 @@ func TestUpsertLexemesRootAndBinyan(t *testing.T) {
 	}
 }
 
+// INIT-038/SPEC-015: LexemeConsonantForms prefers bare, else text_nfc.
+func TestLexemeConsonantForms(t *testing.T) {
+	s := openStore(t, fixedClock{time.Date(2026, 11, 10, 0, 0, 0, 0, time.UTC)})
+	ctx := context.Background()
+	mustExec(t, s, `INSERT INTO lexemes (text_nfc, bare, gloss_en) VALUES ('כָּתַב', 'כתב', 'wrote')`)
+	mustExec(t, s, `INSERT INTO lexemes (text_nfc, bare, gloss_en) VALUES ('בַּיִת', '', 'house')`)
+	got, err := s.LexemeConsonantForms(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != "כתב" || got[1] != "בַּיִת" {
+		t.Fatalf("forms = %v, want [כתב, בַּיִת]", got)
+	}
+}
+
 func readStoredLexeme(t *testing.T, s *Store, id int64) storedLexeme {
 	t.Helper()
 	conn, err := s.DB()

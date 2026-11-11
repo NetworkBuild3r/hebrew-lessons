@@ -31,7 +31,7 @@ templ Lesson(p Page, s Screen) {
 // ActivityBlock is the step inside the lesson frame. The completion panel uses the same id.
 // An answer is a c-answer button: it posts the form, and the frame comes back swapped.
 templ ActivityBlock(a Activity) {
-	<div id="activity" class="activity">
+	<div id="activity" class="activity" data-kind={ a.Kind }>
 		if a.Done {
 			<p class="lede" lang="en">@E("Lesson complete.")</p>
 			if a.Score != "" {
@@ -68,6 +68,9 @@ templ ActivityBlock(a Activity) {
 					<button type="button" class="how-sheet__close" data-close-sheet>Close</button>
 					<div id="how-body"></div>
 				</dialog>
+			}
+			if a.See {
+				@seeCards(a.SeeCards)
 			}
 			if flipCount(a) > 0 {
 				@flipHint(a)
@@ -149,6 +152,8 @@ templ ActivityBlock(a Activity) {
 					<button type="submit" class="btn btn-primary" name="answer" value="continue" autofocus>@E(a.Continue)</button>
 				} else if orderAsk(a) {
 					@orderAskBlock(a)
+				} else if a.Typed {
+					@typedBlock()
 				} else if a.Asking {
 					<div class="choices">
 						for _, choice := range a.Choices {
@@ -156,9 +161,17 @@ templ ActivityBlock(a Activity) {
 						}
 					</div>
 				} else if a.Feedback != "" {
+					if a.TypedAnswer != "" {
+						<p class="write__typed" data-state={ orderAnswerState(a) } dir="rtl">
+							<bdi lang="he" dir="rtl">{ a.TypedAnswer }</bdi>
+						</p>
+					}
 					<div class="lf-result">
 						@Sheet("Answer") {
 							<p class={ a.FeedbackClass } lang="en">@E(a.Feedback)</p>
+							if a.TypedNote != "" {
+								<p class="write__note" lang="en">@E(a.TypedNote)</p>
+							}
 							if a.Audio != "" {
 								@PaceControls("line-clip")
 							}
@@ -170,10 +183,15 @@ templ ActivityBlock(a Activity) {
 							<button type="submit" class="btn btn-primary" name="answer" value="continue" autofocus>@E(a.Continue)</button>
 						}
 					</div>
+				} else if a.See {
+					<button type="submit" class="btn btn-primary" name="answer" value="continue" data-see-next data-next-label="Next word" data-done-label={ a.Continue }>@E(a.Continue)</button>
 				} else {
 					<button type="submit" class="btn btn-primary" name="answer" value="continue">@E(a.Continue)</button>
 				}
 			</form>
+			if a.See {
+				<script src={ Asset("/static/js/seecards.js") } defer></script>
+			}
 			if hasClip(a) {
 				<script src={ Asset("/static/js/slow.js") } defer></script>
 				<script src={ Asset("/static/js/clips.js") } defer></script>
@@ -191,6 +209,40 @@ templ ActivityBlock(a Activity) {
 				<script type="module" src={ Asset("/static/js/wcards.js") }></script>
 			}
 		}
+	</div>
+}
+
+// seeCards is the See step: one card for each new word, with the Hebrew big, the meaning,
+// the part of speech and its place ("noun · 1 of 4"), and a play control when the word has
+// a clip. On a phone seecards.js shows one card at a time and the button reads "Next word".
+// Without script every card shows and the button is Continue. Figma See (255:112).
+templ seeCards(cards []SeeCard) {
+	<div class="see" data-see>
+		<ol class="see__list">
+			for i, c := range cards {
+				<li class="see__card" data-see-card>
+					<bdi class="see__he" lang="he" dir="rtl">{ c.Text }</bdi>
+					<p class="see__en" lang="en" dir="ltr">{ c.Gloss }</p>
+					<p class="see__meta" lang="en" dir="ltr">{ SeeMeta(c, i, len(cards)) }</p>
+					if c.Audio != "" {
+						@clip("see-clip-"+Num(i), c.Audio, "Play "+c.Text, false)
+					}
+				</li>
+			}
+		</ol>
+	</div>
+	<script src={ Asset("/static/js/slow.js") } defer></script>
+	<script src={ Asset("/static/js/clips.js") } defer></script>
+}
+
+// typedBlock is the Write step: a Hebrew field, the Hebrew keyboard, and Check. The field
+// posts as "answer", so the lesson form needs no second path. Figma Write (255:183).
+templ typedBlock() {
+	<div class="write">
+		<label class="vh" for="write-answer" lang="en">Type the Hebrew word</label>
+		@HebrewInput("write-answer", "answer", templ.Attributes{"required": true})
+		@HebrewKeyboard("write-answer", "en")
+		<button type="submit" class="btn btn-primary">@E("Check")</button>
 	</div>
 }
 

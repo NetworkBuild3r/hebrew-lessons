@@ -471,19 +471,24 @@ func TestLessonPromptDoesNotLeak(t *testing.T) {
 	if strings.Contains(produce, "<audio") || strings.Contains(produce, "/audio/") || strings.Contains(produce, "shalom") {
 		t.Fatalf("produce prompt leaks translit or audio:\n%s", produce)
 	}
-	if containsHebrew(attrValues(produce)) {
-		t.Fatalf("produce attributes leak Hebrew:\n%s", attrValues(produce))
+	// Write is typed. The page holds the Hebrew keyboard's single letters, but never the
+	// answer word, in text or in an attribute. Figma Write (255:183).
+	if strings.Contains(attrValues(produce), hello) || strings.Contains(attrValues(produce), "שלום") {
+		t.Fatalf("produce attributes leak the answer:\n%s", attrValues(produce))
 	}
-	if !strings.Contains(produce, hello) || !strings.Contains(produce, `value="`+itoa(ids[hello])+`"`) {
-		t.Fatalf("produce choices should show pointed Hebrew and post the lexeme id:\n%s", produce)
+	if strings.Contains(produce, hello) || strings.Contains(produce, `class="choices"`) {
+		t.Fatalf("a typed Write step shows the answer or buttons:\n%s", produce)
 	}
-	if strings.Contains(produce, `value="`+hello+`"`) {
-		t.Fatal("produce value is pointed Hebrew")
+	if !strings.Contains(produce, `name="answer"`) || !strings.Contains(produce, "data-hk-input") {
+		t.Fatalf("produce should be a typed Hebrew field:\n%s", produce)
 	}
 
-	shown := activityHTML(t, postLesson(t, h, cookie, path, runID, itoa(ids[hello]), true, "brian-csrf").Body.String())
+	shown := activityHTML(t, postLesson(t, h, cookie, path, runID, hello, true, "brian-csrf").Body.String())
 	if !strings.Contains(shown, hello) || !strings.Contains(shown, "shalom") || !strings.Contains(shown, "wcard__gl") || !strings.Contains(shown, `/audio/`+helloID+`.mp3`) {
 		t.Fatalf("produce answer did not reveal the word and clip:\n%s", shown)
+	}
+	if !strings.Contains(shown, "feedback--right") || !strings.Contains(shown, `class="write__typed"`) {
+		t.Fatalf("a right typed answer was not marked right and echoed:\n%s", shown)
 	}
 
 	cloze := activityHTML(t, postLesson(t, h, cookie, path, runID, "continue", true, "brian-csrf").Body.String())

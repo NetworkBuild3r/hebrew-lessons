@@ -99,6 +99,43 @@ type Activity struct {
 	// Zero hides the button: a right answer, an ungraded reveal, and a step
 	// that recorded nothing. INIT-038/SPEC-009.
 	AlsoRightID int64
+	// Kind is the activity type, a hook for the stylesheet (data-kind). It is never
+	// shown to the learner.
+	Kind string
+	// See is the teach step of a word or conjugation lesson: one card for each new
+	// word, with its meaning and its sound, instead of tiles that hide the meaning.
+	// SeeCards are those cards. Figma Lesson types, See (255:112).
+	See      bool
+	SeeCards []SeeCard
+	// Typed is the Write step: the learner types the Hebrew for an English cue
+	// instead of picking it. TypedAnswer is what they typed, on the reveal, and
+	// TypedNote is the one line that explains how it was read. Figma Write (255:183).
+	Typed       bool
+	TypedAnswer string
+	TypedNote   string
+	// Heading and Eyebrow are what the frame prints above this step when the step knows
+	// better than its type does: the Write step's title is the English cue. Empty keeps
+	// the frame's own.
+	Heading, Eyebrow string
+}
+
+// SeeCard is one new word on the See step.
+type SeeCard struct {
+	Text  string
+	Gloss string
+	// POS is the part of speech as the learner reads it, such as "noun".
+	POS   string
+	Audio string
+}
+
+// SeeMeta is the small line under a See card: "noun · 1 of 4". The part of speech
+// leaves out when the lexicon has none.
+func SeeMeta(c SeeCard, i, n int) string {
+	place := Num(i+1) + " of " + Num(n)
+	if c.POS == "" {
+		return place
+	}
+	return c.POS + " · " + place
 }
 
 // orderAsk is the build-the-sentence step before Check. INIT-029/SPEC-004.

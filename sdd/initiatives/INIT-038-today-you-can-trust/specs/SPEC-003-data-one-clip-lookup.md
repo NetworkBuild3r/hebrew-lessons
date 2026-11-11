@@ -7,7 +7,7 @@ spec_id: SPEC-003
 initiative_id: INIT-038
 title: "One way to find a word's clip, and no listening card without one"
 domain: data
-status: in_review
+status: complete
 primary_prompt: none
 complexity: medium
 complexity_reason: replaces three audio_id-only checks with one lookup and guards every card-creation path

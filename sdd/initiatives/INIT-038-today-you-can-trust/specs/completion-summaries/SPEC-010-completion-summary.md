@@ -1,6 +1,6 @@
 # INIT-038/SPEC-010 completion summary: Progress leads with the ladder
 
-**Status:** in_review, 2026-11-09. Written by the orchestrator from [Progress ladder headline](15614523-2530-463c-99a2-929485fd00ce)'s return. Not independently verified.
+**Status:** complete, 2026-11-10. Written by the orchestrator from [Progress ladder headline](15614523-2530-463c-99a2-929485fd00ce)'s return. Phone capture `shots/progress-390.png` does not scroll sideways. Figma frame `257:85`.
 
 ## What changed
 

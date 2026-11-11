@@ -22,16 +22,31 @@ templ LessonFrameView(p Page, s Screen) {
 		</header>
 		<div class="lf-body">
 			<div class="lf-main">
+				if !s.Frame.NoStages {
+					<nav class="lf-stages" aria-label="Lesson stages">
+						for _, stage := range LessonStageChips(s.Frame.Stage) {
+							<span class="lf-stage" data-state={ stage.State } if stage.State == "now" { aria-current="step" }>@E(stage.Label)</span>
+						}
+					</nav>
+				}
 				<header class="lf-head">
 					<p class="eyebrow" lang="en" dir="ltr">
 						if s.Frame.Done {
 							@E("Lesson complete")
+						} else if s.Frame.Eyebrow != "" {
+							@LessonName(s.Frame.Eyebrow)
 						} else {
 							@E(StepText(s.Frame.Step, s.Frame.Total))
 						}
 					</p>
-					<h1 class="lf-title" lang="en" dir="ltr">{ s.Frame.Kind }</h1>
-					if s.Frame.Step == 1 || s.Frame.Done {
+					<h1 class="lf-title" lang="en" dir="ltr">
+						if s.Frame.Heading != "" {
+							{ s.Frame.Heading }
+						} else {
+							{ s.Frame.Kind }
+						}
+					</h1>
+					if s.Frame.Done || ((s.Frame.Eyebrow == "" || s.Frame.NoStages) && s.Frame.Step == 1) {
 						<p class="lf-unit">
 							@LessonName(s.Title)
 							if s.Gloss != "" {

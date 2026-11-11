@@ -150,7 +150,7 @@ No new trust boundary. Authoring stays admin-only and MCP-only on the server, as
 - `sdd/research/RSCH-004-course-design-and-lesson-types/RSCH-004-course-design-and-lesson-types-report.md` — §3 design rules, §4 candidate lesson types, §1.4 lesson structure
 - [ADR-0003: Course and lesson-plan language](ADR-0003-course-and-lesson-plan-language.md)
 - [ADR-0011: AI-first plan builder](ADR-0011-ai-first-plan-builder.md)
-- `sdd/initiatives/INIT-009-custom-lesson-stack/INIT-009-custom-lesson-stack-initiative.md`
+- `sdd/archive/initiatives/INIT-009-custom-lesson-stack/INIT-009-custom-lesson-stack-initiative.md`
 
 ## Changelog
 

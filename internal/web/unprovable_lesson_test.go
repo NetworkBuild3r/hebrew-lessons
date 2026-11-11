@@ -137,7 +137,7 @@ func TestUnprovableStepsFiftySeeds(t *testing.T) {
 		{Type: units.ActivityOrder, Text: line, Translation: "Do you live here?"},
 		{Type: units.ActivityListenPick, Text: line},
 		{Type: units.ActivityListenPick, Text: upEifo},
-		{Type: units.ActivityProduce, Text: upGar},
+		// Write is typed now, so it has no buttons to count. lesson_typed_test.go covers it.
 	}
 	words := []string{upAta, upAt, upGar, upGara, upPo, upMayim, upEifo, upOved, upKotev, upOkhel}
 	unitID := putLesson(t, fx.store, nil, units.Unit{
