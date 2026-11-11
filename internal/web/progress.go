@@ -96,7 +96,7 @@ func (s *server) serveProgress(w http.ResponseWriter, r *http.Request, secure bo
 	ui := views.UIFor(lang, gender)
 	skill := chooseSkill(r.URL.Query().Get("skill"))
 	v := views.ProgressView{
-		Brief: skill == "" && r.URL.Query().Get("detail") != "1",
+		Brief:     skill == "" && r.URL.Query().Get("detail") != "1",
 		Page:      views.Page{UI: ui, Title: ui.DocTitle("progress"), CSRF: csrf, Current: "progress"},
 		Empty:     true,
 		Skill:     skill,
