@@ -1,0 +1,12 @@
+# Temporary probe: does GitHub create any jobs for this repo right now?
+name: ci-ping
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/ci-ping.yml
+jobs:
+  ping:
+    runs-on: k8-build
+    steps:
+      - run: echo ping && uname -a
