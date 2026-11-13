@@ -14,6 +14,7 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/lessons"
 )
 
 // The weekly report (INIT-015/SPEC-023). Week one is Monday 2026-10-12 to Sunday 2026-10-18,
@@ -770,5 +771,74 @@ func TestWeeklyCatchUpUsesLearnerZone(t *testing.T) {
 	}
 	if r.Payload.Minutes != 1 {
 		t.Fatalf("minutes = %d, want 1 (only the in-week attempt)", r.Payload.Minutes)
+	}
+}
+
+func TestWeeklyCourseBlock(t *testing.T) {
+	in := weekInput{
+		weekStart: "2026-11-09",
+		loc:       time.UTC,
+		course:    map[int64]int{1: 5, 2: 12},
+		cards: map[int64]time.Time{
+			1: time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC),
+			2: time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC),
+		},
+		attempts: []db.AttemptTime{
+			{At: time.Date(2026, 11, 10, 10, 0, 0, 0, time.UTC), LatencyMS: 1000},
+			{At: time.Date(2026, 11, 10, 10, 1, 0, 0, time.UTC), LatencyMS: 1000},
+			{At: time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC), LatencyMS: 1000},
+		},
+		events: []db.WeekEvent{
+			{Day: "2026-11-10", Kind: db.EventWord, LexemeID: 1, Text: "אִם", Skill: "read", Cause: "confusion"},
+			{Day: "2026-11-10", Kind: db.EventWord, LexemeID: 9, Text: "אחר", Skill: "read", Cause: "confusion"},
+		},
+	}
+	p := buildWeekly(in)
+	if p.Course == nil {
+		t.Fatal("no course block")
+	}
+	if p.Course.Place != 12 || p.Course.Met != 2 || p.Course.MetThisWeek != 1 || p.Course.StudyDays != 2 {
+		t.Fatalf("course = %+v", p.Course)
+	}
+	if len(p.Course.Lost) != 1 || p.Course.Lost[0].LexemeID != 1 || p.Course.Lost[0].Cause != "confusion" {
+		t.Fatalf("lost = %+v", p.Course.Lost)
+	}
+}
+
+func TestWeeklyNoCourseBlock(t *testing.T) {
+	p := buildWeekly(weekInput{weekStart: "2026-11-09", loc: time.UTC})
+	raw, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"course"`) {
+		t.Fatalf("payload has a course block: %s", raw)
+	}
+}
+
+func TestWeeklyReadoutIsFiveLines(t *testing.T) {
+	p := buildWeekly(weekInput{
+		weekStart: "2026-11-09", loc: time.UTC,
+		course: map[int64]int{1: 1, 2: 2},
+		cards:  map[int64]time.Time{1: time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)},
+		lesson: lessons.Week{Started: 1, Answers: 4, Right: 3},
+	})
+	if len(p.Readout) != 5 {
+		t.Fatalf("readout = %v", p.Readout)
+	}
+	if !strings.Contains(p.Readout[0], "Too early") || !strings.Contains(p.Readout[3], "Ready words still untaught: 1") {
+		t.Fatalf("readout = %v", p.Readout)
+	}
+}
+
+func TestWeeklySummaryUnchanged(t *testing.T) {
+	base := weekInput{weekStart: "2026-11-09", loc: time.UTC, attempts: []db.AttemptTime{
+		{At: time.Date(2026, 11, 10, 10, 0, 0, 0, time.UTC), LatencyMS: 1000},
+	}}
+	with := base
+	with.cards = map[int64]time.Time{1: time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)}
+	with.course = map[int64]int{1: 3}
+	if summarize(buildWeekly(base)) != summarize(buildWeekly(with)) {
+		t.Fatal("the course block changed the summary")
 	}
 }

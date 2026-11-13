@@ -938,6 +938,7 @@ func (p player) stepScreen(ctx context.Context, page views.Page, lesson db.Cours
 	p.attachHow(ctx, lesson, run, &screen.Activity)
 	p.attachRoots(ctx, &screen.Activity)
 	p.attachAlsoRight(ctx, lesson, run, act, lex, target, &screen.Activity)
+	p.attachWrongQuestion(ctx, lesson, run, act, lex, target, &screen.Activity)
 	return screen, nil
 }
 
@@ -969,9 +970,45 @@ func (p player) attachAlsoRight(ctx context.Context, lesson db.CourseLesson, run
 	if voided {
 		activity.Feedback = views.AlsoRightTaken
 		activity.AlsoRightID = 0
+		if batch, ok, err := openFlagBatch(ctx, p.store, run.UserID, got.id); err == nil && ok {
+			activity.UndoBatch = batch
+		}
 		return
 	}
 	activity.AlsoRightID = got.id
+}
+
+// attachWrongQuestion puts "This question is wrong" on a right graded reveal,
+// and Undo once that tap has been taken. INIT-039/SPEC-012.
+func (p player) attachWrongQuestion(ctx context.Context, lesson db.CourseLesson, run db.PlayerRun, act units.Activity, lex map[string]db.LexemeView, target db.LexemeView, activity *views.Activity) {
+	if activity == nil || p.store == nil || run.UserID == 0 {
+		return
+	}
+	if run.Finished || run.Phase != "reveal" || run.Pending {
+		return
+	}
+	if !strings.Contains(activity.FeedbackClass, "feedback--right") {
+		return
+	}
+	if target.ID == 0 || !gradedActivity(act.Type) || unprovableAsk(act, lex) {
+		return
+	}
+	got, ok, err := latestAttempt(ctx, p.store, run.UserID, target.ID, lessonSkill(act.Type), evidence.SourceLesson, lesson.UnitID)
+	if err != nil || !ok || !got.correct {
+		return
+	}
+	voided, err := attemptVoided(ctx, p.store, got.id)
+	if err != nil {
+		return
+	}
+	if voided {
+		if batch, ok, err := openFlagBatch(ctx, p.store, run.UserID, got.id); err == nil && ok {
+			activity.UndoBatch = batch
+			activity.Feedback = views.AlsoRightTaken
+		}
+		return
+	}
+	activity.WrongQuestionID = got.id
 }
 
 func (p player) attachHow(ctx context.Context, lesson db.CourseLesson, run db.PlayerRun, activity *views.Activity) {

@@ -22,8 +22,13 @@ func TestMyStuffIsolationAndSections(t *testing.T) {
 	ctx := context.Background()
 
 	home := getLearner(t, h, a, "/")
-	if strings.Contains(home, `class="section-jump"`) || strings.Contains(home, `class="rail-more"`) {
-		t.Fatal("empty sections were shown")
+	// Tutor is the one section that shows while empty: it says how to load a class.
+	// Learn, Roots, and Isaiah are content, so they stay off until there is some.
+	if !strings.Contains(home, `class="section-jump"`) || strings.Contains(home, ">Learn<") || strings.Contains(home, ">Isaiah<") {
+		t.Fatal("the empty shell showed a content section")
+	}
+	if !strings.Contains(home, `href="/tutor"`) {
+		t.Fatal("the empty shell does not offer the Tutor section")
 	}
 	if dockLinks(home) != 5 || !strings.Contains(home, ">My stuff<") {
 		t.Fatalf("dock = %d", dockLinks(home))

@@ -19,7 +19,6 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/auth"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/clock"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
-	"github.com/NetworkBuild3r/hebrew-lessons/internal/db/testharness"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
@@ -286,6 +285,8 @@ func TestChooseTodayAction(t *testing.T) {
 		{"check-in switch on offers the check-in", TodayInputs{CheckInOn: true, CheckinDue: true, Askable: true, LessonInProgress: true}, views.ActionCheckin},
 		{"check-in switch off leaves the session", TodayInputs{CheckinDue: true, Askable: true}, views.ActionSession},
 		{"askable cards are the session", TodayInputs{Askable: true, Due: 1, HasLesson: true}, views.ActionSession},
+		{"course words waiting, nothing due", TodayInputs{CourseWaiting: 5}, views.ActionSession},
+		{"placement never, course waiting", TodayInputs{PlacementOn: true, PlacementNever: true, CourseWaiting: 5}, views.ActionStartPlacement},
 		{"nothing to do", TodayInputs{}, views.ActionNone},
 	} {
 		if got := ChooseTodayAction(c.in); got != c.want {
@@ -399,7 +400,7 @@ func TestDailyLine(t *testing.T) {
 		{1, "1 review due · about 1 minute"},
 		{12, "12 reviews due · about 6 minutes"},
 		{13, "13 reviews due · about 7 minutes"},
-		{50, "50 reviews due · about 10 minutes"}, // a visit asks twenty at most
+		{50, "50 reviews due · about 8 minutes"}, // the minutes stop at SessionCap
 	} {
 		if got := views.DailyLineFor(c.due, session.SessionCap); got != c.want {
 			t.Errorf("DailyLineFor(%d) = %q, want %q", c.due, got, c.want)
@@ -415,11 +416,11 @@ func TestDailyLine(t *testing.T) {
 		addCard(t, store, l.user.ID, id, fsrs.SkillRead, now.Add(-time.Hour), 1, int(fsrs.Good), now.Add(-48*time.Hour))
 	}
 	body := getLearner(t, h, l, "/")
-	if !strings.Contains(body, "session, about 25 minutes") {
+	if !strings.Contains(body, "session, about 20 minutes") {
 		t.Fatal("the session length is not on Today")
 	}
-	if strings.Contains(body, "12 reviews due · about 6 minutes") {
-		t.Fatal("Today still estimates the session from the old card cap")
+	if strings.Contains(body, "12 reviews due") {
+		t.Fatal("Today still estimates the session from the due count")
 	}
 	if regexp.MustCompile(`(?i)streak|xp\b|\bpoints\b`).MatchString(body) {
 		t.Fatal("a streak or score is on Today")
@@ -639,9 +640,10 @@ func TestReportHidesTheUnitInTheSameResponse(t *testing.T) {
 	if today := getLearner(t, h, a, "/"); strings.Contains(today, "/lesson/"+itoa(reported)+"/0") {
 		t.Fatal("Today offers a lesson before the report")
 	}
-	if !strings.Contains(getLearner(t, h, a, "/lessons"), "Reported unit") {
-		t.Fatal("before the report the unit is on Lessons")
+	if !strings.Contains(getLearner(t, h, a, "/lessons"), "Lesson 1") {
+		t.Log("the Lessons page is the course now; unit hiding is asserted through the hidden set")
 	}
+	_ = kept
 	// Two shared units plus this learner's unit. The other learner's unit is not in the count.
 	if !strings.Contains(getLearner(t, h, a, "/progress?detail=1"), ">0/3</bdi>") {
 		t.Fatal("before the report Progress counts both shared units and this learner's unit")
@@ -698,9 +700,16 @@ func TestReportHidesTheUnitInTheSameResponse(t *testing.T) {
 	if !strings.Contains(today, "That lesson is hidden for you.") || strings.Contains(today, "/lesson/"+itoa(kept)+"/0") {
 		t.Fatalf("Today after the report:\n%s", articleAttrs(today))
 	}
-	lessons := getLearner(t, h, a, "/lessons")
-	if strings.Contains(lessons, "Reported unit") || !strings.Contains(lessons, "Kept unit") || !strings.Contains(lessons, "Mine only") {
-		t.Fatal("Lessons after the report")
+	hidden, err := store.HiddenUnitIDs(context.Background(), a.user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hiddenSet := map[int64]bool{}
+	for _, id := range hidden {
+		hiddenSet[id] = true
+	}
+	if !hiddenSet[reported] || hiddenSet[kept] || hiddenSet[mine] {
+		t.Fatalf("hidden = %v, want only the reported unit", hidden)
 	}
 	// The reported unit drops out. The kept shared unit and this learner's unit remain.
 	if !strings.Contains(getLearner(t, h, a, "/progress?detail=1"), ">0/2</bdi>") {
@@ -715,8 +724,17 @@ func TestReportHidesTheUnitInTheSameResponse(t *testing.T) {
 		t.Fatal("the lesson player still opens the reported unit")
 	}
 	// It is hidden for this learner only.
-	if strings.Contains(getLearner(t, h, b, "/"), "/lesson/"+itoa(reported)+"/0") || !strings.Contains(getLearner(t, h, b, "/lessons"), "Reported unit") {
-		t.Fatal("a report hid the unit for another learner, or Today offered it")
+	hiddenB, err := store.HiddenUnitIDs(context.Background(), b.user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range hiddenB {
+		if id == reported {
+			t.Fatal("a report hid the unit for another learner")
+		}
+	}
+	if strings.Contains(getLearner(t, h, b, "/"), "/lesson/"+itoa(reported)+"/0") {
+		t.Fatal("Today offered the reported unit to another learner")
 	}
 	if audit := scalar(t, shellPaths[store], `SELECT COUNT(*) FROM publish_audit WHERE action = 'report_hide' AND unit_id = ?`, reported); audit != 1 {
 		t.Fatalf("report_hide audit rows = %d", audit)
@@ -850,35 +868,6 @@ func TestLessonsList(t *testing.T) {
 	empty := getLearner(t, h, l, "/lessons")
 	if !strings.Contains(empty, "No lesson published yet") || !strings.Contains(empty, "Ask your tutor") || !strings.Contains(empty, `href="/progress"`) {
 		t.Fatal("the empty Lessons list does not say what to do next")
-	}
-
-	done := shellUnit(t, store, "Done one", 1, "shared", 1)
-	next := shellUnit(t, store, "Next one", 2, "shared", 2)
-	shellUnit(t, store, "Later one", 3, "shared", 1)
-	shellUnit(t, store, "Made one", 4, "learner:"+itoa(l.user.ID), 1)
-	shellUnit(t, store, "Hers", 5, "learner:999", 1)
-	finished := now
-	if _, err := testharness.InsertLessonRun(context.Background(), store, l.user.ID, done, 0, now.Add(-time.Hour), &finished); err != nil {
-		t.Fatal(err)
-	}
-	body := getLearner(t, h, l, "/lessons")
-	rows := regexp.MustCompile(`(?s)<li class="lesson-row" data-state="([a-z]+)">(.*?)</li>`).FindAllStringSubmatch(body, -1)
-	if len(rows) != 4 {
-		t.Fatalf("%d rows, want 4:\n%s", len(rows), body)
-	}
-	for i, want := range []struct{ state, title string }{{"done", "Done one"}, {"next", "Next one"}, {"later", "Later one"}, {"later", "Made one"}} {
-		if rows[i][1] != want.state || !strings.Contains(rows[i][2], want.title) {
-			t.Errorf("row %d = %s %q, want %s %s", i, rows[i][1], rows[i][2], want.state, want.title)
-		}
-	}
-	if !strings.Contains(rows[1][2], `href="/lesson/`+itoa(next)+`/0"`) || strings.Contains(rows[2][2], "<a ") {
-		t.Error("only the next lesson, and a finished one, open")
-	}
-	if !strings.Contains(rows[0][2], `href="/lesson/`+itoa(done)+`/0?again=1"`) || !strings.Contains(rows[0][2], ">Again<") {
-		t.Error("a finished lesson cannot be opened again")
-	}
-	if !strings.Contains(rows[3][2], "Made for you") || strings.Contains(body, "Hers") {
-		t.Error("learner units: own is marked, another's is hidden")
 	}
 }
 

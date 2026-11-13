@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 	"net/http"
 	"net/url"
@@ -17,6 +18,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/jobs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/speech"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
@@ -258,9 +260,19 @@ func (s *server) fillProgress(ctx context.Context, userID int64, v *views.Progre
 		return err
 	}
 	if len(reports) > 0 {
-		v.Weekly = &views.WeeklyCard{WeekOf: "Week of " + shortDay(reports[0].WeekStart), Summary: reports[0].Summary}
+		card := &views.WeeklyCard{WeekOf: "Week of " + shortDay(reports[0].WeekStart), Summary: reports[0].Summary}
+		var extra struct {
+			Readout []string `json:"readout"`
+		}
+		if json.Unmarshal([]byte(reports[0].Payload), &extra) == nil {
+			card.Lines = extra.Readout
+		}
+		v.Weekly = card
 	}
 
+	if err := s.fillMix(ctx, userID, v); err != nil {
+		slog.Warn("progress: mix", "err", err)
+	}
 	seen := 0
 	for st, n := range sum.Words {
 		if st != learner.Unseen {
@@ -279,6 +291,107 @@ func (s *server) fillProgress(ctx context.Context, userID int64, v *views.Progre
 		return err
 	}
 	return s.fillPlacementHistory(ctx, userID, v, now)
+}
+
+// fillMix is the brief view's three lines: the course, the tutor, and the week.
+// It writes nothing, and it leaves the lines empty on the detail view.
+func (s *server) fillMix(ctx context.Context, userID int64, v *views.ProgressView) error {
+	if !v.Brief {
+		return nil
+	}
+	z, err := s.learnerZone(ctx, userID)
+	if err != nil {
+		return err
+	}
+	today := studyday.Today(s.now(), z)
+
+	lessons, err := speech.CourseLessons()
+	if err != nil {
+		return err
+	}
+	course, err := s.store.CourseLexemes(ctx)
+	if err != nil {
+		return err
+	}
+	have, err := s.store.CourseCardLexemes(ctx, userID)
+	if err != nil {
+		return err
+	}
+	met, place, doneLessons := 0, 0, 0
+	byOrder := map[int]db.CourseLexeme{}
+	for _, row := range course {
+		byOrder[row.Order] = row
+	}
+	for _, row := range course {
+		if have[row.LexemeID] {
+			met++
+		}
+	}
+	for _, lesson := range lessons {
+		all := 0
+		for _, w := range lesson.Words {
+			if row, ok := byOrder[w.Order]; ok && have[row.LexemeID] {
+				all++
+				if row.Order > place {
+					place = row.Order
+				}
+			}
+		}
+		if len(lesson.Words) > 0 && all == len(lesson.Words) {
+			doneLessons = lesson.Number
+		}
+	}
+	switch {
+	case met == 0:
+		v.CourseLine = "The common words start with your first lesson."
+	case doneLessons > 0:
+		v.CourseLine = "Lesson " + strconv.Itoa(doneLessons+1) + " of " + strconv.Itoa(len(lessons)) + ". You have met " + strconv.Itoa(met) + " of the common words."
+	default:
+		v.CourseLine = "You have met " + strconv.Itoa(met) + " of the common words. Lesson 1 is waiting."
+	}
+
+	sheets, err := s.store.ClassSheets(ctx, userID)
+	if err != nil {
+		return err
+	}
+	passed := 0
+	for _, sh := range sheets {
+		if sh.Status == "passed" {
+			passed++
+		}
+	}
+	if len(sheets) == 0 {
+		v.TutorLine = "No class loaded yet."
+	} else {
+		v.TutorLine = views.CountText(len(sheets), "class", "classes") + " from your tutor"
+		if passed < len(sheets) {
+			v.TutorLine += ", " + strconv.Itoa(passed) + " checked"
+		}
+		v.TutorLine += "."
+	}
+
+	from := s.now().AddDate(0, 0, -7)
+	attempts, err := s.store.AttemptTimes(ctx, userID, from, s.now())
+	if err != nil {
+		return err
+	}
+	if len(attempts) == 0 {
+		v.ReviewLine = "No study yet this week."
+	} else {
+		events, err := s.store.RegressionRows(ctx, userID, addDaysStr(today, -7), today, 100)
+		if err != nil {
+			return err
+		}
+		words := map[int64]bool{}
+		for _, e := range events {
+			if e.Kind == db.EventWord {
+				words[e.LexemeID] = true
+			}
+		}
+		v.ReviewLine = "This week: " + views.CountText(len(attempts), "answer", "answers") +
+			", " + views.CountText(len(words), "word", "words") + " slipping."
+	}
+	return nil
 }
 
 // fillSkillPanel fills the overview (no ?skill=) or one skill's bar, and the two line

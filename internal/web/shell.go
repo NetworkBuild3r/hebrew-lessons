@@ -18,6 +18,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/placement"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/roots"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/speech"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
@@ -76,6 +77,8 @@ type TodayInputs struct {
 	// Askable is true when a session built from cards that can be asked today
 	// has at least one card. Its length is Session.Minutes.
 	Askable bool
+	// CourseWaiting is how many new common words the next sitting would add.
+	CourseWaiting int
 }
 
 // ChooseTodayAction is the one next action Today offers. With the placement
@@ -92,7 +95,7 @@ func ChooseTodayAction(in TodayInputs) views.TodayAction {
 		return views.ActionStartPlacement
 	case in.CheckInOn && in.CheckinDue:
 		return views.ActionCheckin
-	case in.Askable:
+	case in.Askable || in.CourseWaiting > 0:
 		return views.ActionSession
 	}
 	return views.ActionNone
@@ -192,13 +195,24 @@ func (s *server) mountShell(mux *http.ServeMux, tokens CSRFToken, gate, secure b
 		})
 	}
 	mux.HandleFunc("GET /learn", page(s.serveLearn))
+	mux.HandleFunc("GET /learn/alefbet", page(s.serveAlefbet))
+	mux.HandleFunc("GET /learn/vowels", page(s.serveVowels))
+	mux.HandleFunc("GET /learn/verbs", page(s.serveBinyanIndex))
+	mux.HandleFunc("GET /learn/verbs/word/{lemma}", page(s.serveVerb))
+	mux.HandleFunc("GET /learn/customs", page(s.serveCustoms))
 	mux.HandleFunc("GET /learn/{slug}", page(s.serveLearnOne))
 	mux.HandleFunc("GET /_hx/learn/{slug}", page(s.serveLearnSheet))
 	mux.HandleFunc("GET /roots", page(s.serveRoots))
 	mux.HandleFunc("GET /roots/{root}", page(s.serveRoot))
+	mux.HandleFunc("GET /tutor", page(s.serveTutor))
+	mux.HandleFunc("POST /_hx/tutor/{id}/study", page(s.postTutorStudy))
 	mux.HandleFunc("GET /lessons", page(s.serveLessons))
+	mux.HandleFunc("GET /lessons/{number}", page(s.serveCourseLesson))
+	mux.HandleFunc("POST /_hx/lessons/{number}/study", page(s.postCourseLesson))
 	mux.HandleFunc("GET /me", page(s.serveMe))
 	mux.HandleFunc("GET /me/speaking", page(s.serveSpeaking))
+	mux.HandleFunc("GET /speech", page(s.serveSpeech))
+	mux.HandleFunc("POST /speech", page(s.serveSpeech))
 	mux.HandleFunc("GET /me/words", page(s.serveWords))
 	mux.HandleFunc("GET /me/verbs", page(s.serveVerbs))
 	mux.HandleFunc("GET /me/mistakes", page(s.serveMistakes))
@@ -210,6 +224,7 @@ func (s *server) mountShell(mux *http.ServeMux, tokens CSRFToken, gate, secure b
 	mux.HandleFunc("GET /lessons/{id}/report", page(s.serveReportForm))
 	mux.HandleFunc("POST /lessons/{id}/report", page(s.postReport))
 	mux.HandleFunc("POST /_hx/review/band", page(s.postBandReview))
+	mux.HandleFunc("POST /_hx/review/course", page(s.postCourseReview))
 	mux.HandleFunc("POST /_hx/placement/recheck", page(s.postRecheck))
 }
 
@@ -258,7 +273,7 @@ func (s *server) sectionLinks(ctx context.Context, ui views.UI) ([]views.Section
 		return nil, err
 	}
 	if len(published) > 0 {
-		out = append(out, views.SectionLink{Href: ui.Href("/learn"), Label: "Learn", Icon: "book", ID: "learn"})
+		out = append(out, views.SectionLink{Href: ui.Href("/learn"), Label: "Learn", Icon: "tiles", ID: "learn"})
 	}
 	if s.showRoots {
 		showRoots, err := roots.Any(ctx, s.store)
@@ -266,7 +281,7 @@ func (s *server) sectionLinks(ctx context.Context, ui views.UI) ([]views.Section
 			return nil, err
 		}
 		if showRoots {
-			out = append(out, views.SectionLink{Href: ui.Href("/roots"), Label: "Roots", Icon: "layers", ID: "roots"})
+			out = append(out, views.SectionLink{Href: ui.Href("/roots"), Label: "Roots", Icon: "branch", ID: "roots"})
 		}
 	}
 	if s.showIsaiah {
@@ -278,6 +293,7 @@ func (s *server) sectionLinks(ctx context.Context, ui views.UI) ([]views.Section
 			out = append(out, views.SectionLink{Href: ui.Href("/isaiah"), Label: "Isaiah", Icon: "flag", ID: "isaiah"})
 		}
 	}
+	out = append(out, views.SectionLink{Href: ui.Href("/tutor"), Label: "Tutor", Icon: "chat", ID: "tutor"})
 	return out, nil
 }
 
@@ -302,49 +318,94 @@ func (s *server) serveLessons(w http.ResponseWriter, r *http.Request, lang, csrf
 	}
 	v := views.LessonsView{Page: page}
 	if user != nil && s != nil && s.store != nil {
-		rows, err := s.lessonRows(r.Context(), user.ID)
+		rows, summary, err := s.courseLessonRows(r.Context(), user.ID)
 		if err != nil {
 			serverError(w)
 			return
 		}
-		v.Rows = rows
+		v.Rows, v.Summary = rows, summary
 	}
 	render(w, r, views.Lessons(v))
 }
 
-// lessonRows is the Lessons list: the learner's published units in order, with a unit they
-// reported left out. The first unit with a lesson still to do is "next"; the units before
-// it are done and the units after it are later.
-func (s *server) lessonRows(ctx context.Context, userID int64) ([]views.LessonRow, error) {
-	list, err := s.store.LearnerUnitProgress(ctx, userID)
+// courseLessonRows is the Lessons list: numbered lessons of five common words in
+// frequency order, with the first one not yet studied marked next.
+func (s *server) courseLessonRows(ctx context.Context, userID int64) ([]views.LessonRow, string, error) {
+	lessons, err := speech.CourseLessons()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	next, hasNext, err := s.store.NextCourseLesson(ctx, userID)
+	if len(lessons) == 0 {
+		return nil, "", nil
+	}
+	course, err := s.store.CourseLexemes(ctx)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	rows := make([]views.LessonRow, 0, len(list))
-	for _, u := range list {
-		gloss, err := titleGloss(ctx, s.store, u.Title)
-		if err != nil {
-			return nil, err
+	have, err := s.store.CourseCardLexemes(ctx, userID)
+	if err != nil {
+		return nil, "", err
+	}
+	byOrder := map[int]db.CourseLexeme{}
+	for _, row := range course {
+		byOrder[row.Order] = row
+	}
+	// A lesson whose words are not all in the database cannot be studied, so it is
+	// not listed. Numbering is over the lessons that are listed.
+	var kept []speech.CourseLesson
+	for _, lesson := range lessons {
+		complete := true
+		for _, w := range lesson.Words {
+			if _, ok := byOrder[w.Order]; !ok {
+				complete = false
+				break
+			}
 		}
+		if complete {
+			kept = append(kept, lesson)
+		}
+	}
+	rows := make([]views.LessonRow, 0, len(kept))
+	next := 0
+	for i, lesson := range kept {
 		row := views.LessonRow{
-			Title: u.Title, Gloss: gloss, Mine: u.Scope != "shared",
-			Lessons: u.Lessons, Done: u.Finished, State: "later",
+			Number: i + 1,
+			Title:  "Lesson " + strconv.Itoa(i+1),
+			Href:   "/lessons/" + strconv.Itoa(i+1),
+			State:  "later",
 		}
-		switch {
-		case u.Finished >= u.Lessons:
+		var words, glosses []string
+		for _, w := range lesson.Words {
+			words = append(words, w.Pointed)
+			glosses = append(glosses, w.Gloss)
+			row.Lessons++
+			stored := byOrder[w.Order]
+			if have[stored.LexemeID] {
+				row.Done++
+			}
+		}
+		row.Words = strings.Join(words, " · ")
+		row.Gloss = strings.Join(glosses, " · ")
+		if row.Lessons > 0 && row.Done >= row.Lessons {
 			row.State = "done"
-			row.Href = lessonPath(u.UnitID, 0) + "?again=1"
-		case hasNext && u.UnitID == next.UnitID:
-			row.State = "next"
-			row.Href = lessonPath(next.UnitID, next.LessonIx)
 		}
 		rows = append(rows, row)
 	}
-	return rows, nil
+	for i := range rows {
+		if rows[i].State != "done" {
+			rows[i].State = "next"
+			next = rows[i].Number
+			break
+		}
+	}
+	if len(rows) == 0 {
+		return nil, "", nil
+	}
+	summary := "All " + strconv.Itoa(len(rows)) + " lessons done."
+	if next > 0 {
+		summary = "Lesson " + strconv.Itoa(next) + " of " + strconv.Itoa(len(rows))
+	}
+	return rows, summary, nil
 }
 
 // reportTarget reads the unit id of a report route. A unit the learner cannot see (not
@@ -625,6 +686,15 @@ func (s *server) fillToday(r *http.Request, page *views.Home) error {
 		ctx := r.Context()
 		if in.CheckInOn && s.recheck != nil && !in.PlacementNever && !in.PlacementActive {
 			s.fillCheckin(ctx, user.ID, t, &in)
+		}
+		if s.study != nil {
+			n, _, err := s.study.CourseWaiting(ctx, user.ID)
+			if err != nil {
+				slog.Warn("today: course", "err", err)
+			} else {
+				in.CourseWaiting = n
+				t.CourseNew = n
+			}
 		}
 		if page.Due > 0 && s.study != nil {
 			minutes, askable, err := s.askableMinutes(ctx, user.ID)

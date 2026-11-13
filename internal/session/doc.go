@@ -25,9 +25,13 @@
 //
 // # Constants
 //
-// SessionCap is the card count at the default pace (20). A learner with
-// 200 timed answers gets a card count from his median seconds per answer,
-// sized to 20 to 30 minutes. TargetSuccess is 0.85, the sessionlimits value the
+// SessionCap is the card count at the default pace (16). A sitting is about
+// 20 minutes. MaxCardsPerSitting is 40, because the list is counted as if
+// each answer takes at least 30 seconds. MaxKeptQueue is the longest list
+// the player keeps, including new cards, drills, and one re-queue of each.
+// A learner with 200 timed answers gets a card count from his median
+// seconds per answer, and a faster median does not raise that count.
+// TargetSuccess is 0.85, the sessionlimits value the
 // coach also reports. New-card caps follow recent accuracy
 // (INIT-027/SPEC-005): 2 below LowAccuracy (0.80), 5 from 0.80 through
 // HighAccuracy (0.90), and 8 above 0.90. MaxNewPerSession is the high tier
@@ -66,6 +70,9 @@
 // injected seed and the card id. There is no math/rand draw. The same clock,
 // the same seed, and the same rows always build the same queue.
 //
+// Two study visits in a row are not the same activity kind while another
+// kind is still waiting. Drill steps keep their seats.
+//
 // The two lists are then interleaved. While a known card is still waiting,
 // a run of struggling cards stops at MaxStruggleRun. Letter steps and pattern steps are woven in
 // after that, one of each after each study card until the drill plan runs
@@ -83,7 +90,8 @@
 // position, then that lesson's index, then frequency rank when the card has
 // one, then card id. A card with no intro lesson sorts after every card that
 // has one. A card with no frequency rank sorts after every card that has one.
-// The lexicon does not store a rank, so ListStudyCards leaves that key unset.
+// A course word's rank comes from the course list. ListStudyCards does not
+// store one, so a card that is not on the course list leaves the key unset.
 //
 // A pass then walks the queue. Two consecutive study visits that share a
 // lexeme are split when a later card can take the second visit's seat

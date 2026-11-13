@@ -180,6 +180,16 @@ templ ActivityBlock(a Activity) {
 									@E(AlsoRightLabel)
 								}
 							}
+							if wrongQuestionTap(a) {
+								@ButtonWith(ButtonQuiet, templ.Attributes{"type": "submit", "name": "attempt", "value": Num64(a.WrongQuestionID), "formnovalidate": true, "formaction": WrongQuestionPath, "hx-post": WrongQuestionPath, "hx-target": "#lesson-frame", "hx-swap": "outerHTML", "hx-select": "unset"}) {
+									@E(WrongQuestionLabel)
+								}
+							}
+							if undoFlagTap(a) {
+								@ButtonWith(ButtonQuiet, templ.Attributes{"type": "submit", "name": "batch", "value": a.UndoBatch, "formnovalidate": true, "formaction": UndoFlagPath, "hx-post": UndoFlagPath, "hx-target": "#lesson-frame", "hx-swap": "outerHTML", "hx-select": "unset"}) {
+									@E(UndoFlagLabel)
+								}
+							}
 							<button type="submit" class="btn btn-primary" name="answer" value="continue" autofocus>@E(a.Continue)</button>
 						}
 					</div>

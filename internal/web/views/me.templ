@@ -56,13 +56,15 @@ templ Me(v MeView) {
 	}
 }
 
-// Lessons is the list of the learner's lessons, in order. Guides, verbs, and words were
-// meant to sit here as tabs (aud-1), but this line has no such pages yet.
+// Lessons is the course: numbered lessons of five common words, in order.
 templ Lessons(v LessonsView) {
 	@Layout(v.Page) {
 		<article class="lessons">
 			<header class="lessons__head">
 				<h1 lang={ v.Lang }>{ v.Page.Lessons }</h1>
+				if v.Summary != "" {
+					<p class="lessons__summary">@E(v.Summary)</p>
+				}
 			</header>
 			if len(v.Rows) == 0 {
 				<section class="quiet-card quiet-card--next">
@@ -90,15 +92,15 @@ templ Lessons(v LessonsView) {
 							</span>
 							<div class="lesson-row__text">
 								<p class="lesson-row__title">
-									@H(row.Title)
+									@E(row.Title)
 									if row.Gloss != "" {
 										<span class="unit-gloss">@E(row.Gloss)</span>
 									}
 								</p>
+								if row.Words != "" {
+									<p class="lesson-row__words" lang="he" dir="rtl">@E(row.Words)</p>
+								}
 								<p class="lesson-row__meta">
-									if row.Mine {
-										@ChipLabelText("Made for you")
-									}
 									<span>
 										@E(StepsDone(row.Done, row.Lessons))
 									</span>

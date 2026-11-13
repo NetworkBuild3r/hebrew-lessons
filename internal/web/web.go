@@ -231,6 +231,12 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 	mux.HandleFunc("POST /_hx/also-right", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
 		s.postAlsoRight(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
 	}))
+	mux.HandleFunc("POST /_hx/wrong-question", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+		s.postWrongQuestion(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
+	}))
+	mux.HandleFunc("POST /_hx/undo-flag", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
+		s.postUndoFlag(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
+	}))
 	mux.HandleFunc("POST /_hx/review/drill", gated(gate, secure, s.drill))
 	mux.HandleFunc("POST /_hx/review/next", gated(gate, secure, s.next))
 	mux.HandleFunc("POST /_hx/zone", gated(gate, secure, s.observeZone))

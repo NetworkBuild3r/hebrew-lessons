@@ -238,5 +238,13 @@ func m25Aside(st m7State) m7State {
 	delete(st.tables, "story_slots")
 	delete(st.rowCnts, "story_slots")
 	st.schema = m8SchemaWithout(st.schema, "story_slots")
+	return m26Aside(st)
+}
+
+// m26Aside drops the course list, which migration 026 adds.
+func m26Aside(st m7State) m7State {
+	delete(st.tables, "course_words")
+	delete(st.rowCnts, "course_words")
+	st.schema = m8SchemaWithout(st.schema, "course_words")
 	return st
 }

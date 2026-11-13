@@ -114,11 +114,11 @@ func TestMigrate020KeepsRowsAndDefaults(t *testing.T) {
 		t.Fatalf("migrate 020: %v", err)
 	}
 	want := make([]int, 0, 21)
-	for i := 1; i <= 25; i++ {
+	for i := 1; i <= 27; i++ {
 		want = append(want, i)
 	}
 	if got := m6Applied(t, conn); !reflect.DeepEqual(got, want) {
-		t.Fatalf("versions after = %v, want 1..25", got)
+		t.Fatalf("versions after = %v, want 1..27", got)
 	}
 
 	if got := m6Dump(t, conn, `SELECT id, email, google_sub, role, created_at FROM users ORDER BY id`); !reflect.DeepEqual(got, usersBefore) {

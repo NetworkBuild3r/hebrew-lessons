@@ -14,25 +14,31 @@ templ Today(h Home) {
 			data-placement-at={ h.PlacementAt }
 		}>
 			<header class="today__head">
-				<h1 lang={ h.Lang }>{ h.Heading }</h1>
-				<p class="today__sub today-known">
-					<span class="today-known__figure" role="group" aria-label={ ProgressLabel(h.Lang, "Words you know") }>
-						<span class="count"><bdi lang="en" dir="ltr">{ h.KnownText }</bdi></span>
-						<span class="today-known__label">@ProgressT(h.Lang, "Words you know")</span>
-					</span>
-					if h.WaitingText != "" {
-						<span class="today-known__figure" role="group" aria-label={ ProgressLabel(h.Lang, LabelLearnedTodayCheckTomorrow) }>
-							<span class="count"><bdi lang="en" dir="ltr">{ h.WaitingText }</bdi></span>
-							<span class="today-known__label">@ProgressT(h.Lang, LabelLearnedTodayCheckTomorrow)</span>
-						</span>
+				<div class="today__intro">
+					<h1 lang={ h.Lang }>{ h.Heading }</h1>
+					if h.Today.CanSayLine != "" {
+						<p class="today__sub today-say"><a href={ templ.SafeURL(h.Href("/progress")) }>@E(h.Today.CanSayLine)</a></p>
 					}
-				</p>
-				if h.Today.DailyLine != "" {
-					<p class="today__sub today-line">@E(h.Today.DailyLine)</p>
-				}
-				if h.Today.CanSayLine != "" {
-					<p class="today__sub today-say"><a href={ templ.SafeURL(h.Href("/progress")) }>@E(h.Today.CanSayLine)</a></p>
-				}
+					if h.Today.DailyLine != "" {
+						<p class="today__sub today-line">@E(h.Today.DailyLine)</p>
+					}
+				</div>
+				<ul class="today-stats today-known">
+					<li class="today-stat" data-stat="known">
+						<span class="today-stat__figure" role="group" aria-label={ ProgressLabel(h.Lang, "Words you know") }>
+							<span class="count"><bdi lang="en" dir="ltr">{ h.KnownText }</bdi></span>
+						</span>
+						<span class="today-stat__l">@ProgressT(h.Lang, "Words you know")</span>
+					</li>
+					if h.WaitingText != "" {
+						<li class="today-stat" data-stat="waiting">
+							<span class="today-stat__figure" role="group" aria-label={ ProgressLabel(h.Lang, LabelLearnedTodayCheckTomorrow) }>
+								<span class="count"><bdi lang="en" dir="ltr">{ h.WaitingText }</bdi></span>
+							</span>
+							<span class="today-stat__l">@ProgressT(h.Lang, LabelLearnedTodayCheckTomorrow)</span>
+						</li>
+					}
+				</ul>
 			</header>
 			if h.Today.Reported {
 				<p class="today-notice" role="status">@T(h.Lang, "", "That lesson is hidden for you. Thank you for telling us.")</p>
@@ -44,6 +50,9 @@ templ Today(h Home) {
 						@todayReviewCard(h)
 						@todayLessonCard(h)
 					</div>
+				}
+				if h.Today.Action == ActionSession {
+					@todayElsewhere(h)
 				}
 			</div>
 			for _, slip := range h.Today.Slips {
@@ -61,14 +70,17 @@ templ todayHero(h Home) {
 	switch h.Today.Action {
 		case ActionSession:
 			<section class="ink-card today-hero today-session" aria-labelledby="hero-title">
-				<h2 id="hero-title" class="today-hero__title">@E(SessionButtonText(h.Today.SessionMinutes))</h2>
+				<p class="eyebrow">@E(SessionKicker(h.Today.SessionMinutes))</p>
+				<h2 id="hero-title" class="today-session__title">@E(TodaySessionTitle(h.Due, h.Today.SessionMinutes, h.Today.CourseNew))</h2>
+				<p class="ink-card__hint">@E(TodaySessionHint(h.Due, h.Today.CourseNew))</p>
 				<a class="btn btn-primary" href={ templ.SafeURL(h.Href("/review")) }>
 					@Icon("play", "")
-					<span>@E(SessionButtonText(h.Today.SessionMinutes))</span>
+					<span lang={ h.Lang }>{ h.Start }</span>
 				</a>
 			</section>
 		case ActionNone:
 			<p class="today-empty">@Pair(h.Lang, h.ZeroHE, h.ZeroEN)</p>
+			<p class="today-speech"><a href={ templ.SafeURL(h.Href("/speech")) }>@T(h.Lang, "", "Common words")</a></p>
 		case ActionResumePlacement:
 			<section class="today-place today-place--resume" aria-labelledby="hero-title">
 				<p class="eyebrow">@T(h.Lang, "", "Placement")</p>
@@ -171,6 +183,55 @@ templ lessonChips(h Home) {
 			</li>
 		}
 	</ul>
+}
+
+// todayElsewhere is the column beside the session on a wide screen and under it on a
+// phone: the words that are slipping, and the two sections that explain what the
+// sitting is doing. It is links only, so the session stays the one gold action.
+templ todayElsewhere(h Home) {
+	<aside class="today__aside" aria-label="Also today">
+		if len(h.Today.Watch) > 0 {
+			<section class="today-mini" aria-labelledby="aside-watch">
+				<h2 id="aside-watch" class="today-mini__h">@T(h.Lang, "", "Words to watch")</h2>
+				<p class="today-mini__note">@T(h.Lang, "", "These come back first.")</p>
+				<ul class="today-mini__list">
+					for _, w := range h.Today.Watch {
+						<li class="today-mini__row" data-skill={ w.Skill }>
+							<span class="today-mini__he">@H(w.Text)</span>
+							if w.Gloss != "" {
+								<span class="today-mini__gloss">@E(w.Gloss)</span>
+							}
+						</li>
+					}
+				</ul>
+			</section>
+		}
+		<nav class="today-mini" aria-labelledby="aside-go">
+			<h2 id="aside-go" class="today-mini__h">@T(h.Lang, "", "Where to go")</h2>
+			<ul class="today-mini__list">
+				<li>
+					<a class="today-mini__link" href={ templ.SafeURL(h.Href("/lessons")) }>
+						@Icon("lessons", "")
+						<span class="today-mini__text">
+							<span class="today-mini__t">@uiRun(h.Lang, h.Lessons)</span>
+							<span class="today-mini__note">@T(h.Lang, "", "The five most common words at a time.")</span>
+						</span>
+						@IconClass("next", iconClass(h.Dir == "rtl"), "")
+					</a>
+				</li>
+				<li>
+					<a class="today-mini__link" href={ templ.SafeURL(h.Href("/learn/alefbet")) }>
+						@Icon("compass", "")
+						<span class="today-mini__text">
+							<span class="today-mini__t">@T(h.Lang, "", "The letters")</span>
+							<span class="today-mini__note">@T(h.Lang, "", "Every letter, and the vowels.")</span>
+						</span>
+						@IconClass("next", iconClass(h.Dir == "rtl"), "")
+					</a>
+				</li>
+			</ul>
+		</nav>
+	</aside>
 }
 
 // todayReviewCard is what is due, when the hero is not the review. A quiet link goes to the

@@ -32,22 +32,23 @@ type MeView struct {
 	Name string
 }
 
-// LessonRow is one unit on the Lessons list. State is done, next, or later.
+// LessonRow is one lesson on the Lessons list. State is done, next, or later.
 type LessonRow struct {
-	Title   string // Pointed Hebrew.
-	Gloss   string // "(translit, meaning)", or empty.
-	Mine    bool   // Built for this learner.
+	Number  int    // Position in the course, from 1.
+	Title   string // "Lesson 5".
+	Gloss   string // The English of its words, joined with " · ".
+	Words   string // Its pointed words, joined with " · ".
 	State   string
-	Lessons int
-	Done    int
-	Href    string // Where "next" opens, or where a finished unit starts again.
+	Lessons int // Words done in this lesson.
+	Done    int // Words in this lesson.
+	Href    string
 }
 
-// LessonsView is the Lessons list. Rows are the learner's published units in order, with
-// any unit they reported already left out.
+// LessonsView is the Lessons list: the numbered course lessons in order.
 type LessonsView struct {
 	Page
-	Rows []LessonRow
+	Rows    []LessonRow
+	Summary string // "Lesson 5 of 94", or "All 94 lessons done."
 }
 
 // ReportView is the no-script page of the report form.

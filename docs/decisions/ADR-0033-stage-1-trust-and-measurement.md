@@ -15,7 +15,7 @@
 
 ## Summary
 
-The app stops recording wrong answers it cannot prove wrong, and takes back the ones it already recorded, as flags that never delete a row. "Known" becomes one frozen "proved" ladder per skill, counted out of the words Brian was taught. "Due" means askable today, and Today offers one session of 20 to 30 minutes. No AI-written unit reaches Today. Every line that will judge this stage is written below, before anything ships, so no line can be moved after the numbers come in.
+The app stops recording wrong answers it cannot prove wrong, and takes back the ones it already recorded, as flags that never delete a row. "Known" becomes one frozen "proved" ladder per skill, counted out of the words Brian was taught. "Due" means askable today, and Today offers one session of about 20 minutes. No AI-written unit reaches Today. Every line that will judge this stage is written below, before anything ships, so no line can be moved after the numbers come in.
 
 ## Context
 
@@ -113,7 +113,7 @@ A fix for a defect that contradicts this ADR may change a count, and it is annou
 **D10 · Due means due today, in one session.**
 - **Same-day steps move.** A review whose next due time falls inside the same study day is due at the next study-day cutoff.
 - **No listening card without a clip.** A listen card exists only when its word has a clip, found by `lexemes.audio_id` or by an `audio_assets` row for its exact pointed text.
-- **One session.** Today offers one session sized to 20 to 30 minutes from his own answer times, preferring typing from English and dictation over meaning picks.
+- **One session.** A review sitting is about 20 minutes. That is the block size in the one study we have, not a finding that 20 minutes beats 10 or 30. Cards that do not fit stay due for the next sitting. The list is counted as if each answer takes at least 30 seconds, so a faster tap does not lengthen it, and one sitting lists at most 40 study questions. The mix still prefers typing from English and dictation over meaning picks. Amended 2026-11-11.
 
 Rejected: keeping same-day learning steps. The app asks each word once per sitting (ADR-0024 D3), so those steps only ever showed as overdue.
 

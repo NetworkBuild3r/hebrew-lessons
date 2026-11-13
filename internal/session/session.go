@@ -15,6 +15,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/fsrs"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/units"
 )
 
 // Service loads a learner's cards and grades the answers.
@@ -123,7 +124,22 @@ type CardRef struct {
 	Intro       bool
 	MovedUp     bool
 	OwnActivity activity.Kind
+	// Source says whether the word is on the common-word course, came from the
+	// learner's tutor, or came from somewhere else.
+	Source Source
 }
+
+// Source says where a study card's word came from.
+type Source string
+
+const (
+	// SourceCourse is a word on the common-word course list.
+	SourceCourse Source = "course"
+	// SourceTutor is a word that came from the learner's tutor, and not the course.
+	SourceTutor Source = "tutor"
+	// SourceOther is anything else: an earlier lesson, or a placement seed.
+	SourceOther Source = "other"
+)
 
 type gradeFunc func(context.Context, int64, fsrs.Rating, bool) error
 
@@ -224,6 +240,48 @@ func (s *Service) BuildSessionFor(ctx context.Context, userID int64, lexemeIDs [
 	return s.build(ctx, userID, only, s.seed)
 }
 
+// sourceOf says where a word came from. The course wins over a tutor sheet,
+// because the course is what ranks the word.
+func sourceOf(lexemeID int64, courseRank map[int64]int, tutor map[int64]bool) Source {
+	if courseRank[lexemeID] > 0 {
+		return SourceCourse
+	}
+	if tutor[lexemeID] {
+		return SourceTutor
+	}
+	return SourceOther
+}
+
+// tutorLexemeIDs is the stored lexemes whose words appear on one of this
+// learner's class sheets.
+func (s *Service) tutorLexemeIDs(ctx context.Context, userID int64) (map[int64]bool, error) {
+	sheets, err := s.store.ClassSheets(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := map[int64]bool{}
+	if len(sheets) == 0 {
+		return out, nil
+	}
+	spellings, err := s.store.LexemeIDsBySpelling(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, sheet := range sheets {
+		for _, line := range sheet.Lines {
+			if line.Held || line.Tutor == "" {
+				continue
+			}
+			for _, tok := range units.Tokenize(line.Tutor) {
+				for _, id := range spellings[units.StripNiqqud(units.Normalize(tok))] {
+					out[id] = true
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
 // build is BuildSession. only, when not nil, keeps the cards of those words and no drill.
 // seed is the sitting seed: it orders equal due times, places new cards, and
 // chooses the miss gap.
@@ -287,6 +345,18 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 	for _, id := range knownIDs {
 		known[id] = struct{}{}
 	}
+	courseRows, err := s.store.CourseLexemes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	courseRank := map[int64]int{}
+	for _, row := range courseRows {
+		courseRank[row.LexemeID] = row.Rank
+	}
+	tutorIDs, err := s.tutorLexemeIDs(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	byLexSkill := map[lexemeSkill]db.StudyCard{}
 	for _, card := range cards {
 		byLexSkill[lexemeSkill{card.LexemeID, card.Skill}] = card
@@ -325,6 +395,9 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 			HasIntro:                  card.HasIntro,
 			IntroPosition:             card.IntroPosition,
 			IntroLesson:               card.IntroLesson,
+			HasFreq:                   courseRank[card.LexemeID] > 0,
+			FreqRank:                  courseRank[card.LexemeID],
+			Source:                    sourceOf(card.LexemeID, courseRank, tutorIDs),
 			Skills:                    activity.ViewsOf(w),
 			Facts:                     facts.of(card.LexemeID),
 			Exposed:                   w.Exposures > 0,

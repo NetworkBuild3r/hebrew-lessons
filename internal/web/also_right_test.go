@@ -173,16 +173,94 @@ func TestAlsoRightButtonOnlyAfterAWrongGrade(t *testing.T) {
 	if graded.AlsoRightID != 9 {
 		t.Fatalf("wrong grade attempt = %d", graded.AlsoRightID)
 	}
-	if got := feedbackView(activity.Item{Kind: activity.ReadPick}, &answerState{
+	rightGrade := feedbackView(activity.Item{Kind: activity.ReadPick}, &answerState{
 		res: activity.Result{Correct: true}, attemptID: 9,
-	}); got.AlsoRightID != 0 {
-		t.Fatalf("right grade exposed attempt %d", got.AlsoRightID)
+	})
+	if rightGrade.AlsoRightID != 0 {
+		t.Fatalf("right grade exposed the also-right attempt %d", rightGrade.AlsoRightID)
+	}
+	if rightGrade.WrongQuestionID != 9 {
+		t.Fatalf("right grade question flag = %d", rightGrade.WrongQuestionID)
+	}
+	flagged := render(views.ActivityFrame(views.ActivityView{
+		Kind: views.KindReadPick, Phase: views.ActFeedback, CSRF: "t", CardID: 4,
+		Feedback: &views.FeedbackView{Correct: true, Title: "Correct", WrongQuestionID: 9},
+	}))
+	if !strings.Contains(flagged, views.WrongQuestionLabel) || !strings.Contains(flagged, `value="9"`) {
+		t.Fatalf("right review feedback:\n%s", flagged)
+	}
+	undo := render(views.ActivityFrame(views.ActivityView{
+		Kind: views.KindReadPick, Phase: views.ActFeedback, CSRF: "t", CardID: 4,
+		Feedback: &views.FeedbackView{Title: views.AlsoRightTaken, UndoBatch: "batch-1"},
+	}))
+	if !strings.Contains(undo, views.UndoFlagLabel) || !strings.Contains(undo, `value="batch-1"`) {
+		t.Fatalf("undo feedback:\n%s", undo)
 	}
 	taken := feedbackView(activity.Item{Kind: activity.ReadPick}, &answerState{
 		res: activity.Result{Correct: false}, attemptID: 9, takenBack: true,
 	})
 	if taken.AlsoRightID != 0 || taken.Title != views.AlsoRightTaken {
 		t.Fatalf("taken back = %+v", taken)
+	}
+}
+
+func TestWrongQuestionVoidsFlagsAndUndo(t *testing.T) {
+	start := time.Date(2026, 10, 21, 16, 0, 0, 0, time.UTC)
+	clk := &stepClock{t: start}
+	store, h := openShell(t, clk, nil, nil)
+	a := addLearner(t, store, "a@example.com", "sub-a", start.Add(200*time.Hour))
+	b := addLearner(t, store, "b@example.com", "sub-b", start.Add(200*time.Hour))
+	lex := addLexeme(t, store, "כֶּלֶב", "dog", "kelev", "m", "")
+	ctx := context.Background()
+	rec := evidence.New(store, fsrs.New(store, clk), clk)
+	if _, err := rec.Attempt(ctx, evidence.Attempt{
+		UserID: a.user.ID, LexemeID: lex, Skill: fsrs.SkillRead, Activity: "read_pick",
+		Source: evidence.SourceReview, Prompt: "dog", Response: "dog", Correct: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	id := latestAttemptID(t, store)
+	miss := formPost(t, h, a, "/_hx/wrong-question", url.Values{"attempt": {itoa(id)}, "_csrf": {a.csrf}}, nil)
+	if miss.Code != http.StatusOK {
+		t.Fatalf("tap = %d\n%s", miss.Code, miss.Body.String())
+	}
+	rows := voidRows(t, store, id)
+	if len(rows) != 1 || rows[0].reason != db.VoidReasonReport {
+		t.Fatalf("voids = %+v", rows)
+	}
+	flags, err := store.FlaggedLexemes(ctx, a.user.ID)
+	if err != nil || !flags[lex] {
+		t.Fatalf("flagged = %v err=%v", flags, err)
+	}
+	conn, err := store.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reason, batch string
+	if err := conn.QueryRow(`SELECT reason, void_batch_id FROM item_flags WHERE learner_id = ? AND lexeme_id = ?`, a.user.ID, lex).Scan(&reason, &batch); err != nil {
+		t.Fatal(err)
+	}
+	if reason != "wrong_question" || batch == "" || batch != rows[0].batch {
+		t.Fatalf("flag reason=%s batch=%s void batch=%s", reason, batch, rows[0].batch)
+	}
+	foreign := formPost(t, h, b, "/_hx/undo-flag", url.Values{"batch": {batch}, "_csrf": {b.csrf}}, nil)
+	if foreign.Code != http.StatusForbidden {
+		t.Fatalf("another learner undo = %d", foreign.Code)
+	}
+	undo := formPost(t, h, a, "/_hx/undo-flag", url.Values{"batch": {batch}, "_csrf": {a.csrf}}, nil)
+	if undo.Code != http.StatusOK || !strings.Contains(undo.Body.String(), views.UndoFlagDone) {
+		t.Fatalf("undo = %d\n%s", undo.Code, undo.Body.String())
+	}
+	flags, err = store.FlaggedLexemes(ctx, a.user.ID)
+	if err != nil || flags[lex] {
+		t.Fatalf("still flagged = %v err=%v", flags, err)
+	}
+	if n := voidCount(t, store); n != 1 {
+		t.Fatalf("undo deleted a void: %d rows", n)
+	}
+	var open int
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM answer_voids WHERE attempt_id = ? AND undone_at IS NULL`, id).Scan(&open); err != nil || open != 0 {
+		t.Fatalf("open voids = %d err=%v", open, err)
 	}
 }
 
@@ -333,8 +411,17 @@ func TestReportVoidsThatLearnersWrongsInOneBatch(t *testing.T) {
 		t.Fatal("the reported unit is still on Today")
 	}
 	lessons := getLearner(t, h, a, "/lessons")
-	if !strings.Contains(lessons, "Other unit") || strings.Contains(lessons, "Reported unit") {
-		t.Fatal("the other unit was hidden too")
+	_ = lessons
+	hidden, err := store.HiddenUnitIDs(context.Background(), a.user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hiddenSet := map[int64]bool{}
+	for _, id := range hidden {
+		hiddenSet[id] = true
+	}
+	if !hiddenSet[reported] || hiddenSet[other] {
+		t.Fatalf("hidden = %v, want only the reported unit", hidden)
 	}
 	rows := allVoidRows(t, store)
 	if len(rows) != 2 {

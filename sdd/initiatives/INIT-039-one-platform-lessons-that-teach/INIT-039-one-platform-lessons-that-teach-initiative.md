@@ -1,6 +1,6 @@
 # INIT-039: One platform, with lessons that teach from your own classes
 
-**Initiative ID:** INIT-039 · **Status:** in progress · **Created:** 2026-11-11 · **Owner:** Brian Nelson
+**Initiative ID:** INIT-039 · **Status:** complete 2026-11-12 · **Created:** 2026-11-11 · **Owner:** Brian Nelson
 **Discipline Profile:** `software` · **Ticket:** none · **Branch:** `main` (in place, as INIT-036 to INIT-038 did)
 **Source:** [BRAIN-002](../../brainstorms/BRAIN-002-lesson-types-done-right/decision-document.md), its [spec skeleton](../../brainstorms/BRAIN-002-lesson-types-done-right/spec-skeleton.md) (spec detail is in section 4 of that file), and [Lesson types](../../../docs/design/lesson-architecture.md). This is Stage 2 of [BRAIN-001](../../brainstorms/BRAIN-001-is-the-hebrew-app-built-right/decision-document.md).
 **Brian's go:** 2026-11-11. "We need a unified platform and a working Hebrew school that lets me learn Hebrew as fast as possible, based on the actual science of learning another language." He removed the standalone worksheet player (`Aharon's code/`), and chose to amend abandon line A2 so this initiative could open before the Stage 1 exit check finished ([ADR-0033](../../../docs/decisions/ADR-0033-stage-1-trust-and-measurement.md), A2).
@@ -13,7 +13,7 @@ Stage 1 made the app honest: no unfair wrong grade, listening back on, Progress 
 1. **Lessons are not built from your own classes.** The research on adult second-language learning (RSCH-003, RSCH-004) points hardest at reading and hearing text where you already know about 90 to 95 percent of the words, plus spaced retrieval and producing the word yourself. Today's lessons are hand-authored units, AI lesson writing is paused, and the picker does not use the tutor's sheets. The tutor audit passed: 286 usable lines, 10 of 10 classes loadable.
 2. **Most class vocabulary is not in the lexicon.** The audit found 742 of 974 distinct class tokens missing. A word with no lexicon entry cannot be a card, a key, or a lesson word.
 3. **Today does not always offer something new.** It offers review. You study days after a class and need a lesson waiting.
-4. **Volume.** Time on task predicts speed more than any method. The success line is 120 study minutes a week, and the app offers one session of about 25 minutes.
+4. **Volume.** Time on task predicts speed more than any method. The success line is 120 study minutes a week, and the app offers one review sitting of about 20 minutes.
 
 ## What you get
 
@@ -53,20 +53,39 @@ Detail for each spec is section 4 of the [BRAIN-002 spec skeleton](../../brainst
 | SPEC-003 | service | Class sheet import with per-sheet checks | SPEC-002 | 5h | complete 2026-11-11. `lessons.ImportSheet`, `db.SaveClassSheet`. Local tests. |
 | SPEC-004 | service | Matcher, T0 test, and lexicon entry checks | SPEC-003 | 6h | complete 2026-11-11. Exact match, one prefix, two hits is a miss, entry checks, ranked pool. Forms are passed in on the word. |
 | SPEC-005 | api | MCP tools for the class queue | SPEC-004 | 3h | complete 2026-11-11. `import_class_sheet`, `get_class_queue`. `record_taught_words` stores `sheetRef` when it names a passed sheet and writes nothing when it does not. A word with no sheet still records. |
-| SPEC-006 | service | Lesson engine: suspension, taught-first buttons, second ask | SPEC-002 | 5h | engine is in: a flagged word is not built, `WithUnrecorded` stores nothing, `WithRun` writes `run_id`, `WithTaughtFirst` ranks seen words. The also-right tap writes the flag. The player does not yet ask the second time. |
+| SPEC-006 | service | Lesson engine: suspension, taught-first buttons, second ask | SPEC-002 | 5h | complete 2026-11-12. Suspension, taught-first, `WithUnrecorded`, and the flag writes are in. The second ask belonged to the class-sheet player. ADR-0034 D1 and ADR-0035 D1 study in the review player and do not build a second one. |
 | SPEC-007 | service | Word lesson picker, assembler, and the pre-flight | SPEC-004, SPEC-006 | 6h | complete 2026-11-11. `lessons.Assemble` and `Preflight`. A lesson under 2 words or 4 graded items becomes the easy lesson. A missed word left out of the passage is added. |
-| SPEC-008 | service | Easy lesson assembler and the Today plan | SPEC-007 | 5h | plan is in: `TodayOffer` reserves the word lesson under 15 minutes and the easy lesson over it. Today does not call it yet. |
-| SPEC-009 | service | Minimal measurement and the weekly readout | SPEC-002, SPEC-007, SPEC-008 | 4h | `Readout` is five lines and says too early under 3 starts. It is not on the weekly report yet. |
+| SPEC-008 | service | Easy lesson assembler and the Today plan | SPEC-007 | 5h | complete 2026-11-12. `TodayOffer` and the easy-lesson assembler stay in the code. Today does not call them: ADR-0034 D1 says the class-sheet assembler is not what Today offers. SPEC-026 is the offer. |
+| SPEC-009 | service | Minimal measurement and the weekly readout | SPEC-002, SPEC-007, SPEC-008 | 4h | complete 2026-11-12. The weekly payload carries the five lines, and Progress shows them on the weekly card. Under 3 starts it says too early. |
 | SPEC-010 | api | One story tool, and one skill that must call it (cuttable) | SPEC-002, SPEC-007 | 4h | complete 2026-11-11. `put_story` returns every failure in one reply. Migration 025 stores one story. The skill is `.cursor/skills/hebrew-story`. |
-| SPEC-011 | frontend | Thin lesson player: word lesson and easy lesson | SPEC-006, SPEC-007, SPEC-008 | 6h | not started. The current player already runs See, Check, Read, Write, and building the stored sentence. A separate player file is not written. |
-| SPEC-012 | frontend | Flag control | SPEC-006, SPEC-011 | 4h | the also-right tap voids and flags in one request. Undo is `UndoFlag` and has no button yet. |
-| SPEC-013 | frontend | Today: review first, reserved lesson slot, source label | SPEC-008, SPEC-011 | 4h | not started. The offer is `TodayOffer`. Today still uses the old lesson gate. |
+| SPEC-011 | frontend | Thin lesson player: word lesson and easy lesson | SPEC-006, SPEC-007, SPEC-008 | 6h | complete 2026-11-12. Not built. ADR-0035 D1: a lesson is studied in the review player, and there is no second player. ADR-0034 D1: the class-sheet assembler is not what Today offers. |
+| SPEC-012 | frontend | Flag control | SPEC-006, SPEC-011 | 4h | complete 2026-11-12. A miss can be taken back. A right answer can be flagged as a bad question. Undo puts the grade and the word back. One request does the void, the flag, and the suspension. |
+| SPEC-013 | frontend | Today: review first, reserved lesson slot, source label | SPEC-008, SPEC-011 | 4h | complete 2026-11-12. Superseded by ADR-0034 D5 and SPEC-026. Today offers a review sitting, and a sitting of new common words when nothing is due. There is no class-date lesson slot. |
 | SPEC-014 | frontend | Speaking-prep page (cuttable) | SPEC-004 | 2h | complete 2026-11-11. `GET /me/speaking` is this learner's tutor lines only. |
-| SPEC-015 | service | Release-bar tests | SPEC-007, SPEC-008, SPEC-011, SPEC-012 | 5h | the six-lesson robot is `TestReleaseBarSixLessons`: perfect run, wrong run, a held line, two older sheets, and a lesson with no graded key. The typed accept-set table stays the INIT-038 test. |
-| SPEC-016 | docs | Security Review | SPEC-002 to SPEC-015 | 3h | not started. It has to be an agent that did not write this code. |
-| SPEC-017 | docs | Architecture and Design Diagrams | SPEC-016 | 2h | diagrams are in [diagrams.md](diagrams.md). |
+| SPEC-015 | service | Release-bar tests | SPEC-007, SPEC-008, SPEC-011, SPEC-012 | 5h | complete 2026-11-12. `TestReleaseBarSixLessons` is the robot. The typed accept-set table stays the INIT-038 test. The class-sheet player those lessons would have opened is not what Today offers (ADR-0034 D1). |
+| SPEC-016 | docs | Security Review | SPEC-002 to SPEC-015, SPEC-024, SPEC-026 | 3h | complete 2026-11-12. An agent that did not write this code found no Critical or High issue. Two Medium notes stay open: a class sheet has no total size cap, and studying a tutor class can write a shared lexicon gloss from the sheet. Undo of a void batch is checked for this learner in the web handler. |
+| SPEC-017 | docs | Architecture and Design Diagrams | SPEC-016 | 2h | complete 2026-11-12. [diagrams.md](diagrams.md) shows the class queue, the assembler that Today does not call, Today's sitting, the five sections, the flag and Undo, and retirement. |
+| SPEC-018 | service | [One review sitting of about 20 minutes](specs/SPEC-018-service-twenty-minute-sitting.md) | none | 2h | complete 2026-11-11. A sitting is about 20 minutes and at most 40 study questions. A faster tap does not lengthen the list. Local tests passed. |
+| SPEC-019 | service | [Lessons from the words that cover speech](specs/SPEC-019-service-words-that-cover-speech.md) | none | 4h | complete 2026-11-11. Pinto 2018, 5,000 subtitle lemmas, about 91 percent of that corpus. Today links to the first lesson when nothing is due. Local tests passed. |
+| SPEC-020 | service | [Walk the most common words](specs/SPEC-020-service-walk-the-common-words.md) | SPEC-019 | 3h | complete 2026-11-11. The next six after the first six. A sentence stays only at about 95 percent known. Local tests passed. |
+| SPEC-021 | docs | [Where a graded meaning comes from](specs/SPEC-021-docs-course-key-source.md) | none | 1h | complete 2026-11-12. ADR-0034 D1, D3, D5 amended. |
+| SPEC-022 | data | [The course list](specs/SPEC-022-data-course-list.md) | SPEC-021 | 6h | complete 2026-11-12. `cmd/coursegen`, `course.tsv`, unsigned fixes. Local tests passed. |
+| SPEC-023 | data | [Check the first 500 course words](specs/SPEC-023-data-review-first-500.md) | SPEC-022 | 4h | complete 2026-11-12. grok-4.7 signed ranks 1–500: 475 ready, 28 dropped, 4 unsigned. Local tests passed. |
+| SPEC-024 | service | [Course words into the lexicon and into review](specs/SPEC-024-service-course-into-review.md) | SPEC-022 | 5h | complete 2026-11-12. Migration 026. Course words are the first source of new review words. Local tests passed. |
+| SPEC-025 | service | [Never the same kind of question twice in a row](specs/SPEC-025-service-no-same-kind-twice.md) | none | 2h | complete 2026-11-12. `MaxKindRun` is 1. Local tests passed. |
+| SPEC-026 | frontend | [The course page, and Today when words are waiting](specs/SPEC-026-frontend-course-page-and-today.md) | SPEC-024 | 5h | complete 2026-11-12. `/speech` is the course page. Today offers a sitting when words are waiting. Local tests passed. |
+| SPEC-027 | service | [The weekly report counts the course](specs/SPEC-027-service-weekly-course-lines.md) | SPEC-024, SPEC-026 | 3h | complete 2026-11-12. The weekly payload has a course block. The course page shows last week. Local tests passed. |
+| SPEC-028 | service | [Numbered lessons from the common words](specs/SPEC-028-service-numbered-course-lessons.md) | SPEC-024 | 4h | complete 2026-11-12. 468 words in 94 lessons of five. Local tests passed. |
+| SPEC-029 | frontend | [The Lessons page is the course](specs/SPEC-029-frontend-lessons-page-course.md) | SPEC-028 | 5h | complete 2026-11-12. `/lessons` lists the course; `/lessons/{n}` studies its words. Local tests passed. |
+| SPEC-030 | frontend | [The Tutor section](specs/SPEC-030-frontend-tutor-section.md) | SPEC-024 | 4h | complete 2026-11-12. `/tutor` lists classes and studies one. Local tests passed. |
+| SPEC-031 | service | [Review says where each word came from](specs/SPEC-031-service-review-source-line.md) | SPEC-024 | 2h | complete 2026-11-12. A card front names Common words, tutor, or earlier. Local tests passed. |
+| SPEC-032 | frontend | [Learn gets the alphabet and the vowels](specs/SPEC-032-frontend-learn-alphabet-vowels.md) | none | 4h | complete 2026-11-12. `/learn/alefbet` and `/learn/vowels`. Local tests passed. |
+| SPEC-033 | frontend | [Progress shows the mix](specs/SPEC-033-frontend-progress-mix.md) | SPEC-026, SPEC-028 | 3h | complete 2026-11-12. Three lines and three links on the brief view; the detail view unchanged. Local tests passed. |
+| SPEC-034 | docs | [The five sections, recorded](specs/SPEC-034-docs-five-sections-recorded.md) | SPEC-029 to SPEC-033 | 1h | complete 2026-11-12. ADR-0035. |
 
-**Total:** about 69h, of which about 52h is code. Cut SPEC-010 and SPEC-014 first if time is short.
+**Total:** about 116h, of which about 92h is code. Cut SPEC-010 and SPEC-014 first if time is short.
+**Full course (SPEC-021 to SPEC-027):** plan [full-course-plan.md](full-course-plan.md), approval [full-course-approval.md](full-course-approval.md). Build order: 021, 022, then 023 by a different agent while 024 and 025 are built, then 026, then 027. SPEC-016's security review now also covers SPEC-024 and SPEC-026, which add a startup write to the lexicon and a POST route.
+**Five sections (SPEC-028 to SPEC-034):** plan [five-sections-plan.md](five-sections-plan.md), approval [five-sections-approval.md](five-sections-approval.md). Build order: 028, then 029 and 031, then 030, then 032 and 033, then 034. SPEC-016's security review also covers SPEC-029, SPEC-030, and SPEC-031, which add three POST routes and two pages that write words.
 **Minimum path to a first lesson you can study:** SPEC-001, 002, 003, 004, 005, 006, 007, 011, 013 (41h).
 
 ## Done when

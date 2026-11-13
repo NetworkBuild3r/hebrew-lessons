@@ -367,7 +367,7 @@ func (s *server) sessionKey(r *http.Request) (string, *auth.User, bool) {
 func (s *server) queueLocked(ctx context.Context, key string, userID int64) (*studyQueue, error) {
 	now := s.now()
 	prev := s.queues[key]
-	if prev != nil && prev.userID == userID && !prev.done && prev.sameDay(now) {
+	if prev != nil && prev.userID == userID && !prev.done && prev.sameDay(now) && prev.total <= session.MaxKeptQueue {
 		return prev, nil
 	}
 	// No learner database: Review stays on the empty done state. That page is
@@ -613,6 +613,7 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 	ref := q.cur
 	vm.CardID = ref.CardID
 	vm.Kind = ref.Kind
+	vm.Source = string(ref.Source)
 	if q.item != nil {
 		// A checked activity carries its own prompt. Nothing about the word goes on
 		// the card: the answer is not in the page until Check has run.
@@ -1204,6 +1205,7 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 		PairsCleared:  vm.PairsCleared,
 		Slow:          vm.Slow,
 		NewMet:        vm.NewMet,
+		Source:        vm.Source,
 	}
 	if vm.Item != nil {
 		card.Act = activityView(lang, csrf, vm)

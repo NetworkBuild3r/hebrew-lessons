@@ -45,12 +45,14 @@ type answerState struct {
 	slow    bool
 	// ownSkill is the due card's skill when Implied, so the line names reading or listening.
 	ownSkill string
-	// attemptID is the wrong graded attempt this feedback can take back.
-	// Zero when the answer was right, or when the check wrote no attempt.
-	// takenBack is set after the learner taps "My answer was also right".
-	// INIT-038/SPEC-009.
+	// attemptID is the graded attempt this feedback can flag.
+	// Zero when the check wrote no attempt.
+	// takenBack is set after the learner flags it. undoBatch is that flag's batch.
+	// restored is set after Undo. INIT-038/SPEC-009. INIT-039/SPEC-012.
 	attemptID int64
 	takenBack bool
+	undoBatch string
+	restored  bool
 }
 
 // prepareItem records the exposure of a new word and builds the item the visit is asked
@@ -205,11 +207,11 @@ func (s *server) answer(w http.ResponseWriter, r *http.Request) {
 	// Place stays the same length: a miss is not put back (ADR-0024 D3).
 	_, q.total, _ = q.sess.Place()
 	var attemptID int64
-	if !res.Correct && q.cur.LexemeID > 0 && q.item.Skill != "" {
+	if q.item != nil && q.cur.LexemeID > 0 && q.item.Skill != "" {
 		// A lookup failure still shows the grade. The tap needs the id; without
 		// it the button stays off, and the answer already recorded is not lost.
 		got, ok, lookErr := latestAttempt(r.Context(), s.store, user.ID, q.cur.LexemeID, q.item.Skill, evidence.SourceReview, 0)
-		if lookErr == nil && ok && !got.correct {
+		if lookErr == nil && ok && got.correct == res.Correct {
 			attemptID = got.id
 		}
 	}
@@ -332,6 +334,7 @@ func activityView(lang, csrf string, vm ReviewCardVM) *views.ActivityView {
 	a := &views.ActivityView{
 		Kind: string(it.Kind), Phase: views.ActAsk, CSRF: csrf, Lang: lang,
 		CardID: vm.CardID, Token: it.Token, Index: vm.Index, Total: vm.Total, Lead: leadFor(it.Kind),
+		Source: vm.Source,
 	}
 	st := vm.Answer
 	if st != nil {
@@ -452,12 +455,18 @@ func feedbackView(it activity.Item, st *answerState) *views.FeedbackView {
 	default:
 		f.Title = "Not quite"
 	}
-	// A tap takes the wrong grade back. It does not mark the answer right.
-	// INIT-038/SPEC-009.
-	if st.takenBack {
+	// A tap takes the grade back and pulls the word out. Undo puts both back.
+	// INIT-038/SPEC-009. INIT-039/SPEC-012.
+	switch {
+	case st.restored:
+		f.Title = views.UndoFlagDone
+	case st.takenBack:
 		f.Title = views.AlsoRightTaken
-	} else if !res.Correct && st.attemptID > 0 {
+		f.UndoBatch = st.undoBatch
+	case !res.Correct && st.attemptID > 0:
 		f.AlsoRightID = st.attemptID
+	case res.Correct && st.attemptID > 0:
+		f.WrongQuestionID = st.attemptID
 	}
 
 	switch {

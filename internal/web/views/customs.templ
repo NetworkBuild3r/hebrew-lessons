@@ -1,0 +1,47 @@
+package views
+
+// CustomsPage is the reference on the ways of the Jews that Isaiah leans on.
+//
+// Reference only, never graded, and never a claim about what to believe
+// (ADR-0035 D5). Each entry says what the practice is and why it helps read the
+// prophet. INIT-040.
+templ CustomsPageView(v CustomsPage) {
+	@Layout(v.Page) {
+		<article class="customs" data-customs="1">
+			<header class="customs__head">
+				<p class="eyebrow">@E("Reading Isaiah")</p>
+				<h1>The ways of the Jews</h1>
+				<p class="lede">Isaiah is a book inside a way of life. These are the days, the places, and the words the prophet assumes you already know. Each one is here because the book leans on it.</p>
+				<p class="customs__note">This is a map, not a course. Nothing here is graded, and nothing here tells you what to believe.</p>
+			</header>
+			for _, group := range v.Groups {
+				<section class="customs__group" aria-labelledby={ "customs-" + group.Name }>
+					<h2 id={ "customs-" + group.Name } class="customs__group-h">{ group.Name }</h2>
+					<ul class="customs__list">
+						for _, c := range group.Items {
+							<li class="custom-card" id={ "custom-" + c.Key } data-custom={ c.Key }>
+								<p class="custom-card__he" lang="he" dir="rtl">{ c.Hebrew }</p>
+								<p class="custom-card__name">{ c.Name }</p>
+								<p class="custom-card__what">{ c.What }</p>
+								<p class="custom-card__why">@E("In Isaiah: " + c.Why)</p>
+								if c.Isaiah != "" {
+									<p class="custom-card__verses" lang="he" dir="rtl">{ c.Isaiah }</p>
+								}
+							</li>
+						}
+					</ul>
+				</section>
+			}
+			<footer class="customs__foot">
+				<p><a href={ templ.SafeURL(v.UI.Href("/isaiah")) }>Read Isaiah</a></p>
+				<p><a href={ templ.SafeURL(v.UI.Href("/learn")) }>All guides</a></p>
+			</footer>
+		</article>
+	}
+}
+
+// CustomsPage is the reference page's data.
+type CustomsPage struct {
+	Page
+	Groups []CustomGroupView
+}

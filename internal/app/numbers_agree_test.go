@@ -47,8 +47,8 @@ func TestNumbersAgreeAcrossSurfaces(t *testing.T) {
 	id := fx.userID
 
 	home := getAgree(t, fx, "/")
-	// Cross-surface number checks need the detail Progress view; the default
-	// brief screen is one can-do sentence (RSCH-013) without ladder rows.
+	// The ladder lives on the detail view; the brief view is one sentence and the
+	// next action (ADR-0035 D4).
 	progress := getAgree(t, fx, "/progress?detail=1")
 
 	session := connectAppMCP(t, fx.app.MCP(), agreeToken)

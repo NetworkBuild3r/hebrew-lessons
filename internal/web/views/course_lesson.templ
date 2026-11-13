@@ -1,0 +1,58 @@
+package views
+
+// CourseWordRow is one word of a lesson on its own page.
+type CourseWordRow struct {
+	Pointed  string
+	English  string
+	Translit string
+	Times    string // "121 times in every 1,000 words", or empty.
+}
+
+// CourseLessonPage is one numbered lesson of the course.
+type CourseLessonPage struct {
+	Page
+	Number int
+	Words  []CourseWordRow
+	Done   bool
+	// Heard is the line about audio, set only when every word has a clip.
+	Heard string
+}
+
+templ CourseLesson(v CourseLessonPage) {
+	@Layout(v.Page) {
+		<article class="course-lesson" data-lesson={ Num(v.Number) }>
+			<header class="course-lesson__head">
+				<h1>Lesson { Num(v.Number) }</h1>
+				<p class="lede">Five of the most common words in Hebrew, in the order they are used.</p>
+			</header>
+			<ol class="course-lesson__words">
+				for _, w := range v.Words {
+					<li class="course-word">
+						<span class="course-word__he" lang="he" dir="rtl">{ w.Pointed }</span>
+						<span class="course-word__en">{ w.English }</span>
+						if w.Times != "" {
+							<span class="course-word__times">{ w.Times }</span>
+						}
+					</li>
+				}
+			</ol>
+			if v.Heard != "" {
+				<p data-heard="1">@E(v.Heard)</p>
+			}
+			<form method="post" action={ templ.SafeURL(v.UI.Href("/_hx/lessons/" + Num(v.Number) + "/study")) }>
+				<input type="hidden" name="_csrf" value={ v.CSRF }/>
+				<button class="btn btn-primary" type="submit">
+					if v.Done {
+						Study these again
+					} else {
+						Study these five
+					}
+				</button>
+			</form>
+			if v.Done {
+				<p class="course-lesson__done">Done. These words come back in review on later days.</p>
+			}
+			<p class="course-lesson__back"><a href={ templ.SafeURL(v.UI.Href("/lessons")) }>All lessons</a></p>
+		</article>
+	}
+}

@@ -44,20 +44,21 @@ func TestKnownShareBands(t *testing.T) {
 	if LowAccuracyKnownShare > 1 || HighAccuracyKnownShare < 0 {
 		t.Fatal("a shifted share leaves 0..1 and would be clamped")
 	}
-	// Literal slots for a full 20-card session. These are not computed from
-	// PlanFor or KnownShare, so a change to the share constants fails here.
+	// Literal slots for a full default sitting (SessionCap is 16).
+	// These are not computed from PlanFor or KnownShare, so a change to
+	// the share constants fails here.
 	cases := []struct {
 		accuracy float64
 		known    int
 		struggle int
 	}{
-		{0, 19, 1},
-		{0.79, 19, 1},
-		{0.80, 16, 4},
-		{0.85, 16, 4},
-		{0.90, 16, 4},
-		{0.91, 13, 7},
-		{1.0, 13, 7},
+		{0, 15, 1},
+		{0.79, 15, 1},
+		{0.80, 12, 4},
+		{0.85, 12, 4},
+		{0.90, 12, 4},
+		{0.91, 10, 6},
+		{1.0, 10, 6},
 	}
 	for _, tc := range cases {
 		got := PlanFor(tc.accuracy)
@@ -143,7 +144,7 @@ func TestMixCapAndDueFill(t *testing.T) {
 func TestInterleaveCapsTheRun(t *testing.T) {
 	now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 	var cands []Candidate
-	for i := 0; i < 15; i++ {
+	for i := 0; i < 14; i++ {
 		cands = append(cands, struggleCand(int64(i+1), now.Add(time.Duration(i)*time.Minute-2*time.Hour)))
 	}
 	cands = append(cands,
@@ -159,7 +160,7 @@ func TestInterleaveCapsTheRun(t *testing.T) {
 			k++
 		}
 	}
-	if s != 15 || k != 2 {
+	if s != 14 || k != 2 {
 		t.Fatalf("struggle=%d known=%d pattern=%s", s, k, pattern(got))
 	}
 	if i := struggleRun(got); i >= 0 {

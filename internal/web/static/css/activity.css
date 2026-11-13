@@ -111,9 +111,27 @@
   gap: var(--space-3);
   overflow: visible;
 }
+.act__orb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  position: relative;
+}
+.act__orb audio {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
 .act__orb .c-orb {
   inline-size: calc(var(--size-cta) * 2);
   block-size: calc(var(--size-cta) * 2);
+}
+.act__orb .pace {
+  justify-content: center;
 }
 .act__orb .c-orb .icon {
   inline-size: var(--space-6);

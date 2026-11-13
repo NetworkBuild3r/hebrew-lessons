@@ -59,6 +59,26 @@ templ ActivityFrame(a ActivityView) {
 								}
 							</form>
 						}
+						if a.Feedback != nil && a.Feedback.Correct && a.Feedback.WrongQuestionID != 0 {
+							<form method="post" action={ templ.SafeURL(WrongQuestionPath) } hx-post={ WrongQuestionPath } hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
+								<input type="hidden" name="_csrf" value={ a.CSRF }/>
+								<input type="hidden" name="attempt" value={ Num64(a.Feedback.WrongQuestionID) }/>
+								<input type="hidden" name="card_id" value={ Num64(a.CardID) }/>
+								@ButtonWith(ButtonQuiet, submitAttrs(templ.Attributes{})) {
+									@E(WrongQuestionLabel)
+								}
+							</form>
+						}
+						if a.Feedback != nil && a.Feedback.UndoBatch != "" {
+							<form method="post" action={ templ.SafeURL(UndoFlagPath) } hx-post={ UndoFlagPath } hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
+								<input type="hidden" name="_csrf" value={ a.CSRF }/>
+								<input type="hidden" name="batch" value={ a.Feedback.UndoBatch }/>
+								<input type="hidden" name="card_id" value={ Num64(a.CardID) }/>
+								@ButtonWith(ButtonQuiet, submitAttrs(templ.Attributes{})) {
+									@E(UndoFlagLabel)
+								}
+							</form>
+						}
 						<form method="post" action="/_hx/review/next" hx-post="/_hx/review/next" hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
 							<input type="hidden" name="_csrf" value={ a.CSRF }/>
 							<input type="hidden" name="card_id" value={ Num64(a.CardID) }/>
@@ -88,6 +108,9 @@ templ actTop(lang string, done, total, index int) {
 // shows is the skill's rule: a listening item has audio and no Hebrew, a reading
 // item has pointed Hebrew and no audio, typing from English has the gloss only.
 templ actPrompt(a ActivityView) {
+	if a.Phase == ActAsk && a.Source != "" {
+		<p class="act__source" data-source={ a.Source }>{ SourceLabel(a.Source) }</p>
+	}
 	<p class="act__lead" id="act-lead" lang="en">{ a.Lead }</p>
 	switch a.Kind {
 		case KindReadPick:

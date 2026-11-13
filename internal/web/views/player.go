@@ -99,6 +99,11 @@ type Activity struct {
 	// Zero hides the button: a right answer, an ungraded reveal, and a step
 	// that recorded nothing. INIT-038/SPEC-009.
 	AlsoRightID int64
+	// WrongQuestionID is a right graded attempt the learner can flag.
+	// Zero hides that button. INIT-039/SPEC-012.
+	WrongQuestionID int64
+	// UndoBatch puts a flagged word back. Empty hides Undo.
+	UndoBatch string
 	// Kind is the activity type, a hook for the stylesheet (data-kind). It is never
 	// shown to the learner.
 	Kind string
@@ -158,6 +163,14 @@ func orderWrong(a Activity) bool {
 // INIT-038/SPEC-009.
 func alsoRightTap(a Activity) bool {
 	return a.AlsoRightID != 0 && strings.Contains(a.FeedbackClass, "feedback--wrong")
+}
+
+func wrongQuestionTap(a Activity) bool {
+	return a.WrongQuestionID != 0 && strings.Contains(a.FeedbackClass, "feedback--right")
+}
+
+func undoFlagTap(a Activity) bool {
+	return a.UndoBatch != ""
 }
 
 // orderRightClass marks the learner's reveal row. INIT-029/SPEC-004.

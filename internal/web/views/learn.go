@@ -13,6 +13,15 @@ type LearnGroup struct {
 	Summary string
 	Example string
 	Cover   string
+	Href    string // Set for a fixed reference page, such as the alphabet.
+}
+
+// learnGroupHref is a fixed page's address when it has one, else the guide's.
+func learnGroupHref(g LearnGroup) string {
+	if g.Href != "" {
+		return g.Href
+	}
+	return "/learn/" + g.Slug
 }
 
 // LearnIndexView is the Learn index.

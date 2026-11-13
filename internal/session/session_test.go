@@ -220,7 +220,7 @@ func TestInterleaveStruggleRun(t *testing.T) {
 	svc, store, clk := openSvc(t, 1)
 	userID := mustUser(t, store)
 	reviewed := clk.Now().Add(-48 * time.Hour)
-	for i := 0; i < 15; i++ {
+	for i := 0; i < 14; i++ {
 		due := clk.Now().Add(time.Duration(i)*time.Minute - 2*time.Hour)
 		addCard(t, store, userID, fmt.Sprintf("s-%02d", i), fsrs.SkillRead, due, 0, int(fsrs.Hard), reviewed, false)
 	}
@@ -230,7 +230,7 @@ func TestInterleaveStruggleRun(t *testing.T) {
 	}
 	got := drain(t, mustBuild(t, svc, userID))
 	s, k := counts(got)
-	if s != 15 || k != 2 {
+	if s != 14 || k != 2 {
 		t.Fatalf("struggle=%d known=%d (%s)", s, k, pattern(got))
 	}
 	assertShape(t, got)
@@ -767,8 +767,8 @@ func TestDrillCap(t *testing.T) {
 	}
 	got := drainAll(t, mustBuild(t, svc, userID))
 	plan := PlanFor(0.5)
-	if plan.Known != 19 || plan.Struggle != 1 {
-		t.Fatalf("plan = %+v, want 19/1", plan)
+	if plan.Known != 15 || plan.Struggle != 1 {
+		t.Fatalf("plan = %+v, want 15/1", plan)
 	}
 	s, k, letters := 0, 0, 0
 	for _, card := range got {
@@ -799,8 +799,8 @@ func TestDrillsAtBandPlans(t *testing.T) {
 		good, again  int
 		wantK, wantS int
 	}{
-		{name: "in-band 16/4", good: 45, again: 5, wantK: 16, wantS: 4},
-		{name: "high 13/7", good: 48, again: 2, wantK: 13, wantS: 7},
+		{name: "in-band 12/4", good: 45, again: 5, wantK: 12, wantS: 4},
+		{name: "high 10/6", good: 48, again: 2, wantK: 10, wantS: 6},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

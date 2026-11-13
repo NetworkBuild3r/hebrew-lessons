@@ -238,6 +238,7 @@ type WeeklyReportRow struct {
 	WeekStart string
 	Summary   string
 	CreatedAt time.Time
+	Payload   string
 }
 
 // WeeklyReportRows returns the learner's reports whose week starts from through to,
@@ -248,7 +249,7 @@ func (s *Store) WeeklyReportRows(ctx context.Context, userID int64, from, to str
 		return nil, err
 	}
 	rows, err := conn.QueryContext(ctx, `
-		SELECT week_start, summary, created_at FROM weekly_reports
+		SELECT week_start, summary, created_at, payload_json FROM weekly_reports
 		WHERE user_id = ? AND week_start >= ? AND week_start <= ?
 		ORDER BY week_start DESC LIMIT ?`, userID, from, to, limit)
 	if err != nil {
@@ -259,7 +260,7 @@ func (s *Store) WeeklyReportRows(ctx context.Context, userID int64, from, to str
 	for rows.Next() {
 		var r WeeklyReportRow
 		var at string
-		if err := rows.Scan(&r.WeekStart, &r.Summary, &at); err != nil {
+		if err := rows.Scan(&r.WeekStart, &r.Summary, &at, &r.Payload); err != nil {
 			return nil, fmt.Errorf("db: weekly reports: %w", err)
 		}
 		if r.CreatedAt, err = ParseTime(at); err != nil {

@@ -13,29 +13,33 @@ import (
 )
 
 const (
-	// SessionMinMinutes and SessionMaxMinutes are the one-session budget
-	// (ADR-0033 D10). SessionTargetMinutes is the length the card count aims at.
+	// SessionMinMinutes and SessionMaxMinutes are one review sitting
+	// (ADR-0033 D10, amended 2026-11-11). A sitting is about 20 minutes,
+	// the block in the one study we have. Cards that do not fit stay due.
 	SessionMinMinutes    = 20
-	SessionMaxMinutes    = 30
-	SessionTargetMinutes = 25
+	SessionMaxMinutes    = 20
+	SessionTargetMinutes = 20
+
+	// MinPlannedSeconds is the fastest pace used to size the list.
+	// A quicker tap does not add more questions.
+	MinPlannedSeconds = 30
 
 	// AnswerPaceWindow is how many of the newest timed answers make the
 	// median seconds per answer. Fewer than this uses DefaultSecondsPerAnswer.
 	AnswerPaceWindow = 200
 
 	// DefaultSecondsPerAnswer is the pace when fewer than AnswerPaceWindow
-	// timed answers exist. 75 seconds fills the 25-minute target with 20 cards.
+	// timed answers exist. 75 seconds fills the 20-minute target with 16 cards.
 	DefaultSecondsPerAnswer = 75
 
-	// SessionCap is the card count at the default pace. It is no longer a
-	// fixed stop for every learner: BuildSession uses CardsForPace. Today's
-	// daily line still reads this until SPEC-011. A re-queued miss is another
-	// visit of a card already counted.
-	SessionCap = SessionTargetMinutes * 60 / DefaultSecondsPerAnswer
+	// SessionCap is the card count at the default pace.
+	// MaxCardsPerSitting is the most study questions one sitting lists.
+	SessionCap         = SessionTargetMinutes * 60 / DefaultSecondsPerAnswer
+	MaxCardsPerSitting = SessionTargetMinutes * 60 / MinPlannedSeconds
 
-	// MaxKindRun is the longest run of the same activity kind across the
-	// session while another kind is still waiting (ADR-0028 D6).
-	MaxKindRun = 3
+	// MaxKindRun is the longest run of one activity kind while another kind
+	// is still waiting (ADR-0028 D6).
+	MaxKindRun = 1
 
 	// TargetSuccess is the session success rate the default mix aims at.
 	// The literal lives in sessionlimits so the authoring coach reads the
@@ -126,6 +130,11 @@ const (
 	// INIT-027/SPEC-003: six steps, not twenty.
 	DrillCap = 6
 
+	// MaxKeptQueue is the longest in-progress list the player keeps:
+	// study cards, new cards, drills, and one re-queue of each.
+	// A longer list was sized by an older budget and is rebuilt.
+	MaxKeptQueue = 2 * (MaxCardsPerSitting + MaxNewPerSession + DrillCap)
+
 	// DrillClearStreak is how many right, non-slow drill answers in a row
 	// clear a confusion pair. INIT-027/SPEC-003.
 	DrillClearStreak = 3
@@ -204,6 +213,9 @@ func CardsForPace(seconds float64) (cards, minutes int) {
 	if seconds <= 0 || math.IsNaN(seconds) || math.IsInf(seconds, 0) {
 		seconds = DefaultSecondsPerAnswer
 	}
+	if seconds < MinPlannedSeconds {
+		seconds = MinPlannedSeconds
+	}
 	lo := float64(SessionMinMinutes * 60)
 	hi := float64(SessionMaxMinutes * 60)
 	target := float64(SessionTargetMinutes * 60)
@@ -216,6 +228,9 @@ func CardsForPace(seconds float64) (cards, minutes int) {
 	}
 	for float64(cards)*seconds < lo && float64(cards+1)*seconds <= hi {
 		cards++
+	}
+	if cards > MaxCardsPerSitting {
+		cards = MaxCardsPerSitting
 	}
 	minutes = int(math.Round(float64(cards) * seconds / 60))
 	if minutes < SessionMinMinutes {
@@ -255,6 +270,9 @@ type Candidate struct {
 	// A missing rank sorts after every rank that is present.
 	HasFreq  bool
 	FreqRank int
+
+	// Source says where the word came from. The zero value is SourceOther.
+	Source Source
 
 	// Skills is how the learner model sees the card's word in each skill, and Facts says
 	// which activities can ask it. Exposed is true when the word has been shown with no
@@ -1006,6 +1024,7 @@ func newRefs(cards []Candidate) []CardRef {
 			Skill:    c.Skill,
 			Kind:     c.Skill,
 			New:      true,
+			Source:   c.Source,
 		}
 	}
 	return out
@@ -1020,6 +1039,7 @@ func refs(cards []Candidate, struggling bool) []CardRef {
 			Skill:      c.Skill,
 			Struggling: struggling,
 			Kind:       c.Skill,
+			Source:     c.Source,
 		}
 	}
 	return out

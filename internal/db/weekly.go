@@ -155,3 +155,72 @@ func (s *Store) AttemptTimes(ctx context.Context, userID int64, from, to time.Ti
 	}
 	return out, nil
 }
+
+// LessonWeek is one week's counts for the five-line readout. A run that never
+// started leaves no row, so offered is the caller's started count.
+// INIT-039/SPEC-009.
+type LessonWeek struct {
+	Started    int
+	Finished   int
+	Flags      int
+	Answers    int
+	Right      int
+	Voids      int
+	LaterRight int
+	LaterN     int
+}
+
+// LessonWeekCounts reads those counts for one learner between from and to.
+func (s *Store) LessonWeekCounts(ctx context.Context, userID int64, from, to time.Time) (LessonWeek, error) {
+	var w LessonWeek
+	conn, err := s.connOrErr()
+	if err != nil {
+		return w, err
+	}
+	start, end := FormatTime(from), FormatTime(to)
+	if err := conn.QueryRowContext(ctx, `
+		SELECT COUNT(*), COALESCE(SUM(CASE WHEN correct = 1 THEN 1 ELSE 0 END), 0)
+		FROM attempts
+		WHERE user_id = ? AND created_at >= ? AND created_at < ?
+		  AND NOT EXISTS (
+		    SELECT 1 FROM answer_voids v WHERE v.attempt_id = attempts.id AND v.undone_at IS NULL
+		  )`, userID, start, end).Scan(&w.Answers, &w.Right); err != nil {
+		return w, fmt.Errorf("db: lesson week answers: %w", err)
+	}
+	if err := conn.QueryRowContext(ctx, `
+		SELECT COUNT(*), COALESCE(SUM(CASE WHEN a.correct = 1 THEN 1 ELSE 0 END), 0)
+		FROM attempts a
+		WHERE a.user_id = ? AND a.created_at >= ? AND a.created_at < ?
+		  AND EXISTS (
+		    SELECT 1 FROM attempts prev
+		    WHERE prev.user_id = a.user_id AND prev.lexeme_id = a.lexeme_id AND prev.id < a.id
+		      AND prev.created_at < ?
+		  )
+		  AND NOT EXISTS (
+		    SELECT 1 FROM answer_voids v WHERE v.attempt_id = a.id AND v.undone_at IS NULL
+		  )`, userID, start, end, start).Scan(&w.LaterN, &w.LaterRight); err != nil {
+		return w, fmt.Errorf("db: lesson week later: %w", err)
+	}
+	if err := conn.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM answer_voids
+		WHERE learner_id = ? AND created_at >= ? AND created_at < ? AND undone_at IS NULL`,
+		userID, start, end).Scan(&w.Voids); err != nil {
+		return w, fmt.Errorf("db: lesson week voids: %w", err)
+	}
+	if err := conn.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM item_flags
+		WHERE learner_id = ? AND created_at >= ? AND created_at < ?`,
+		userID, start, end).Scan(&w.Flags); err != nil {
+		return w, fmt.Errorf("db: lesson week flags: %w", err)
+	}
+	if err := conn.QueryRowContext(ctx, `
+		SELECT COUNT(*), COALESCE(SUM(CASE WHEN r.finished_at IS NOT NULL THEN 1 ELSE 0 END), 0)
+		FROM lesson_runs r
+		JOIN units u ON u.id = r.unit_id
+		WHERE r.user_id = ? AND r.started_at >= ? AND r.started_at < ?
+		  AND u.lesson_type IN ('word', 'easy')`,
+		userID, start, end).Scan(&w.Started, &w.Finished); err != nil {
+		return w, fmt.Errorf("db: lesson week runs: %w", err)
+	}
+	return w, nil
+}

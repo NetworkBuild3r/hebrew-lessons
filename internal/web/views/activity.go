@@ -117,6 +117,11 @@ type FeedbackView struct {
 	// Zero hides the button. A right answer and an ungraded reveal leave it zero.
 	// INIT-038/SPEC-009.
 	AlsoRightID int64
+	// WrongQuestionID is the right graded attempt the learner can flag as a bad
+	// question. Zero hides that button. INIT-039/SPEC-012.
+	WrongQuestionID int64
+	// UndoBatch is the flag batch a tap can put back. Empty hides Undo.
+	UndoBatch string
 }
 
 // ActivityView is one checked activity, as a screen.
@@ -133,6 +138,8 @@ type ActivityView struct {
 	Total int
 	// Lead is the instruction above the prompt.
 	Lead string
+	// Source names where the word came from: course, tutor, or other.
+	Source string
 	// Hebrew, Gloss and AudioURL are the prompt, whichever the skill allows.
 	Hebrew   string
 	Gloss    string
@@ -224,6 +231,12 @@ const (
 	AlsoRightPath  = "/_hx/also-right"
 	AlsoRightLabel = "My answer was also right"
 	AlsoRightTaken = "Taken back. This answer no longer counts."
+
+	WrongQuestionPath  = "/_hx/wrong-question"
+	WrongQuestionLabel = "This question is wrong"
+	UndoFlagPath       = "/_hx/undo-flag"
+	UndoFlagLabel      = "Undo"
+	UndoFlagDone       = "Put back. This answer counts again."
 )
 
 // AlsoCountsLine names the easier skill that an implied Good covered.

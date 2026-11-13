@@ -54,32 +54,90 @@
 .rail-more { display: none; }
 @media (min-width: 1024px) {
   .section-jump { display: none; }
+  /* Learn, Roots, Isaiah and Tutor sit in the rail as the same pill the five
+     destinations use, so one list of places reads as one list. A rule above
+     them marks where the extra sections start. */
   .rail-more {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: var(--space-2);
     inline-size: 100%;
     min-inline-size: 0;
     padding-inline: 0;
+    padding-block-start: var(--space-3);
+    border-block-start: 1px solid var(--hairline);
   }
   .rail__link {
     flex-direction: column;
     justify-content: center;
-    gap: 0;
+    gap: var(--space-1);
+    min-block-size: var(--tap);
+    padding-block: var(--space-2);
     padding-inline: 0;
     border: 0;
+    border-radius: var(--radius-pill);
     background: transparent;
+    color: var(--muted);
     font-size: var(--fs-caption);
+    font-weight: 600;
+    line-height: var(--lh-he-body);
+    text-align: center;
   }
+  .rail__link:hover { color: var(--text); background: var(--surface-soft); }
+  .rail__link[aria-current="page"] {
+    color: var(--text);
+    font-weight: 700;
+    background: var(--surface-soft);
+  }
+  .rail__link[aria-current="page"] .icon { color: var(--text); }
 }
 
 /* Today */
-.today__head { display: grid; gap: var(--space-1); }
+/* The heading and the counts share one row on a wide screen and stack on a phone.
+   align-items: end lines the big figure up with the h1's baseline block. */
+.today__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
+}
+.today__intro { display: grid; gap: var(--space-1); min-inline-size: 0; }
 .today__sub { color: var(--muted); font-size: var(--fs-body); line-height: var(--lh-he-body); }
 .today-known { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
 .today-known__figure { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1); min-inline-size: 0; }
 .today-known__label { font-weight: 600; }
 .today-say a { color: var(--text); font-weight: 700; text-decoration: underline; text-underline-offset: .15em; }
+
+/* The two counts. Each is a figure over its label, never a sentence. */
+.today-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-2) var(--space-5);
+  list-style: none;
+  padding: 0;
+}
+.today-stat { display: grid; gap: 0; min-inline-size: 0; }
+.today-stat + .today-stat {
+  padding-inline-start: var(--space-5);
+  border-inline-start: 1px solid var(--hairline-strong);
+}
+.today-stat__n,
+.today-stat__figure .count,
+.today-known .count {
+  font-family: var(--font-display);
+  font-size: var(--fs-display);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  font-variant-numeric: tabular-nums;
+}
+.today-stat__l {
+  color: var(--muted);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  line-height: var(--lh-body);
+}
 .today__grid { display: grid; gap: var(--space-5); align-items: stretch; }
 .today__side { display: grid; gap: var(--space-5); align-content: start; }
 .today__side:empty { display: none; }
@@ -101,7 +159,90 @@
 .today-place .btn-primary:hover { background: color-mix(in srgb, var(--lamp) 88%, var(--on-lamp)); }
 
 .today-hero { gap: var(--space-3); }
-/* The session button is the one action. On a phone it fills the column and the label wraps. */
+/* The session hero is content-sized, not a tall empty slab: the title, one line,
+   and the one gold action. */
+.today-session {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+  align-content: start;
+}
+.today-session .eyebrow {
+  color: var(--kicker-on-ink);
+}
+.today-session__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-he-xl);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  overflow: visible;
+}
+.today-session .ink-card__hint { max-inline-size: 46ch; }
+.today-session .btn { margin-block-start: var(--space-3); }
+/* The column beside the session, and under it on a phone. Neutral cards only:
+   the session holds the one gold action. */
+.today__aside { display: grid; gap: var(--space-4); align-content: start; }
+.today-mini {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-1);
+}
+.today-mini__h {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: 700;
+  line-height: var(--lh-he-body);
+}
+.today-mini__note { color: var(--muted); font-size: var(--fs-small); line-height: var(--lh-body); }
+.today-mini__list { display: grid; gap: var(--space-1); list-style: none; padding: 0; }
+.today-mini__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding-block: var(--space-1);
+  min-inline-size: 0;
+}
+.today-mini__he {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-md);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  padding-block: .1em;
+}
+.today-mini__gloss { color: var(--muted); font-size: var(--fs-small); }
+.today-mini__link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: var(--size-tap);
+  padding-block: var(--space-2);
+  color: var(--text);
+  text-decoration: none;
+}
+/* The leading icon sits in a soft tile, the same treatment the app gives every
+   other leading icon, so it reads as a place to go rather than stray art.
+   The arrow stays bare: it is a direction, not a destination. */
+.today-mini__link > .icon:first-child {
+  flex: none;
+  display: grid;
+  place-items: center;
+  inline-size: var(--space-7);
+  block-size: var(--space-7);
+  padding: var(--space-2);
+  box-sizing: content-box;
+  border-radius: var(--radius-control);
+  background: var(--surface-soft);
+  color: var(--text);
+}
+.today-mini__link > .icon:last-child { color: var(--muted); flex: none; }
+.today-mini__text { display: grid; gap: 0; flex: 1 1 auto; min-inline-size: 0; }
+.today-mini__t { font-weight: 700; font-size: var(--fs-body); }
+
 .today-session .btn {
   flex-wrap: nowrap;
   align-items: center;
@@ -564,7 +705,7 @@
   .today__grid { align-items: start; }
   .today__grid[data-hero="true"] { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
   /* With nothing beside it, the action takes the whole row instead of leaving a blank column. */
-  .today__grid[data-hero="true"]:not(:has(> .today__side)) { grid-template-columns: minmax(0, 1fr); }
+  .today__grid[data-hero="true"]:not(:has(> .today__side)):not(:has(> .today__aside)) { grid-template-columns: minmax(0, 1fr); }
   .today__grid[data-hero="false"] { grid-template-columns: 1fr 1fr; }
   .today__grid[data-hero="false"] .today__side { display: contents; }
   .today .ink-card,
@@ -576,6 +717,11 @@
   .today-hero .btn { align-self: start; inline-size: auto; margin-block-start: var(--space-4); padding-inline: var(--space-6); }
   .today-hero .today-form { justify-self: start; }
   .today-hero .today-form .btn { inline-size: auto; }
+  /* The session is a card, not a panel: it keeps its own height and a readable width. */
+  .today-session {
+    min-block-size: 0;
+    max-inline-size: calc(var(--space-9) * 6);
+  }
   .lessons, .me { max-inline-size: calc(var(--player-max) + var(--space-9)); }
 }
 

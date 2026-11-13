@@ -13,14 +13,24 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 )
 
-// InsertLexeme inserts a lexeme with text_nfc and returns the id.
+// InsertLexeme inserts a lexeme with text_nfc and returns the id. When a row
+// with that text is already stored — the common-word course seeds some of them
+// at startup — it returns that row's id instead of failing.
 func InsertLexeme(ctx context.Context, s *db.Store, textNFC string) (int64, error) {
-	res, err := s.ExecContext(ctx, `INSERT INTO lexemes (text_nfc) VALUES (?)`, textNFC)
-	if err != nil {
+	res, err := s.ExecContext(ctx, `INSERT INTO lexemes (text_nfc) VALUES (?) ON CONFLICT (text_nfc) DO NOTHING`, textNFC)
+	if err == nil {
+		if id, idErr := res.LastInsertId(); idErr == nil {
+			if n, rowsErr := res.RowsAffected(); rowsErr == nil && n > 0 {
+				return id, nil
+			}
+		}
+	}
+	conn, connErr := s.DB()
+	if connErr != nil {
 		return 0, fmt.Errorf("testharness: insert lexeme: %w", err)
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
+	var id int64
+	if scanErr := conn.QueryRowContext(ctx, `SELECT id FROM lexemes WHERE text_nfc = ?`, textNFC).Scan(&id); scanErr != nil {
 		return 0, fmt.Errorf("testharness: insert lexeme: %w", err)
 	}
 	return id, nil

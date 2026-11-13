@@ -24,7 +24,7 @@ var IconNames = []string{
 	"speaker", "replay", "slower", "play", "stop", "audio-off", "dots",
 	"x", "check", "arrow-right", "arrow-left",
 	"keyboard", "flag", "lamp", "spark", "eye", "flip",
-	"theme", "help", "tip",
+	"theme", "help", "tip", "chat", "compass", "tiles", "branch",
 	// Older ids, kept so existing views and links keep working.
 	"today", "lessons", "review", "progress", "sound", "next", "close",
 }

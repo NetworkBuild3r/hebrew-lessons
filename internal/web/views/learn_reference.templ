@@ -1,0 +1,67 @@
+package views
+
+// AlefbetPage is the alphabet reference.
+type AlefbetPage struct {
+	Page
+	Forms []AlefbetEntry
+}
+
+templ AlefbetPageView(v AlefbetPage) {
+	@Layout(v.Page) {
+		<article class="alefbet-page" data-alefbet="1">
+			<header class="alefbet-page__head">
+				<h1>The alphabet</h1>
+				<p class="lede">Twenty-two letters. Five of them change shape at the end of a word, and a dot inside a letter can change its sound.</p>
+			</header>
+			<ul class="alefbet-grid">
+				for _, f := range v.Forms {
+					<li class="alefbet-cell" id={ "letter-" + f.Translit }>
+						<span class="alefbet-cell__he" lang="he" dir="rtl">{ f.Letter }</span>
+						<span class="alefbet-cell__name" lang="he" dir="rtl">{ f.Name }</span>
+						<span class="alefbet-cell__translit">{ f.Translit }</span>
+						<span class="alefbet-cell__sound">{ f.Sound }</span>
+						if f.Cue != "" {
+							<span class="alefbet-cell__cue">{ f.Cue }</span>
+						}
+					</li>
+				}
+			</ul>
+			<p class="alefbet-page__note">Three letters take a dot and change sound: ב (b or v), כ (k or kh), and פ (p or f). A dot on the left of ש makes s; on the right it makes sh.</p>
+			<p class="alefbet-page__back"><a href={ templ.SafeURL(v.UI.Href("/learn")) }>All guides</a></p>
+		</article>
+	}
+}
+
+// VowelsPage is the vowel reference.
+type VowelsPage struct {
+	Page
+	Marks []Vowel
+}
+
+templ VowelsPageView(v VowelsPage) {
+	@Layout(v.Page) {
+		<article class="vowels-page" data-vowels="1">
+			<header class="vowels-page__head">
+				<h1>The vowels</h1>
+				<p class="lede">The marks under and above the letters. The app shows them on a new word, and most everyday Hebrew leaves them out.</p>
+			</header>
+			<table class="vowels-table">
+				<thead>
+					<tr><th>Mark</th><th>Name</th><th>Sound</th><th>Example</th></tr>
+				</thead>
+				<tbody>
+					for _, m := range v.Marks {
+						<tr>
+							<td class="vowels-table__mark" lang="he" dir="rtl">{ m.Mark }</td>
+							<td><span lang="he" dir="rtl">{ m.Name }</span> <span class="vowels-table__translit">{ m.Translit }</span></td>
+							<td>{ m.Sound }</td>
+							<td><span lang="he" dir="rtl">{ m.Example }</span> <span>{ m.ExampleGloss }</span></td>
+						</tr>
+					}
+				</tbody>
+			</table>
+			<p class="vowels-page__back"><a href={ templ.SafeURL(v.UI.Href("/learn")) }>All guides</a></p>
+		</article>
+	}
+}
+

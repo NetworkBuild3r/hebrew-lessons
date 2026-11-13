@@ -105,6 +105,8 @@ type PlacementRow struct {
 type WeeklyCard struct {
 	WeekOf  string
 	Summary string
+	// Lines is the five-line lesson readout. Empty when that week has none.
+	Lines []string
 }
 
 // SkillOverview is one skill's row on the Progress overview (no ?skill=).
@@ -240,6 +242,11 @@ type ProgressView struct {
 	CanSay *CanSayPanel
 	// Brief is the learner's Progress screen: one sentence and the next action (RSCH-013).
 	Brief bool
+	// CourseLine, TutorLine, and ReviewLine are the brief view's mix: where the
+	// learner is in the course, what a tutor class added, and how this week went.
+	CourseLine string
+	TutorLine  string
+	ReviewLine string
 	// CanDo is one sentence of what the learner can do, with no counts (RSCH-013).
 	// CanDoHE is that sentence in Hebrew. NextAction is the one thing to do next.
 	CanDo, CanDoHE           string

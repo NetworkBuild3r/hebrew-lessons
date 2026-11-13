@@ -1,0 +1,173 @@
+package views
+
+// VerbsPageView is the index of the seven patterns and a way into each verb.
+//
+// It teaches the shape of Hebrew verbs, not a table of guessed forms. Every
+// number and example here comes from the signed course list, so the page says
+// what the data holds and nothing it does not. INIT-040.
+templ VerbsPageView(v VerbsIndex) {
+	@Layout(v.Page) {
+		<article class="verbs" data-verbs="1">
+			<header class="verbs__head">
+				<p class="eyebrow">@E("Verbs")</p>
+				<h1>How Hebrew verbs work</h1>
+				<p class="lede">Every Hebrew verb is built from three root letters. The pattern those letters sit in is called a <bdi lang="he" dir="rtl">בִּנְיָן</bdi> (binyan). Learn the pattern once and you can read hundreds of verbs.</p>
+				if v.Total > 0 {
+					<p class="verbs__count">@E(CountText(v.Total, "verb", "verbs") + " in your course so far.")</p>
+				}
+			</header>
+			<section class="verbs__rules" aria-labelledby="rules-h">
+				<h2 id="rules-h">The three roots trick</h2>
+				<p>Almost every Hebrew verb hides the same three letters in every form. Take <bdi lang="he" dir="rtl">כ־ת־ב</bdi>, the root of writing:</p>
+				<ul class="verbs__demo">
+					<li><span class="verbs__demo-he" lang="he" dir="rtl">כָּתַב</span> <span class="verbs__demo-gl">he wrote</span></li>
+					<li><span class="verbs__demo-he" lang="he" dir="rtl">כּוֹתֵב</span> <span class="verbs__demo-gl">he writes</span></li>
+					<li><span class="verbs__demo-he" lang="he" dir="rtl">יִכְתֹּב</span> <span class="verbs__demo-gl">he will write</span></li>
+					<li><span class="verbs__demo-he" lang="he" dir="rtl">מִכְתָּב</span> <span class="verbs__demo-gl">a letter</span></li>
+				</ul>
+				<p>The vowels and the extra letters change. The three root letters stay. Find them and you have the meaning.</p>
+			</section>
+			<section aria-labelledby="binyan-h">
+				<h2 id="binyan-h">The seven patterns</h2>
+				<p class="verbs__hint">A pattern is not a rule you memorise. It is a habit your ear picks up after a few dozen words.</p>
+				<ul class="binyan-grid">
+					for _, b := range v.Binyanim {
+						<li class="binyan-card" id={ "binyan-" + b.Key } data-binyan={ b.Key }>
+							<p class="binyan-card__name" lang="he" dir="rtl">{ b.Name }</p>
+							<p class="binyan-card__translit">{ b.Translit }</p>
+							<p class="binyan-card__english">{ b.English }</p>
+							<p class="binyan-card__shape">{ b.Shape }</p>
+							if b.Example != "" {
+								<p class="binyan-card__example">
+									<span class="binyan-card__he" lang="he" dir="rtl">{ b.Example }</span>
+									<span class="binyan-card__gloss">{ b.Gloss }</span>
+									if b.Root != "" {
+										<span class="binyan-card__root" lang="he" dir="rtl">{ b.Root }</span>
+									}
+								</p>
+							}
+							<p class="binyan-card__count">@E(CountText(b.Count, "verb", "verbs") + " in your course")</p>
+						</li>
+					}
+				</ul>
+			</section>
+			if len(v.Verbs) > 0 {
+				<section aria-labelledby="verb-list-h">
+					<h2 id="verb-list-h">Open a verb</h2>
+					<p class="verbs__hint">Each page shows the forms your course list holds for that verb, and the endings that build the rest.</p>
+					<ul class="verb-list">
+						for _, row := range v.Verbs {
+							<li class="verb-row">
+								<a class="verb-row__link" href={ templ.SafeURL(row.Href) }>
+									<span class="verb-row__he" lang="he" dir="rtl">{ row.Text }</span>
+									<span class="verb-row__text">
+										<span class="verb-row__gloss">{ row.Gloss }</span>
+										<span class="verb-row__meta">
+											if row.Root != "" {
+												<span lang="he" dir="rtl">{ row.Root }</span>
+											}
+											<span>@E(row.Binyan)</span>
+											if row.Tenses != "" {
+												<span>@E(row.Tenses)</span>
+											}
+										</span>
+									</span>
+									@IconClass("next", iconClass(v.Dir == "rtl"), "")
+								</a>
+							</li>
+						}
+					</ul>
+				</section>
+			}
+			<footer class="verbs__foot">
+				<p>@E(v.Note)</p>
+				<p class="verbs__back"><a href={ templ.SafeURL(v.UI.Href("/learn")) }>All guides</a></p>
+			</footer>
+		</article>
+	}
+}
+
+// VerbPageView is one verb: its root, its pattern, the forms the course holds
+// for it, and the endings that build the rest.
+templ ConjugationView(v VerbPage) {
+	@Layout(v.Page) {
+		<article class="verb" data-verb={ v.Text }>
+			<nav class="verb__back" aria-label="Back">
+				<a href={ templ.SafeURL(v.UI.Href("/learn/verbs")) }>
+					@IconClass("arrow-left", iconClass(v.Dir == "rtl"), "")
+					<span>All verbs</span>
+				</a>
+			</nav>
+			<header class="verb__head">
+				<p class="verb__he" lang="he" dir="rtl">{ v.Text }</p>
+				<p class="verb__gloss">{ v.Gloss }</p>
+				<p class="verb__meta">
+					if v.Root != "" {
+						<span class="verb__root" lang="he" dir="rtl">{ v.Root }</span>
+					}
+					<span class="c-chip" data-binyan={ v.Binyan.Key }>@E(v.Binyan.Translit)</span>
+				</p>
+			</header>
+			<section aria-labelledby="forms-h">
+				<h2 id="forms-h">Forms in your course</h2>
+				<p class="verb__hint">@E(v.Note)</p>
+				if len(v.Tenses) > 0 {
+					<p class="verb__tenses">@E("Your list holds these tenses: " + joinComma(v.Tenses) + ".")</p>
+				}
+				<ul class="verb-forms">
+					for _, f := range v.Forms {
+						<li class="verb-form" lang="he" dir="rtl">{ f }</li>
+					}
+				</ul>
+			</section>
+			<section aria-labelledby="past-h">
+				<h2 id="past-h">Past tense</h2>
+				<p class="verb__hint">The past is one stem with an ending for each person. The "he" form has no ending.</p>
+				<table class="verb-rule">
+					<thead><tr><th>Who</th><th>Ending</th><th></th></tr></thead>
+					<tbody>
+						for _, row := range v.Past {
+							<tr>
+								<td><span lang="he" dir="rtl">{ row.Pronoun }</span> <span class="verb-rule__tr">{ row.Translit }</span> <span class="verb-rule__en">{ row.English }</span></td>
+								<td><span lang="he" dir="rtl">{ row.Suffix }</span></td>
+								<td class="verb-rule__note">{ row.Note }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</section>
+			<section aria-labelledby="present-h">
+				<h2 id="present-h">Present tense</h2>
+				<p class="verb__hint">The present works like an adjective. There are four forms, not six.</p>
+				<table class="verb-rule">
+					<thead><tr><th>Who</th><th>Ending</th><th></th></tr></thead>
+					<tbody>
+						for _, row := range v.Present {
+							<tr>
+								<td><span lang="he" dir="rtl">{ row.Pronoun }</span> <span class="verb-rule__tr">{ row.Translit }</span> <span class="verb-rule__en">{ row.English }</span></td>
+								<td><span lang="he" dir="rtl">{ row.Suffix }</span></td>
+								<td class="verb-rule__note">{ row.Note }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</section>
+			<section aria-labelledby="future-h">
+				<h2 id="future-h">Future tense</h2>
+				<p class="verb__hint">The future puts the person on the front of the word, which is why Hebrew often leaves the pronoun out.</p>
+				<table class="verb-rule">
+					<thead><tr><th>Who</th><th>Start</th><th></th></tr></thead>
+					<tbody>
+						for _, row := range v.Future {
+							<tr>
+								<td><span lang="he" dir="rtl">{ row.Pronoun }</span> <span class="verb-rule__tr">{ row.Translit }</span> <span class="verb-rule__en">{ row.English }</span></td>
+								<td><span lang="he" dir="rtl">{ row.Suffix }</span></td>
+								<td class="verb-rule__note">{ row.Note }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</section>
+		</article>
+	}
+}

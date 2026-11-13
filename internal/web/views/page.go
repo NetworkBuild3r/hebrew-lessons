@@ -308,6 +308,8 @@ type ReviewCard struct {
 	PairsCleared int
 	Slow         int
 	NewMet       int
+	// Source is course, tutor, or other. The front of a study card names it.
+	Source string
 }
 
 // DrillSide is one letter, or one agreement form, on the back of a drill card.

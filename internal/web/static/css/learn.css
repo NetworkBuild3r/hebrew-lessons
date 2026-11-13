@@ -238,3 +238,236 @@
 }
 .stuff tr[data-known="false"], .roots td[data-known="false"] { color: var(--muted); }
 .stuff tr[data-known="true"], .roots td[data-known="true"] { font-weight: 700; }
+
+/* Verbs: the seven patterns, one verb in full, and the rule tables.
+   INIT-040. Tokens only; no literal colour and no physical property. */
+.verbs, .verb, .customs {
+  display: grid;
+  gap: var(--space-5);
+  max-inline-size: 1100px;
+  align-content: start;
+}
+.verbs__head, .verb__head, .customs__head { display: grid; gap: var(--space-2); }
+.verbs__count, .verbs__hint, .verb__hint, .customs__note {
+  color: var(--muted);
+  font-size: var(--fs-small);
+  line-height: var(--lh-body);
+}
+.verbs__rules {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+}
+.verbs__rules h2, .verbs h2, .verb h2, .customs h2 {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-weight: 700;
+  line-height: var(--lh-he-body);
+}
+.verbs__demo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  list-style: none;
+  padding: 0;
+}
+.verbs__demo li { display: grid; gap: var(--space-1); }
+.verbs__demo-he {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-lg);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  padding-block: .1em;
+}
+.verbs__demo-gl { color: var(--muted); font-size: var(--fs-small); }
+
+/* The seven patterns. */
+.binyan-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
+}
+.binyan-card {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-1);
+  align-content: start;
+}
+.binyan-card__name {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-xl);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  padding-block: .1em;
+}
+.binyan-card__translit { font-weight: 700; color: var(--lamp-ink); }
+.binyan-card__english { font-weight: 600; }
+.binyan-card__shape { color: var(--muted); font-size: var(--fs-small); line-height: var(--lh-body); }
+.binyan-card__example {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding-block-start: var(--space-2);
+  border-block-start: 1px solid var(--hairline);
+}
+.binyan-card__he {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-md);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  padding-block: .1em;
+}
+.binyan-card__gloss { color: var(--muted); font-size: var(--fs-small); }
+.binyan-card__root { color: var(--muted); font-size: var(--fs-small); }
+.binyan-card__count { color: var(--muted); font-size: var(--fs-caption); }
+
+/* A list of verbs to open. */
+.verb-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.verb-row__link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: var(--size-tap);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  color: var(--text);
+  text-decoration: none;
+}
+.verb-row__he {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-md);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  padding-block: .1em;
+  flex: none;
+  min-inline-size: 4.5em;
+}
+.verb-row__text { display: grid; gap: 0; flex: 1 1 auto; min-inline-size: 0; }
+.verb-row__gloss { font-weight: 600; }
+.verb-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: var(--fs-caption);
+}
+.verb-row__link .icon { color: var(--muted); flex: none; }
+
+.verbs__foot, .customs__foot { display: grid; gap: var(--space-2); color: var(--muted); font-size: var(--fs-small); }
+.verbs__back a, .customs__foot a, .verb__back a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--size-tap);
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: .15em;
+}
+
+/* One verb. */
+.verb__he {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-hero);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  padding-block: .1em;
+}
+.verb__gloss { font-size: var(--fs-h2); font-weight: 600; }
+.verb__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.verb__root {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-md);
+  font-weight: 700;
+}
+.verb__tenses { font-weight: 600; }
+.verb-forms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  list-style: none;
+  padding: 0;
+}
+.verb-form {
+  padding-block: var(--space-1);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface-soft);
+  font-family: var(--font-he);
+  font-size: var(--fs-he-md);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  overflow: visible;
+}
+.verb-rule {
+  inline-size: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-card);
+}
+.verb-rule th, .verb-rule td {
+  padding: var(--space-2) var(--space-3);
+  text-align: start;
+  border-block-end: 1px solid var(--hairline);
+  vertical-align: top;
+}
+.verb-rule th { font-size: var(--fs-caption); color: var(--muted); text-transform: uppercase; letter-spacing: var(--tracking-caps); }
+.verb-rule tr:last-child td { border-block-end: 0; }
+.verb-rule td span[lang="he"] { font-family: var(--font-he); font-size: var(--fs-he-md); font-weight: 700; }
+.verb-rule__tr { color: var(--muted); font-size: var(--fs-small); }
+.verb-rule__en { color: var(--muted); font-size: var(--fs-small); }
+.verb-rule__note { color: var(--muted); font-size: var(--fs-small); line-height: var(--lh-body); }
+
+/* The ways of the Jews. */
+.customs__group { display: grid; gap: var(--space-3); }
+.customs__group-h {
+  padding-block-end: var(--space-2);
+  border-block-end: 1px solid var(--hairline-strong);
+}
+.customs__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
+}
+.custom-card {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-1);
+  align-content: start;
+}
+.custom-card__he {
+  font-family: var(--font-he);
+  font-size: var(--fs-he-xl);
+  font-weight: 700;
+  line-height: var(--lh-he-display);
+  padding-block: .1em;
+}
+.custom-card__name { font-weight: 700; }
+.custom-card__what { line-height: var(--lh-body); }
+.custom-card__why { color: var(--muted); font-size: var(--fs-small); line-height: var(--lh-body); }
+.custom-card__verses { font-family: var(--font-he); color: var(--muted); }
+
+@media (min-width: 1024px) {
+  .verb-forms { gap: var(--space-3); }
+}

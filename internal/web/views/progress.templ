@@ -13,9 +13,29 @@ templ Progress(v ProgressView) {
 					<h1 lang={ v.Lang }>{ v.ProgressHeading }</h1>
 					<p class="progress__cando" data-cando="1">@T(v.Lang, v.CanDoHE, v.CanDo)</p>
 				</header>
-				<a class="btn btn-primary progress__next" href={ templ.SafeURL(v.Href("/")) }>
-					<span>@T(v.Lang, v.NextActionHE, v.NextAction)</span>
-				</a>
+				if v.CourseLine != "" || v.TutorLine != "" || v.ReviewLine != "" {
+					<section class="progress__mix" data-mix="1">
+						if v.CourseLine != "" {
+							<p data-course="1">@E(v.CourseLine)</p>
+						}
+						if v.TutorLine != "" {
+							<p data-tutor="1">@E(v.TutorLine)</p>
+						}
+						if v.ReviewLine != "" {
+							<p data-review="1">@E(v.ReviewLine)</p>
+						}
+						<p class="progress__mix-links">
+							<a href={ templ.SafeURL(v.Href("/lessons")) }>All lessons</a>
+							<a href={ templ.SafeURL(v.Href("/tutor")) }>Your tutor's classes</a>
+							<a href={ templ.SafeURL(v.Href("/progress?detail=1")) }>See the detail</a>
+						</p>
+					</section>
+				}
+				if v.NextAction != "" {
+					<a class="btn btn-primary progress__next" href={ templ.SafeURL(v.Href("/")) }>
+						<span>@T(v.Lang, v.NextActionHE, v.NextAction)</span>
+					</a>
+				}
 			</article>
 		} else {
 		<article class="progress" data-skill={ v.Skill } data-empty={ Flag(v.Empty) }>
@@ -82,6 +102,13 @@ templ weeklyCard(v ProgressView) {
 	<section class="c-card pweekly" aria-labelledby="weekly-h">
 		<p class="eyebrow" id="weekly-h">@E("Weekly report · " + v.Weekly.WeekOf)</p>
 		<p class="pweekly__text">@E(v.Weekly.Summary)</p>
+		if len(v.Weekly.Lines) > 0 {
+			<ul class="pweekly__lines">
+				for _, line := range v.Weekly.Lines {
+					<li>@E(line)</li>
+				}
+			</ul>
+		}
 	</section>
 }
 

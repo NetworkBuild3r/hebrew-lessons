@@ -1,0 +1,89 @@
+package views
+
+// TutorWord is one word from a class, marked against the common-word course.
+type TutorWord struct {
+	Pointed string
+	English string
+	// Where is "course", "new", or "other".
+	Where string
+}
+
+// TutorLine is one line of a class.
+type TutorLine struct {
+	Hebrew string
+	English string
+	Held   bool
+}
+
+// TutorClass is one imported class.
+type TutorClass struct {
+	ID        int64
+	ClassOn   string
+	Title     string
+	Status    string
+	Lines     []TutorLine
+	Words     []TutorWord
+	InCourse  int
+	NewWords  int
+	CanStudy  bool
+}
+
+// TutorPage is the Tutor section.
+type TutorPage struct {
+	Page
+	Classes []TutorClass
+	Nothing bool
+}
+
+templ Tutor(v TutorPage) {
+	@Layout(v.Page) {
+		<article class="tutor" data-tutor="1">
+			<header class="tutor__head">
+				<h1>Your tutor's classes</h1>
+				<p class="lede">What you covered with your tutor, marked against the common words, so it comes back in review like everything else.</p>
+			</header>
+			if v.Nothing {
+				<p role="status" class="tutor__nothing">Nothing new to study from that class.</p>
+			}
+			if len(v.Classes) == 0 {
+				<section class="quiet-card" data-empty="1">
+					<p class="quiet-card__line">No class loaded yet.</p>
+					<p class="quiet-card__hint">Ask your AI to call import_class_sheet with the exported lines from a class, one line each as tutor: Hebrew || English. The class appears here, and its words can be studied.</p>
+				</section>
+			} else {
+				<ul class="tutor__classes">
+					for _, c := range v.Classes {
+						<li class="tutor-class" data-class={ Num64(c.ID) } data-status={ c.Status }>
+							<p class="tutor-class__title">
+								@E(c.Title)
+								<span class="unit-gloss">@E(c.ClassOn)</span>
+							</p>
+							<p class="tutor-class__count">
+								@E(TutorCountLine(len(c.Lines), c.InCourse, c.NewWords))
+							</p>
+							<ul class="tutor-class__lines">
+								for _, line := range c.Lines {
+									<li>
+										<span lang="he" dir="rtl">@E(line.Hebrew)</span>
+										if line.English != "" {
+											<span lang="en">@E(line.English)</span>
+										}
+										if line.Held {
+											<span class="tutor-class__held">held</span>
+										}
+									</li>
+								}
+							</ul>
+							if c.CanStudy {
+								<form method="post" action={ templ.SafeURL(v.UI.Href("/_hx/tutor/" + Num64(c.ID) + "/study")) }>
+									<input type="hidden" name="_csrf" value={ v.CSRF }/>
+									<button class="btn btn-primary" type="submit">Study this class</button>
+								</form>
+							}
+						</li>
+					}
+				</ul>
+			}
+		</article>
+	}
+}

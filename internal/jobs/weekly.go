@@ -13,6 +13,7 @@ import (
 
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/db"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/learner"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/lessons"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/sessionlimits"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 )
@@ -282,6 +283,21 @@ type WeeklyPayload struct {
 	Retention     RetentionStat   `json:"retention"`
 	Minutes       int             `json:"minutesStudied"`
 	BandSlips     []BandSlipEvent `json:"bandSlips"`
+	// Course is the common-word course for this week. It is absent when the learner
+	// has no course word with a card.
+	Course *CourseWeek `json:"course,omitempty"`
+	// Readout is the five-line lesson note. It says too early while counts are small.
+	Readout []string `json:"readout,omitempty"`
+}
+
+// CourseWeek is the common-word course in one weekly report.
+type CourseWeek struct {
+	Place       int         `json:"place"`
+	Met         int         `json:"met"`
+	MetThisWeek int         `json:"metThisWeek"`
+	Gained      []WordSkill `json:"gained"`
+	Lost        []LostWord  `json:"lost"`
+	StudyDays   int         `json:"studyDays"`
 }
 
 // weeklyBaseline is the job_state row weekly.words.<user>: each word's four skill states at the
@@ -383,6 +399,9 @@ type weekInput struct {
 	// baseWeek is the week of the stored baseline, usable or not. It is empty when none is stored.
 	baseWeek string
 	texts    map[int64]string
+	course   map[int64]int
+	cards    map[int64]time.Time
+	lesson   lessons.Week
 }
 
 // read gathers the inputs of one learner and week in that learner's zone. INIT-026/SPEC-004.
@@ -424,6 +443,27 @@ func (w *Weekly) read(ctx context.Context, userID int64, weekStart string, z stu
 		for id, l := range found {
 			in.texts[id] = l.TextNFC
 		}
+	}
+	courseRows, err := w.d.store.CourseLexemes(ctx)
+	if err != nil {
+		return in, err
+	}
+	in.course = map[int64]int{}
+	for _, row := range courseRows {
+		in.course[row.LexemeID] = row.Order
+	}
+	in.cards, err = w.d.store.CourseCardFirstCreated(ctx, userID)
+	if err != nil {
+		return in, err
+	}
+	counts, err := w.d.store.LessonWeekCounts(ctx, userID, from, to)
+	if err != nil {
+		return in, err
+	}
+	in.lesson = lessons.Week{
+		Offered: counts.Started, Started: counts.Started, Finished: counts.Finished,
+		Flags: counts.Flags, Answers: counts.Answers, Right: counts.Right, Voids: counts.Voids,
+		LaterDayRight: counts.LaterRight, LaterDayN: counts.LaterN,
 	}
 	return in, nil
 }
@@ -508,7 +548,78 @@ func buildWeekly(in weekInput) WeeklyPayload {
 			p.BandSlips = append(p.BandSlips, BandSlipEvent{Day: e.Day, Band: band, Detail: e.Cause})
 		}
 	}
+	if len(in.cards) > 0 {
+		cw := &CourseWeek{Gained: []WordSkill{}, Lost: []LostWord{}}
+		loc := in.loc
+		if loc == nil {
+			loc = time.UTC
+		}
+		from, to := weekWindow(in.weekStart, loc)
+		for id := range in.cards {
+			cw.Met++
+			if order := in.course[id]; order > cw.Place {
+				cw.Place = order
+			}
+			if at := in.cards[id]; !at.Before(from) && at.Before(to) {
+				cw.MetThisWeek++
+			}
+		}
+		for _, g := range p.Gained {
+			if _, ok := in.course[g.LexemeID]; ok {
+				cw.Gained = append(cw.Gained, g)
+			}
+		}
+		for _, l := range p.Lost {
+			if _, ok := in.course[l.LexemeID]; ok {
+				cw.Lost = append(cw.Lost, l)
+			}
+		}
+		cw.StudyDays = studyDays(in.attempts, in.loc)
+		p.Course = cw
+	}
+	note := in.lesson
+	for id := range in.course {
+		if _, ok := in.cards[id]; !ok {
+			note.Pool++
+		}
+	}
+	note.HeavyDays = heavyDays(in.attempts, in.loc)
+	p.Readout = lessons.Readout(note)
 	return p
+}
+
+// heavyDayMinutes is the review cap in ADR-0034 D5. A day over it is a heavy day.
+const heavyDayMinutes = 15
+
+func heavyDays(attempts []db.AttemptTime, loc *time.Location) int {
+	by := map[string][]db.AttemptTime{}
+	for _, a := range attempts {
+		at := a.At
+		if loc != nil {
+			at = at.In(loc)
+		}
+		day := at.Format("2006-01-02")
+		by[day] = append(by[day], a)
+	}
+	n := 0
+	for _, day := range by {
+		if ActiveMinutes(day) > heavyDayMinutes {
+			n++
+		}
+	}
+	return n
+}
+
+func studyDays(attempts []db.AttemptTime, loc *time.Location) int {
+	seen := map[string]bool{}
+	for _, a := range attempts {
+		at := a.At
+		if loc != nil {
+			at = at.In(loc)
+		}
+		seen[at.Format("2006-01-02")] = true
+	}
+	return len(seen)
 }
 
 func knownNow(cur *wordsState, lexeme int64, skill string) bool {

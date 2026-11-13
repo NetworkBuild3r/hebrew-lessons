@@ -1,0 +1,508 @@
+rank	lemma	action	pointed	translit	gloss	pos	gender	root	binyan	reason	reviewed_by	reviewed_on
+1	הוא	split	אֲנִי	ani	I	pronoun				the list's parser folded personal pronouns into הוא	agent:grok-4.7	2026-11-12
+1	הוא	split	אַתָּה	ata	you (m.)	pronoun				the list's parser folded personal pronouns into הוא	agent:grok-4.7	2026-11-12
+1	הוא	split	הוּא	hu	he	pronoun				the list's parser folded personal pronouns into הוא	agent:grok-4.7	2026-11-12
+1	הוא	split	הִיא	hi	she	pronoun				the list's parser folded personal pronouns into הוא	agent:grok-4.7	2026-11-12
+1	הוא	split	אֲנַחְנוּ	anakhnu	we	pronoun				the list's parser folded personal pronouns into הוא	agent:grok-4.7	2026-11-12
+1	הוא	split	אַתֶּם	atem	you (pl.)	pronoun				the list's parser folded personal pronouns into הוא	agent:grok-4.7	2026-11-12
+1	הוא	split	הֵם	hem	they	pronoun				the list's parser folded personal pronouns into הוא	agent:grok-4.7	2026-11-12
+2	ה	prefix	הַ	ha	the	prefix				the definite article, taught inside a line	agent:grok-4.7	2026-11-12
+3	את	split	אֶת	et	object marker	particle				the object marker and the feminine you share a spelling	agent:grok-4.7	2026-11-12
+3	את	split	אַתְּ	at	you (f.)	pronoun				same spelling as the object marker, so this row stays course.duplicate		
+4	ל	prefix	לְ	le	to	prefix				the preposition, taught inside a line	agent:grok-4.7	2026-11-12
+7	ב	prefix	בְּ	be	in	prefix				the preposition, taught inside a line	agent:grok-4.7	2026-11-12
+9	ש	prefix	שֶׁ	she	that	prefix				the prefix, taught inside a line	agent:grok-4.7	2026-11-12
+12	ו	prefix	וְ	ve	and	prefix				the prefix, taught inside a line	agent:grok-4.7	2026-11-12
+14	כול	fix	כֹּל	kol	all	determiner				כול is a spelling of כל	agent:grok-4.7	2026-11-12
+17	מ	prefix	מִ	mi	from	prefix				the preposition, taught inside a line	agent:grok-4.7	2026-11-12
+21	טוב	fix	טוֹב	tov	good	adjective				everyday sense is good	agent:grok-4.7	2026-11-12
+27	סדר	fix	בְּסֵדֶר	beseder	okay	interjection				the parser split בסדר	agent:grok-4.7	2026-11-12
+34	איש	fix	אִישׁ	ish	man	noun	m			everyday sense is man	agent:grok-4.7	2026-11-12
+46	זאת	fix	זֹאת	zot	this (f.)	pronoun				the feminine this	agent:grok-4.7	2026-11-12
+49	נכון	fix	נָכוֹן	nakhon	right	adjective				everyday sense is right	agent:grok-4.7	2026-11-12
+55	והיי	drop								parser artifact		
+66	כ	prefix	כְּ	ke	like	prefix				the preposition, taught inside a line	agent:grok-4.7	2026-11-12
+5	לא	keep									agent:grok-4.7	2026-11-12
+6	זה	keep									agent:grok-4.7	2026-11-12
+8	של	keep									agent:grok-4.7	2026-11-12
+10	היה	keep									agent:grok-4.7	2026-11-12
+11	מה	keep									agent:grok-4.7	2026-11-12
+13	על	keep									agent:grok-4.7	2026-11-12
+15	ידע	keep									agent:grok-4.7	2026-11-12
+16	כן	keep									agent:grok-4.7	2026-11-12
+18	יש	fix			there is						agent:grok-4.7	2026-11-12
+19	עשה	keep									agent:grok-4.7	2026-11-12
+20	אבל	keep									agent:grok-4.7	2026-11-12
+22	רצה	keep									agent:grok-4.7	2026-11-12
+23	אם	keep									agent:grok-4.7	2026-11-12
+24	עם	keep									agent:grok-4.7	2026-11-12
+25	אמר	keep									agent:grok-4.7	2026-11-12
+26	אז	fix			so	adverb					agent:grok-4.7	2026-11-12
+28	צריך	fix			need						agent:grok-4.7	2026-11-12
+29	רק	keep									agent:grok-4.7	2026-11-12
+30	חשב	keep									agent:grok-4.7	2026-11-12
+31	כאן	keep									agent:grok-4.7	2026-11-12
+32	הלך	fix			to go						agent:grok-4.7	2026-11-12
+33	דבר	keep									agent:grok-4.7	2026-11-12
+35	אל	fix	אַל	al	don't	adverb				speech uses אל as don't; the preposition to is literary	agent:grok-4.7	2026-11-12
+36	כך	fix			so	adverb					agent:grok-4.7	2026-11-12
+37	יותר	keep									agent:grok-4.7	2026-11-12
+38	שם	keep									agent:grok-4.7	2026-11-12
+39	יכול	fix			to be able						agent:grok-4.7	2026-11-12
+40	ראה	keep									agent:grok-4.7	2026-11-12
+41	עכשיו	fix	עַכְשָׁיו	akhshav							agent:grok-4.7	2026-11-12
+42	אחד	fix				numeral					agent:grok-4.7	2026-11-12
+43	משהו	keep									agent:grok-4.7	2026-11-12
+44	למה	keep									agent:grok-4.7	2026-11-12
+45	בא	keep									agent:grok-4.7	2026-11-12
+47	או	keep									agent:grok-4.7	2026-11-12
+48	זמן	keep									agent:grok-4.7	2026-11-12
+50	כמו	keep									agent:grok-4.7	2026-11-12
+51	אין	keep									agent:grok-4.7	2026-11-12
+52	איך	keep									agent:grok-4.7	2026-11-12
+53	מי	keep									agent:grok-4.7	2026-11-12
+54	זו	fix			this (f.)						agent:grok-4.7	2026-11-12
+56	כמה	keep									agent:grok-4.7	2026-11-12
+57	גם	keep									agent:grok-4.7	2026-11-12
+58	אולי	keep									agent:grok-4.7	2026-11-12
+59	נראה	keep								everyday sense is to seem, but this verb entry has no present form, so it cannot pass entry.verb		
+60	בית	keep									agent:grok-4.7	2026-11-12
+61	כדי	fix			in order to						agent:grok-4.7	2026-11-12
+62	קרה	keep									agent:grok-4.7	2026-11-12
+63	דיבר	fix	דִּיבֵּר	diber				ד־ב־ר	piel	plene spelling so the key is not דבר	agent:grok-4.7	2026-11-12
+64	פעם	fix	פַּעַם	paam	time	noun	f				agent:grok-4.7	2026-11-12
+65	דרך	fix			way	noun	f				agent:grok-4.7	2026-11-12
+67	באמת	keep									agent:grok-4.7	2026-11-12
+68	הגיע	fix						נ־ג־ע	hifil		agent:grok-4.7	2026-11-12
+69	מן	fix	מִן	min	from	preposition				everyday preposition from; manna is biblical	agent:grok-4.7	2026-11-12
+70	חייב	fix	חַיָּב	khayav	must	adjective					agent:grok-4.7	2026-11-12
+71	אחר	keep									agent:grok-4.7	2026-11-12
+72	עוד	fix				adverb					agent:grok-4.7	2026-11-12
+73	יום	keep									agent:grok-4.7	2026-11-12
+74	פשוט	keep									agent:grok-4.7	2026-11-12
+75	תודה	fix			thanks	interjection					agent:grok-4.7	2026-11-12
+76	כי	fix		ki							agent:grok-4.7	2026-11-12
+77	כבר	keep									agent:grok-4.7	2026-11-12
+78	ילד	fix	יֶלֶד	yeled	boy	noun	m				agent:grok-4.7	2026-11-12
+79	אהב	keep									agent:grok-4.7	2026-11-12
+80	חיים	keep									agent:grok-4.7	2026-11-12
+81	בן	keep									agent:grok-4.7	2026-11-12
+82	מישהו	keep									agent:grok-4.7	2026-11-12
+83	קיבל	fix						ק־ב־ל	piel		agent:grok-4.7	2026-11-12
+84	מאוד	keep									agent:grok-4.7	2026-11-12
+85	לפני	keep									agent:grok-4.7	2026-11-12
+86	אלה	fix	אֵלֶּה	ele	these	determiner					agent:grok-4.7	2026-11-12
+87	אף	keep									agent:grok-4.7	2026-11-12
+88	עד	keep									agent:grok-4.7	2026-11-12
+89	הרבה	keep									agent:grok-4.7	2026-11-12
+90	רגע	keep									agent:grok-4.7	2026-11-12
+91	שנה	fix	שָׁנָה	shana	year	noun	f				agent:grok-4.7	2026-11-12
+92	עדיין	keep									agent:grok-4.7	2026-11-12
+93	עצמו	fix	עַצְמוֹ	atzmo	himself	pronoun				not in Wiktionary senses: reflexive himself	agent:grok-4.7	2026-11-12
+94	האם	fix			whether						agent:grok-4.7	2026-11-12
+95	ניסה	keep									agent:grok-4.7	2026-11-12
+96	חזר	keep									agent:grok-4.7	2026-11-12
+97	מצא	keep									agent:grok-4.7	2026-11-12
+98	מקום	keep									agent:grok-4.7	2026-11-12
+99	מת	keep									agent:grok-4.7	2026-11-12
+100	איפה	keep									agent:grok-4.7	2026-11-12
+101	אלוהים	fix	אֱלֹהִים	elohim	God						agent:grok-4.7	2026-11-12
+102	אדם	fix			person						agent:grok-4.7	2026-11-12
+103	הצטער	fix						צ־ע־ר	hitpael		agent:grok-4.7	2026-11-12
+104	עבר	fix		avar							agent:grok-4.7	2026-11-12
+105	הכיל	fix						כ־ו־ל	hifil		agent:grok-4.7	2026-11-12
+106	הבין	fix						ב־י־ן	hifil		agent:grok-4.7	2026-11-12
+107	חבר	fix	חָבֵר	khaver	friend	noun	m				agent:grok-4.7	2026-11-12
+108	גדול	keep									agent:grok-4.7	2026-11-12
+109	איזה	keep									agent:grok-4.7	2026-11-12
+110	ממש	keep									agent:grok-4.7	2026-11-12
+111	בוא	drop								imperative of בא, already in the course		
+112	נתן	keep									agent:grok-4.7	2026-11-12
+113	קצת	keep									agent:grok-4.7	2026-11-12
+114	שמע	keep									agent:grok-4.7	2026-11-12
+115	עבודה	fix			work						agent:grok-4.7	2026-11-12
+116	הנה	keep									agent:grok-4.7	2026-11-12
+117	קדימה	fix			forward						agent:grok-4.7	2026-11-12
+118	שני	keep									agent:grok-4.7	2026-11-12
+119	עזר	keep									agent:grok-4.7	2026-11-12
+120	יצא	keep									agent:grok-4.7	2026-11-12
+121	ובכן	keep									agent:grok-4.7	2026-11-12
+122	כש	fix	כְּשֶׁ	kshe	when	conjunction				not in Wiktionary senses: the extract lists the conjunction only as כש־	agent:grok-4.7	2026-11-12
+123	שוב	keep									agent:grok-4.7	2026-11-12
+124	לילה	keep									agent:grok-4.7	2026-11-12
+125	יד	fix			hand						agent:grok-4.7	2026-11-12
+126	היום	keep									agent:grok-4.7	2026-11-12
+127	בדיוק	keep									agent:grok-4.7	2026-11-12
+128	אחת	fix	אַחַת	akhat	one (f.)	numeral					agent:grok-4.7	2026-11-12
+129	פה	keep									agent:grok-4.7	2026-11-12
+130	בבקשה	keep									agent:grok-4.7	2026-11-12
+131	הגיד	keep									agent:grok-4.7	2026-11-12
+132	אי	keep								island, the prefix non-, and the interjection oh are all plausible; the conjunction if is archaic		
+133	קטן	fix			small						agent:grok-4.7	2026-11-12
+134	שום	fix			any						agent:grok-4.7	2026-11-12
+135	הרגיש	fix			to feel			ר־ג־שׁ	hifil		agent:grok-4.7	2026-11-12
+136	אמא	keep									agent:grok-4.7	2026-11-12
+137	בטוח	fix			sure						agent:grok-4.7	2026-11-12
+138	אפילו	keep									agent:grok-4.7	2026-11-12
+139	קשר	fix	קֶשֶׁר	kesher	connection	noun	m				agent:grok-4.7	2026-11-12
+140	קרא	keep									agent:grok-4.7	2026-11-12
+141	חדש	keep									agent:grok-4.7	2026-11-12
+142	תמיד	keep									agent:grok-4.7	2026-11-12
+143	אחרי	keep									agent:grok-4.7	2026-11-12
+144	אבא	fix			dad						agent:grok-4.7	2026-11-12
+145	בשביל	keep									agent:grok-4.7	2026-11-12
+146	האמין	fix						א־מ־ן	hifil		agent:grok-4.7	2026-11-12
+147	בעיה	keep									agent:grok-4.7	2026-11-12
+148	הכיר	fix						נ־כ־ר	hifil		agent:grok-4.7	2026-11-12
+149	התכוון	keep									agent:grok-4.7	2026-11-12
+150	סיפר	fix	סִיפֵּר	siper				ס־פ־ר	piel	plene spelling so the key is not ספר	agent:grok-4.7	2026-11-12
+151	מר	fix			mister	noun	m			title of address in speech; bitter is the adjective	agent:grok-4.7	2026-11-12
+152	שלום	fix			hello	interjection					agent:grok-4.7	2026-11-12
+153	תן	drop								imperative of נתן; the jackal is not the everyday word		
+154	אה	fix	אַה	ah	uh	interjection				not in Wiktionary senses: filler uh	agent:grok-4.7	2026-11-12
+155	בטח	keep									agent:grok-4.7	2026-11-12
+156	כסף	fix			money						agent:grok-4.7	2026-11-12
+157	שעה	fix	שָׁעָה	shaa	hour	noun	f				agent:grok-4.7	2026-11-12
+158	עבד	keep									agent:grok-4.7	2026-11-12
+159	הביא	fix						ב־ו־א	hifil		agent:grok-4.7	2026-11-12
+160	מדי	keep									agent:grok-4.7	2026-11-12
+161	נמצא	fix			to be located			מ־צ־א	nifal		agent:grok-4.7	2026-11-12
+162	בגלל	keep									agent:grok-4.7	2026-11-12
+163	אחרון	keep									agent:grok-4.7	2026-11-12
+164	הרג	keep									agent:grok-4.7	2026-11-12
+165	ספר	fix	סֵפֶר	sefer	book	noun	m				agent:grok-4.7	2026-11-12
+166	מוכן	keep									agent:grok-4.7	2026-11-12
+167	עניין	keep									agent:grok-4.7	2026-11-12
+168	לקח	keep									agent:grok-4.7	2026-11-12
+169	גרם	keep									agent:grok-4.7	2026-11-12
+170	גבר	fix	גֶּבֶר	gever	man	noun	m				agent:grok-4.7	2026-11-12
+171	סיבה	keep									agent:grok-4.7	2026-11-12
+172	לב	keep									agent:grok-4.7	2026-11-12
+173	ראש	keep									agent:grok-4.7	2026-11-12
+174	אפשר	fix			possible	adjective					agent:grok-4.7	2026-11-12
+175	שאל	keep									agent:grok-4.7	2026-11-12
+176	חברה	keep									agent:grok-4.7	2026-11-12
+177	עמד	keep									agent:grok-4.7	2026-11-12
+178	אכל	keep									agent:grok-4.7	2026-11-12
+179	חדר	fix	חֶדֶר	kheder	room	noun	m				agent:grok-4.7	2026-11-12
+180	קשה	keep									agent:grok-4.7	2026-11-12
+181	אדוני	fix		adoni			m				agent:grok-4.7	2026-11-12
+182	התחיל	fix						ת־ח־ל	hifil		agent:grok-4.7	2026-11-12
+183	רב	fix	רַב	rav	rabbi	noun	m			speech uses רב for a rabbi; much is formal	agent:grok-4.7	2026-11-12
+184	הניח	fix			to put			נ־ו־ח	hifil		agent:grok-4.7	2026-11-12
+185	עולם	keep									agent:grok-4.7	2026-11-12
+186	נשאר	fix						ש־א־ר	nifal		agent:grok-4.7	2026-11-12
+187	תראה	drop								conjugated form of ראה		
+188	שב	drop								imperative of ישב; the verb to return is literary		
+189	מקרה	keep									agent:grok-4.7	2026-11-12
+190	משפחה	keep									agent:grok-4.7	2026-11-12
+191	בוקר	fix	בֹּקֶר	boker	morning	noun	m				agent:grok-4.7	2026-11-12
+192	עזאזל	drop								name		
+193	כלום	keep									agent:grok-4.7	2026-11-12
+194	חוץ	keep									agent:grok-4.7	2026-11-12
+195	נכנס	fix						כ־נ־ס	nifal		agent:grok-4.7	2026-11-12
+196	שבוע	keep									agent:grok-4.7	2026-11-12
+197	הו	fix	הוֹ	ho	oh	interjection				not in Wiktionary senses: interjection oh	agent:grok-4.7	2026-11-12
+198	הכי	keep									agent:grok-4.7	2026-11-12
+199	אמור	keep									agent:grok-4.7	2026-11-12
+200	די	keep									agent:grok-4.7	2026-11-12
+201	חושב	drop								present of חשב, already in the course		
+202	עסק	keep									agent:grok-4.7	2026-11-12
+203	חלק	fix	חֵלֶק	khelek	part	noun	m				agent:grok-4.7	2026-11-12
+204	סוף	fix			end						agent:grok-4.7	2026-11-12
+205	בת	keep									agent:grok-4.7	2026-11-12
+206	ביותר	keep									agent:grok-4.7	2026-11-12
+207	עזב	keep									agent:grok-4.7	2026-11-12
+208	מצב	fix			situation						agent:grok-4.7	2026-11-12
+209	זהו	keep									agent:grok-4.7	2026-11-12
+210	אינו	fix			is not						agent:grok-4.7	2026-11-12
+211	שמר	fix			to keep						agent:grok-4.7	2026-11-12
+212	פנים	keep									agent:grok-4.7	2026-11-12
+213	בלי	keep									agent:grok-4.7	2026-11-12
+214	יפה	fix			beautiful	adjective					agent:grok-4.7	2026-11-12
+215	חיפש	fix						ח־פ־שׂ	piel		agent:grok-4.7	2026-11-12
+216	הביתה	keep									agent:grok-4.7	2026-11-12
+217	עובד	keep									agent:grok-4.7	2026-11-12
+218	עבור	fix			for						agent:grok-4.7	2026-11-12
+219	בין	keep									agent:grok-4.7	2026-11-12
+220	רע	keep									agent:grok-4.7	2026-11-12
+221	הפך	fix		hafakh	to become						agent:grok-4.7	2026-11-12
+222	אמת	keep									agent:grok-4.7	2026-11-12
+223	כאילו	fix			like						agent:grok-4.7	2026-11-12
+224	אוקיי	fix	אוֹקֵיי	okei	okay	interjection				not in Wiktionary senses: loanword okay	agent:grok-4.7	2026-11-12
+225	כמובן	keep									agent:grok-4.7	2026-11-12
+226	עיר	keep									agent:grok-4.7	2026-11-12
+227	הספיק	keep									agent:grok-4.7	2026-11-12
+228	אוכל	fix	אוֹכֶל	okhel	food	noun	m				agent:grok-4.7	2026-11-12
+229	מעולם	fix			ever					not in Wiktionary senses: used as ever, mostly in מעולם לא	agent:grok-4.7	2026-11-12
+230	השתמש	fix						ש־מ־שׁ	hitpael		agent:grok-4.7	2026-11-12
+231	שמח	fix	שָׂמֵחַ	sameakh	happy	adjective					agent:grok-4.7	2026-11-12
+232	זכר	keep									agent:grok-4.7	2026-11-12
+233	המשיך	fix						מ־שׁ־ך	hifil		agent:grok-4.7	2026-11-12
+234	דקה	keep									agent:grok-4.7	2026-11-12
+235	אמיתי	keep									agent:grok-4.7	2026-11-12
+236	העליי	drop								parser artifact		
+237	יחיד	fix			only						agent:grok-4.7	2026-11-12
+238	בעל	fix	בַּעַל	baal	husband	noun	m				agent:grok-4.7	2026-11-12
+239	נהדר	keep									agent:grok-4.7	2026-11-12
+240	אכפת	fix		ikhpat	care						agent:grok-4.7	2026-11-12
+241	קודם	fix		kodem							agent:grok-4.7	2026-11-12
+242	אלו	keep									agent:grok-4.7	2026-11-12
+243	תוכנית	keep									agent:grok-4.7	2026-11-12
+244	כדאי	fix			worthwhile						agent:grok-4.7	2026-11-12
+245	משחק	keep									agent:grok-4.7	2026-11-12
+246	חשוב	fix	חָשׁוּב	khashuv	important	adjective					agent:grok-4.7	2026-11-12
+247	ביקש	keep									agent:grok-4.7	2026-11-12
+248	נעשה	fix			to become			ע־שׂ־ה	nifal		agent:grok-4.7	2026-11-12
+249	נשמע	fix						ש־מ־ע	nifal		agent:grok-4.7	2026-11-12
+250	מכונית	keep									agent:grok-4.7	2026-11-12
+251	לעולם	fix			forever						agent:grok-4.7	2026-11-12
+252	מספר	fix	מִסְפָּר	mispar	number	noun	m				agent:grok-4.7	2026-11-12
+253	סליחה	fix			sorry	interjection					agent:grok-4.7	2026-11-12
+254	נחמד	fix	נֶחְמָד	nekhmad	nice	adjective					agent:grok-4.7	2026-11-12
+255	התקשר	fix						ק־שׁ־ר	hitpael		agent:grok-4.7	2026-11-12
+256	עין	keep									agent:grok-4.7	2026-11-12
+257	קיווה	fix						ק־ו־ה	piel		agent:grok-4.7	2026-11-12
+258	סיפור	keep									agent:grok-4.7	2026-11-12
+259	שאלה	keep									agent:grok-4.7	2026-11-12
+260	בחור	keep									agent:grok-4.7	2026-11-12
+261	חכה	drop								imperative of חיכה, already in the course		
+262	קרוב	keep									agent:grok-4.7	2026-11-12
+263	שינה	fix	שִׁינָּה	shina	to change			שׁ־נ־ה	piel	plene piel so the key is not שנה; the other sense is sleep	agent:grok-4.7	2026-11-12
+264	הפסיק	keep									agent:grok-4.7	2026-11-12
+265	לעזאזל	keep									agent:grok-4.7	2026-11-12
+266	הודה	fix						י־ד־ה	hifil		agent:grok-4.7	2026-11-12
+267	כתב	keep									agent:grok-4.7	2026-11-12
+268	עלה	fix		ala	to go up						agent:grok-4.7	2026-11-12
+269	מהר	keep									agent:grok-4.7	2026-11-12
+270	מוות	keep									agent:grok-4.7	2026-11-12
+271	אופן	keep									agent:grok-4.7	2026-11-12
+272	טלפון	keep									agent:grok-4.7	2026-11-12
+273	ישן	keep									agent:grok-4.7	2026-11-12
+274	תרא	drop								parser fragment of תראה		
+275	מחר	keep									agent:grok-4.7	2026-11-12
+276	לאן	fix			where to						agent:grok-4.7	2026-11-12
+277	בכלל	fix			at all						agent:grok-4.7	2026-11-12
+278	אך	keep									agent:grok-4.7	2026-11-12
+279	כוח	keep									agent:grok-4.7	2026-11-12
+280	רעיון	fix		raayon							agent:grok-4.7	2026-11-12
+281	לגבי	keep									agent:grok-4.7	2026-11-12
+282	ילך	drop								future of הלך		
+283	עצר	keep									agent:grok-4.7	2026-11-12
+284	מוזר	keep									agent:grok-4.7	2026-11-12
+285	ללא	keep									agent:grok-4.7	2026-11-12
+286	מזל	fix			luck						agent:grok-4.7	2026-11-12
+287	הצליח	fix			to succeed						agent:grok-4.7	2026-11-12
+288	שנייה	keep									agent:grok-4.7	2026-11-12
+289	צדק	keep									agent:grok-4.7	2026-11-12
+290	גברת	keep									agent:grok-4.7	2026-11-12
+291	חיכה	fix						ח־כ־ה	piel		agent:grok-4.7	2026-11-12
+292	נוסף	fix	נוֹסָף	nosaf	additional	adjective					agent:grok-4.7	2026-11-12
+293	דלת	keep									agent:grok-4.7	2026-11-12
+294	אח	keep									agent:grok-4.7	2026-11-12
+295	חזרה	keep									agent:grok-4.7	2026-11-12
+296	חודש	fix	חוֹדֶשׁ	khodesh						plene spelling so the key is not חדש	agent:grok-4.7	2026-11-12
+297	מתי	fix				adverb					agent:grok-4.7	2026-11-12
+298	חזק	fix	חָזָק	khazak	strong	adjective					agent:grok-4.7	2026-11-12
+299	משטרה	keep									agent:grok-4.7	2026-11-12
+300	במקום	keep									agent:grok-4.7	2026-11-12
+301	סוג	keep									agent:grok-4.7	2026-11-12
+302	שיחק	fix						שׂ־ח־ק	piel		agent:grok-4.7	2026-11-12
+303	למד	keep									agent:grok-4.7	2026-11-12
+304	שלח	keep									agent:grok-4.7	2026-11-12
+305	חץ	keep									agent:grok-4.7	2026-11-12
+306	אחי	fix		akhi	my brother		m				agent:grok-4.7	2026-11-12
+307	דם	keep									agent:grok-4.7	2026-11-12
+308	חלה	fix			to get sick						agent:grok-4.7	2026-11-12
+309	כמעט	keep									agent:grok-4.7	2026-11-12
+310	צוות	fix			team						agent:grok-4.7	2026-11-12
+311	ברור	keep									agent:grok-4.7	2026-11-12
+312	ערב	fix	עֶרֶב	erev	evening	noun	m				agent:grok-4.7	2026-11-12
+313	וה	drop								parser artifact		
+314	דולר	keep									agent:grok-4.7	2026-11-12
+315	בחר	keep									agent:grok-4.7	2026-11-12
+316	חי	fix						ח־י־ה	paal		agent:grok-4.7	2026-11-12
+317	כלל	fix			rule	noun	m				agent:grok-4.7	2026-11-12
+318	החזיק	fix						ח־ז־ק	hifil		agent:grok-4.7	2026-11-12
+319	בדק	keep									agent:grok-4.7	2026-11-12
+320	לאחר	keep									agent:grok-4.7	2026-11-12
+321	כנראה	keep									agent:grok-4.7	2026-11-12
+322	כדור	fix			ball						agent:grok-4.7	2026-11-12
+323	רוח	keep									agent:grok-4.7	2026-11-12
+324	הבחור	drop								the article plus בחור, already in the course		
+325	מאוחר	keep									agent:grok-4.7	2026-11-12
+326	השאיר	fix			to leave						agent:grok-4.7	2026-11-12
+327	קנה	keep									agent:grok-4.7	2026-11-12
+328	רצח	fix			very						agent:grok-4.7	2026-11-12
+329	הוציא	fix			to take out						agent:grok-4.7	2026-11-12
+330	איתך	fix	אִתְּךָ	itkha	with you	preposition					agent:grok-4.7	2026-11-12
+331	מבין	drop								present of הבין, already in the course		
+332	סיים	fix						ס־י־ם	piel		agent:grok-4.7	2026-11-12
+333	התראה	fix			to see each other			ר־א־ה	hitpael		agent:grok-4.7	2026-11-12
+334	פחד	keep									agent:grok-4.7	2026-11-12
+335	שלוש	fix	שָׁלוֹשׁ	shalosh	three	numeral					agent:grok-4.7	2026-11-12
+336	למעשה	keep									agent:grok-4.7	2026-11-12
+337	משרד	keep									agent:grok-4.7	2026-11-12
+338	ככה	fix			like this						agent:grok-4.7	2026-11-12
+339	שילם	fix						ש־ל־ם	piel		agent:grok-4.7	2026-11-12
+340	כאשר	keep									agent:grok-4.7	2026-11-12
+341	גרוע	keep									agent:grok-4.7	2026-11-12
+342	כבוד	fix			respect						agent:grok-4.7	2026-11-12
+343	הבטיח	fix						ב־ט־ח	hifil		agent:grok-4.7	2026-11-12
+344	חסר	fix			missing						agent:grok-4.7	2026-11-12
+345	תמונה	fix			picture						agent:grok-4.7	2026-11-12
+346	מלא	fix	מָלֵא	male	full	adjective					agent:grok-4.7	2026-11-12
+347	לכן	keep									agent:grok-4.7	2026-11-12
+348	לבד	keep									agent:grok-4.7	2026-11-12
+349	שוטר	keep									agent:grok-4.7	2026-11-12
+350	איבד	fix						א־ב־ד	piel		agent:grok-4.7	2026-11-12
+351	נסע	fix			to drive						agent:grok-4.7	2026-11-12
+352	השיג	fix			to get			נ־שׂ־ג	hifil		agent:grok-4.7	2026-11-12
+353	לגמרי	keep									agent:grok-4.7	2026-11-12
+354	החוצה	keep									agent:grok-4.7	2026-11-12
+355	לפחות	keep									agent:grok-4.7	2026-11-12
+356	נ	drop								parser artifact		
+357	במשך	keep									agent:grok-4.7	2026-11-12
+358	פרק	fix	פֶּרֶק	perek	chapter	noun	m				agent:grok-4.7	2026-11-12
+359	איתי	fix	אִתִּי	iti	with me	preposition					agent:grok-4.7	2026-11-12
+360	חושבת	drop								present of חשב, already in the course		
+361	פגע	fix			to hurt						agent:grok-4.7	2026-11-12
+362	הת	drop								parser artifact		
+363	בחייך	keep									agent:grok-4.7	2026-11-12
+364	סרט	fix			movie						agent:grok-4.7	2026-11-12
+365	שכח	keep									agent:grok-4.7	2026-11-12
+366	בבקש	drop								truncated בבקשה, already in the course		
+367	צעיר	keep									agent:grok-4.7	2026-11-12
+368	ישב	keep									agent:grok-4.7	2026-11-12
+369	בהחלט	keep									agent:grok-4.7	2026-11-12
+370	שונה	fix	שׁוֹנֶה	shone	different	adjective					agent:grok-4.7	2026-11-12
+371	קח	drop								imperative of לקח, already in the course		
+372	א	drop								parser artifact, the letter alef		
+373	צריכה	fix			need	adjective					agent:grok-4.7	2026-11-12
+374	מעל	keep									agent:grok-4.7	2026-11-12
+375	קל	fix		kal	easy						agent:grok-4.7	2026-11-12
+376	מטה	keep									agent:grok-4.7	2026-11-12
+377	ותק	keep									agent:grok-4.7	2026-11-12
+378	לשם	fix	לָשָׁם	lesham	to there	adverb				not in Wiktionary senses: to that place; the listed stone is biblical	agent:grok-4.7	2026-11-12
+379	אהבה	keep									agent:grok-4.7	2026-11-12
+380	יחד	keep									agent:grok-4.7	2026-11-12
+381	קורה	drop								present of קרה, already in the course		
+382	הקשיב	fix		hikshiv				ק־שׁ־ב	hifil		agent:grok-4.7	2026-11-12
+383	אתמול	fix		etmol							agent:grok-4.7	2026-11-12
+384	מילה	fix	מִלָּה	mila	word	noun	f				agent:grok-4.7	2026-11-12
+385	נקודה	keep									agent:grok-4.7	2026-11-12
+386	הכול	fix	הַכֹּל	hakol	everything	determiner				not in Wiktionary senses: everything, the article plus כל	agent:grok-4.7	2026-11-12
+387	צורה	keep									agent:grok-4.7	2026-11-12
+388	נגע	keep									agent:grok-4.7	2026-11-12
+389	בלתי	keep									agent:grok-4.7	2026-11-12
+390	מים	keep									agent:grok-4.7	2026-11-12
+391	למעלה	keep									agent:grok-4.7	2026-11-12
+392	מושג	keep									agent:grok-4.7	2026-11-12
+393	פתח	fix		patakh							agent:grok-4.7	2026-11-12
+394	נהג	fix			to drive						agent:grok-4.7	2026-11-12
+395	סתם	fix	סְתָם	stam	just	adverb					agent:grok-4.7	2026-11-12
+396	היכן	keep									agent:grok-4.7	2026-11-12
+397	סלח	keep									agent:grok-4.7	2026-11-12
+398	הסתכל	fix						ס־כ־ל	hitpael		agent:grok-4.7	2026-11-12
+399	בתוך	keep									agent:grok-4.7	2026-11-12
+400	כוונה	keep									agent:grok-4.7	2026-11-12
+401	מייד	keep									agent:grok-4.7	2026-11-12
+402	מערכת	fix			system						agent:grok-4.7	2026-11-12
+403	נגמר	fix						ג־מ־ר	nifal		agent:grok-4.7	2026-11-12
+404	הזדמנות	keep									agent:grok-4.7	2026-11-12
+405	תינוק	fix			baby						agent:grok-4.7	2026-11-12
+406	הראה	keep									agent:grok-4.7	2026-11-12
+407	הערב	fix			tonight	adverb					agent:grok-4.7	2026-11-12
+408	עזרה	fix		ezra							agent:grok-4.7	2026-11-12
+409	אלא	keep									agent:grok-4.7	2026-11-12
+410	אתן	fix			you (f. pl.)						agent:grok-4.7	2026-11-12
+411	סיכוי	keep									agent:grok-4.7	2026-11-12
+412	הפעם	keep									agent:grok-4.7	2026-11-12
+413	ניצח	fix						נ־צ־ח	piel		agent:grok-4.7	2026-11-12
+414	הציל	fix						נ־צ־ל	hifil		agent:grok-4.7	2026-11-12
+415	נשק	fix	נֶשֶׁק	neshek	weapon	noun	m				agent:grok-4.7	2026-11-12
+416	רופא	fix	רוֹפֵא	rofe	doctor	noun	m				agent:grok-4.7	2026-11-12
+417	שלושה	keep									agent:grok-4.7	2026-11-12
+418	י	drop								parser artifact, the letter yod		
+419	קול	fix	קוֹל	kol	voice	noun	m				agent:grok-4.7	2026-11-12
+420	אוי	keep									agent:grok-4.7	2026-11-12
+421	כאב	keep									agent:grok-4.7	2026-11-12
+422	שתי	fix	שְׁתֵּי	shtei	two (f.)	numeral					agent:grok-4.7	2026-11-12
+423	אעשה	drop								future of עשה		
+424	כפי	keep									agent:grok-4.7	2026-11-12
+425	רציני	keep									agent:grok-4.7	2026-11-12
+426	הציע	fix			to suggest			י־צ־ע	hifil		agent:grok-4.7	2026-11-12
+427	וואו	fix	וָוָאו	vau	wow						agent:grok-4.7	2026-11-12
+428	כלא	fix	כֶּלֶא	kele	prison	noun	m				agent:grok-4.7	2026-11-12
+429	אדיר	keep									agent:grok-4.7	2026-11-12
+430	כלומר	keep									agent:grok-4.7	2026-11-12
+431	דין	keep									agent:grok-4.7	2026-11-12
+432	ביחד	keep									agent:grok-4.7	2026-11-12
+433	בעוד	fix			while	conjunction					agent:grok-4.7	2026-11-12
+434	כרגע	keep									agent:grok-4.7	2026-11-12
+435	שיר	keep									agent:grok-4.7	2026-11-12
+436	מלחמה	fix			war						agent:grok-4.7	2026-11-12
+437	דעה	keep									agent:grok-4.7	2026-11-12
+438	כלב	fix		kelev							agent:grok-4.7	2026-11-12
+439	לפעמים	keep									agent:grok-4.7	2026-11-12
+440	כעת	keep									agent:grok-4.7	2026-11-12
+441	נעלם	fix						ע־ל־ם	nifal		agent:grok-4.7	2026-11-12
+442	שיחה	keep									agent:grok-4.7	2026-11-12
+443	למען	keep									agent:grok-4.7	2026-11-12
+444	חמש	fix	חָמֵשׁ	khamesh	five	numeral					agent:grok-4.7	2026-11-12
+445	רחוב	keep									agent:grok-4.7	2026-11-12
+446	נורא	fix			terrible	adjective					agent:grok-4.7	2026-11-12
+447	שניים	keep									agent:grok-4.7	2026-11-12
+448	מיוחד	fix			special						agent:grok-4.7	2026-11-12
+449	האליי	drop								parser artifact		
+450	ירד	keep									agent:grok-4.7	2026-11-12
+451	ודה	drop								parser artifact		
+452	קבוצה	keep									agent:grok-4.7	2026-11-12
+453	שאר	fix			rest						agent:grok-4.7	2026-11-12
+454	זונה	fix			prostitute						agent:grok-4.7	2026-11-12
+455	שכן	fix	שָׁכֵן	shakhen	neighbor	noun	m				agent:grok-4.7	2026-11-12
+456	נגד	keep									agent:grok-4.7	2026-11-12
+457	אלי	fix	אֵלַי	elai	to me	preposition					agent:grok-4.7	2026-11-12
+458	יצר	fix			to create						agent:grok-4.7	2026-11-12
+459	יופי	fix			great	interjection					agent:grok-4.7	2026-11-12
+460	ארץ	keep									agent:grok-4.7	2026-11-12
+461	מדינה	keep									agent:grok-4.7	2026-11-12
+462	תפס	keep									agent:grok-4.7	2026-11-12
+463	חוק	keep									agent:grok-4.7	2026-11-12
+464	גר	fix			to live						agent:grok-4.7	2026-11-12
+465	החזיר	fix						ח־ז־ר	hifil		agent:grok-4.7	2026-11-12
+466	גש	drop								imperative of נגש		
+467	אקדח	fix			pistol						agent:grok-4.7	2026-11-12
+468	שה	keep								Wiktionary only has the biblical lamb; this token may be a fragment		
+469	מידע	keep									agent:grok-4.7	2026-11-12
+470	טיפל	fix						ט־פ־ל	piel		agent:grok-4.7	2026-11-12
+471	משפט	fix			sentence						agent:grok-4.7	2026-11-12
+472	גנב	keep									agent:grok-4.7	2026-11-12
+473	מסוגל	keep									agent:grok-4.7	2026-11-12
+474	תורגם	drop								passive past of תרגם, a conjugated form		
+475	ארוחה	keep									agent:grok-4.7	2026-11-12
+476	שקט	fix	שָׁקֵט	shaket	quiet	adjective					agent:grok-4.7	2026-11-12
+477	צד	fix	צַד	tsad	side	noun	m				agent:grok-4.7	2026-11-12
+478	אש	keep									agent:grok-4.7	2026-11-12
+479	מצטער	drop								present of הצטער, already in the course		
+480	אב	fix			father						agent:grok-4.7	2026-11-12
+481	ליד	fix	לְיַד	leyad							agent:grok-4.7	2026-11-12
+482	טעות	fix			mistake						agent:grok-4.7	2026-11-12
+483	פחות	fix				adverb					agent:grok-4.7	2026-11-12
+484	רגיל	keep									agent:grok-4.7	2026-11-12
+485	תיק	keep									agent:grok-4.7	2026-11-12
+486	גבוה	fix			tall						agent:grok-4.7	2026-11-12
+487	מלך	fix	מֶלֶךְ	melekh	king	noun	m				agent:grok-4.7	2026-11-12
+488	מדוע	keep									agent:grok-4.7	2026-11-12
+489	ניתן	fix	נִיתָּן	nitan	to be possible			נ־ת־ן	nifal	plene spelling so the key is not נתן	agent:grok-4.7	2026-11-12
+490	הגן	fix						ג־נ־ן	hifil		agent:grok-4.7	2026-11-12
+491	הצלחה	keep									agent:grok-4.7	2026-11-12
+492	מספיק	keep									agent:grok-4.7	2026-11-12
+493	רכב	fix	רֶכֶב	rekhev	car	noun	m				agent:grok-4.7	2026-11-12
+494	כיוון	fix	כִּיוּוּן	kivun	direction	noun	m				agent:grok-4.7	2026-11-12
+495	פשע	fix	פֶּשַׁע	pesha	crime	noun	m			not in Wiktionary senses: the noun is glossed felony; speech means a crime	agent:grok-4.7	2026-11-12
+496	הורה	fix	הוֹרֶה	hore	parent	noun	m				agent:grok-4.7	2026-11-12
+497	הסכים	fix						ס־כ־ם	hifil		agent:grok-4.7	2026-11-12
+498	הוריד	fix			to lower						agent:grok-4.7	2026-11-12
+499	לחץ	keep									agent:grok-4.7	2026-11-12
+500	דאג	keep									agent:grok-4.7	2026-11-12

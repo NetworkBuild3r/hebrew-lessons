@@ -72,6 +72,8 @@ type ReviewCardVM struct {
 	Revealed      bool
 	Answered      int
 	Correct       int
+	// Source is course, tutor, or other. It names where the word came from.
+	Source string
 	// Item is the checked activity this visit is asked through, with Answer set once
 	// it has been checked. Both are nil for a flashcard and a drill.
 	Item   *activity.Item

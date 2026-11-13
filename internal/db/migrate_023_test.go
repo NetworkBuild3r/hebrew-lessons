@@ -121,11 +121,11 @@ func TestMigrate023KeepsEvidenceRows(t *testing.T) {
 		t.Fatalf("migrate 023: %v", err)
 	}
 	want := make([]int, 0, 23)
-	for i := 1; i <= 25; i++ {
+	for i := 1; i <= 27; i++ {
 		want = append(want, i)
 	}
 	if got := m6Applied(t, conn); !reflect.DeepEqual(got, want) {
-		t.Fatalf("versions after = %v, want 1..25", got)
+		t.Fatalf("versions after = %v, want 1..27", got)
 	}
 	afterN, afterSum := m23Fingerprint(t, conn)
 	if !reflect.DeepEqual(afterN, beforeN) || !reflect.DeepEqual(afterSum, beforeSum) {

@@ -305,6 +305,10 @@ func NewApp(cfg Config) (*App, error) {
 		store.Close()
 		return nil, err
 	}
+	if err := content.EnsureCourse(ctx, store); err != nil {
+		store.Close()
+		return nil, err
+	}
 
 	allowed := append([]string(nil), cfg.AllowedEmails...)
 	if cfg.Dev {

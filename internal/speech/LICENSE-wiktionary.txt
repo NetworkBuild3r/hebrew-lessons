@@ -1,0 +1,12 @@
+The course list in course.tsv is a derived work of the English Wiktionary
+Hebrew entries, written by Wiktionary contributors and licensed under
+Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0):
+
+https://creativecommons.org/licenses/by-sa/4.0/
+
+The extract was downloaded on 2026-11-12 from
+
+https://kaikki.org/dictionary/Hebrew/kaikki.org-dictionary-Hebrew.jsonl
+
+kaikki.org is Tatu Ylonen's wiktextract. course.tsv keeps the same license.
+course_fixes.tsv is original and not covered by that license.

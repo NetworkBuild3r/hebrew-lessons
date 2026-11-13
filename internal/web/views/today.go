@@ -71,6 +71,8 @@ type TodayView struct {
 	Reported bool
 	// CanSayLine is "You can now say 23 things · 4 this week". Empty when nothing is known yet.
 	CanSayLine string
+	// CourseNew is how many new common words the next sitting would add.
+	CourseNew int
 }
 
 // CheckinHint is the line under the check-in title: how long it has been, and what the
@@ -130,6 +132,41 @@ func MinutesFor(due, sessionCap int) int {
 }
 
 // SessionButtonText is Today's one action: "Today's session, about 25 minutes".
+// TodaySessionTitle is the sitting button. With nothing else due, it names the
+// new common words. Otherwise it names the minutes.
+func TodaySessionTitle(due, minutes, courseNew int) string {
+	if due == 0 && courseNew > 0 {
+		return "Learn " + strconv.Itoa(courseNew) + " new common words"
+	}
+	if due > 0 {
+		return CountText(due, "card", "cards") + " to review"
+	}
+	return SessionButtonText(minutes)
+}
+
+// SessionKicker is the small line above the title. It carries the length, so the
+// title can say what the sitting holds instead of repeating the button.
+func SessionKicker(minutes int) string { return SessionButtonText(minutes) }
+
+// TodaySessionHint is the one line under the title. It says what else the sitting
+// adds, and stays empty when there is nothing to add.
+func TodaySessionHint(due, courseNew int) string {
+	switch {
+	case due > 0 && courseNew > 0:
+		return TodayCourseLine(courseNew)
+	case due > 0:
+		return "Each word comes back at the moment you are about to forget it."
+	case courseNew > 0:
+		return "The most common words first, five at a time."
+	}
+	return ""
+}
+
+// TodayCourseLine is the second line when a sitting also adds common words.
+func TodayCourseLine(n int) string {
+	return "Includes " + strconv.Itoa(n) + " new common words."
+}
+
 func SessionButtonText(minutes int) string {
 	if minutes < 1 {
 		minutes = 1
