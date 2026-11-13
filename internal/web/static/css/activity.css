@@ -8,11 +8,14 @@
    [data-state=correct|wrong] (components.css) and .feedback-right and
    .feedback-wrong. The four flashcard grades share one neutral class. */
 
-/* A focused flow on a phone, as the placement deck is: the dock and the top bar
-   step aside. The close control at the top of the frame leads back to Today. */
+/* A focused flow on a phone, as the placement deck is: the dock, the top bar,
+   and the section jump step aside. The close control at the top of the frame
+   leads back to Today. Leaving .section-jump visible pushed letter-pick's
+   Don't know below a 390×844 viewport (CI TestKeyboardNode/ReviewGradesStayInView). */
 @media (max-width: 1023px) {
   .shell:has(.act) .top,
-  .shell:has(.act) .dock-wrap { display: none; }
+  .shell:has(.act) .dock-wrap,
+  .shell:has(.act) .section-jump { display: none; }
 }
 .shell:has(.act) .page { padding-block-end: var(--space-4); }
 
