@@ -228,6 +228,7 @@ func (s *server) routes(health http.Handler, tokens CSRFToken, gate, secure bool
 	mux.HandleFunc("POST /_hx/review/reveal", gated(gate, secure, s.reveal))
 	mux.HandleFunc("POST /_hx/review/grade", gated(gate, secure, s.grade))
 	mux.HandleFunc("POST /_hx/review/answer", gated(gate, secure, s.answer))
+	mux.HandleFunc("POST /_hx/review/teach", gated(gate, secure, s.teach))
 	mux.HandleFunc("POST /_hx/also-right", gated(gate, secure, func(w http.ResponseWriter, r *http.Request) {
 		s.postAlsoRight(w, r, chooseLang(w, r, secure), csrfValue(tokens, r))
 	}))
@@ -644,12 +645,37 @@ func (s *server) finishReview(w http.ResponseWriter, r *http.Request, lang strin
 		return
 	}
 	lede := views.UIFor(lang, views.AddressMasculine).ReviewLede
+	if err := s.fillNextLesson(r, lang, &vm); err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 	card := reviewView(lang, auth.CSRFToken(r), lede, vm)
 	if err := s.attachReviewClips(r.Context(), &card); err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 	render(w, r, views.ReviewBody(card))
+}
+
+// fillNextLesson points the end of a sitting at the next course lesson, so a
+// finished queue is not a dead end. It runs only on the done screen: a card in
+// progress has its own Continue. A failure here does not lose the sitting, so a
+// read error just leaves the done screen without the link.
+func (s *server) fillNextLesson(r *http.Request, lang string, vm *ReviewCardVM) error {
+	if vm == nil || !vm.Done || s.store == nil {
+		return nil
+	}
+	_, user, ok := s.sessionKey(r)
+	if !ok || user == nil {
+		return nil
+	}
+	next, found, err := s.store.NextCourseLesson(r.Context(), user.ID)
+	if err != nil || !found {
+		return nil
+	}
+	vm.NextHref = views.UIFor(lang, views.AddressMasculine).Href(lessonPath(next.UnitID, next.LessonIx))
+	vm.NextLabel = "Next lesson"
+	return nil
 }
 
 func reviewLang(r *http.Request) string {

@@ -1426,8 +1426,11 @@ func assertLearner1Queue(t *testing.T, cards []CardRef, fix learner1) {
 	if studied > SessionCap {
 		t.Fatalf("studied = %d, cap %d", studied, SessionCap)
 	}
-	if fresh != newAllowance(TargetSuccess, 10) {
-		t.Fatalf("new = %d, allowance %d", fresh, newAllowance(TargetSuccess, 10))
+	// This fixture seeds six consecutive Good reviews, which is a right streak
+	// at least BoredomRights long, so the sitting earned the high new-card tier
+	// (temper.go). A learner with a mixed history gets the mid tier.
+	if fresh != newAllowance(TargetSuccess, 10, true) {
+		t.Fatalf("new = %d, allowance %d", fresh, newAllowance(TargetSuccess, 10, true))
 	}
 	if seen[fix.learning] != 1 {
 		t.Fatalf("learning card %d seen %d times", fix.learning, seen[fix.learning])

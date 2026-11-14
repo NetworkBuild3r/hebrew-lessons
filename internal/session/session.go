@@ -171,6 +171,9 @@ type Tally struct {
 	PairsCleared int
 	Slow         int
 	NewMet       int
+	// Eased is how many visits frustration took out of this sitting. They stay
+	// due for the next one.
+	Eased int
 }
 
 type Session struct {
@@ -189,6 +192,11 @@ type Session struct {
 	record   *evidence.Recorder
 	tally    Tally
 	minutes  int
+	// missStreak and rightStreak are the runs that steer the sitting's difficulty
+	// while it runs (temper.go). stretched marks a sitting that was too easy.
+	missStreak  int
+	rightStreak int
+	stretched   bool
 	// SkippedNoAudio is how many due listening cards this sitting left out
 	// because the word has no clip (ADR-0028 D6). They stay due.
 	SkippedNoAudio int
@@ -310,7 +318,7 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 	// Full builds seed placement-list words before ListStudyCards so the
 	// new cards join this sitting (INIT-027/SPEC-005). BuildSessionFor skips it.
 	if only == nil {
-		if err := s.seedNewFromDeck(ctx, userID, accuracy, now, gate); err != nil {
+		if err := s.seedNewFromDeck(ctx, userID, accuracy, now, gate, Stretched(ratings)); err != nil {
 			return nil, err
 		}
 		// Introduce dues cards at the recorder clock's now; pin the build to
@@ -409,7 +417,7 @@ func (s *Service) build(ctx context.Context, userID int64, only map[int64]struct
 		cands = append(cands, drillCandidates(pairs)...)
 	}
 	record := s.record
-	queue, skippedNoAudio := mixGateCap(cands, accuracy, now, seed, gate, cardsN)
+	queue, skippedNoAudio := mixGateCap(cands, accuracy, now, seed, gate, cardsN, Stretched(ratings))
 	sess := &Session{
 		userID:         userID,
 		cards:          queue,
@@ -603,6 +611,9 @@ func (s *Session) Record(ctx context.Context, cardID int64, rating fsrs.Rating) 
 	s.tally.Answered++
 	if rating > fsrs.Again {
 		s.tally.Right++
+		s.temperRight()
+	} else {
+		s.temperMiss()
 	}
 	if rating == fsrs.Hard {
 		s.tally.Slow++
@@ -704,6 +715,9 @@ func (s *Session) Answered(ctx context.Context, cardID int64, res activity.Resul
 	s.tally.Answered++
 	if res.Correct {
 		s.tally.Right++
+		s.temperRight()
+	} else {
+		s.temperMiss()
 	}
 	if out.Slow {
 		s.tally.Slow++

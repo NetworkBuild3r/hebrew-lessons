@@ -120,3 +120,28 @@
   }
   .hk-key { min-inline-size: 0; }
 }
+
+/* The board is collapsed on a phone: the learner already has a keyboard, and
+   two of them leaves no room for the question. The toggle is the one control
+   that opens it. A desktop keeps the board open (hekbd.js sets data-open), so
+   the toggle is only shown where it can actually close something. */
+.hk-zone { display: grid; gap: var(--space-2); }
+.hk-toggle {
+  display: none;
+  justify-self: start;
+  min-block-size: var(--size-tap);
+  padding-inline: var(--space-3);
+  background: var(--surface-soft);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  font-size: var(--fs-small);
+  font-weight: 700;
+}
+@media (pointer: coarse) {
+  .hk-toggle { display: inline-flex; align-items: center; }
+  .hk-zone .hk[data-open="off"] { display: none; }
+  /* Opened on a phone, the board sits over the answers, not in the page flow:
+     the question must not scroll away behind a keyboard the learner asked for. */
+  .hk-zone .hk[data-open="on"] { display: grid; }
+}

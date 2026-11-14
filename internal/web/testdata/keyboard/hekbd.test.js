@@ -194,11 +194,17 @@ function page(opts) {
     new El("div").add(keyBtn("\u05d0", "KeyT"), bet, keyBtn("\u05ea", "Comma"), act("back")),
     new El("div").add(act("space"), act("enter")),
   );
+  // The page wraps the board in a zone with the phone toggle, as keyboard.templ does.
+  const toggle = new El("button", {
+    type: "button", "data-hk-toggle": "", "data-show": "Hebrew keys", "data-hide": "Hide keys",
+    "aria-expanded": "false",
+  });
+  const zone = new El("div", { "data-hk-zone": "" }).add(toggle, root);
   const input = new El("input", { id: "answer", name: "answer" });
   const form = new El("form").add(input);
-  doc.add(form, root);
+  doc.add(form, zone);
   load();
-  return { root, input, form, hintBtn, bet };
+  return { root, zone, toggle, input, form, hintBtn, bet };
 }
 const find = (root, sel) => root.querySelector(sel);
 const tap = (root, sel, detail) => {
@@ -216,9 +222,29 @@ test("wiring: init sets rtl, lang he, and marks the input", () => {
   assert.ok(p.root.hasAttribute("data-ready"));
 });
 
-test("wiring: inputmode none only on a touch screen", () => {
-  assert.equal(page({ coarse: true }).input.getAttribute("inputmode"), "none");
+test("wiring: a closed phone board leaves the system keyboard alone", () => {
+  // The board starts collapsed on a phone. Suppressing the system keyboard while
+  // it is closed is what left a learner with no keyboard at all, so a closed
+  // board on a coarse pointer must not set inputmode=none.
+  assert.equal(page({ coarse: true }).input.getAttribute("inputmode"), "text");
   assert.equal(page({ coarse: false }).input.getAttribute("inputmode"), null);
+});
+
+test("wiring: the toggle opens the board and takes the system keyboard away", () => {
+  const p = page({ coarse: true });
+  const press = () => { doc.fire(p.toggle, "click", { detail: 1 }); };
+  assert.equal(p.root.getAttribute("data-open"), "off");
+  assert.equal(p.input.getAttribute("inputmode"), "text");
+  press();
+  assert.equal(p.root.getAttribute("data-open"), "on");
+  assert.equal(p.input.getAttribute("inputmode"), "none");
+  assert.equal(p.toggle.getAttribute("aria-expanded"), "true");
+  assert.equal(p.toggle.textContent, "Hide keys");
+  press();
+  assert.equal(p.root.getAttribute("data-open"), "off");
+  assert.equal(p.input.getAttribute("inputmode"), "text");
+  assert.equal(p.toggle.getAttribute("aria-expanded"), "false");
+  assert.equal(p.toggle.textContent, "Hebrew keys");
 });
 
 test("wiring: first session shows hints and counts the session (ac-4)", () => {

@@ -30,8 +30,18 @@ templ ReviewBody(c ReviewCard) {
 				for _, line := range TallyLines(c.MovedUp, c.PairsCleared, c.Slow, c.NewMet) {
 					<p class="lede" lang="en" dir="ltr">@E(line)</p>
 				}
-				<a class="btn btn-primary" href={ templ.SafeURL(homeHref(c.Lang)) }>@ReviewT(c.Lang, "Back to Today")</a>
+				if c.Eased > 0 {
+					<p class="lede" lang="en" dir="ltr">@E(EasedLine(c.Eased))</p>
+				}
+				if c.NextHref != "" {
+					<a class="btn btn-primary" href={ templ.SafeURL(c.NextHref) }>@E(c.NextLabel)</a>
+					<a class="btn btn-tonal" href={ templ.SafeURL(homeHref(c.Lang)) }>@ReviewT(c.Lang, "Back to Today")</a>
+				} else {
+					<a class="btn btn-primary" href={ templ.SafeURL(homeHref(c.Lang)) }>@ReviewT(c.Lang, "Back to Today")</a>
+				}
 			</div>
+		} else if c.Teach {
+			@teachFrame(c)
 		} else if c.Act != nil {
 			@ActivityFrame(*c.Act)
 		} else if c.Pick || c.AfterDrill {

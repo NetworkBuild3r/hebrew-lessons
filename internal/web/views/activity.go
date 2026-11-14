@@ -267,6 +267,16 @@ func TallyLines(movedUp, pairsCleared, slow, newMet int) []string {
 	return lines
 }
 
+// EasedLine is the done-screen line for a sitting frustration shortened. It says
+// what happened and where the words went, so a shorter sitting does not read as a
+// lost one.
+func EasedLine(n int) string {
+	if n == 1 {
+		return "1 card saved for next time."
+	}
+	return strconv.Itoa(n) + " cards saved for next time."
+}
+
 // lowerKey is the data-hotkey of a badge: digits stay, letters go lower case.
 func lowerKey(k string) string { return strings.ToLower(k) }
 

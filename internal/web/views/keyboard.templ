@@ -8,11 +8,19 @@ package views
 // It brings its own stylesheet and script, so a page does not touch the
 // layout. One keyboard per page. The rows are always left to right, in the
 // physical order of a PC keyboard, even on a right-to-left page.
+//
+// On a phone the board starts collapsed: the learner already has a system
+// keyboard, and two keyboards on a 390px screen leaves no room for the
+// question. The toggle opens it, and only then does the script stop the
+// system keyboard from covering it. A desktop keeps the board open, because
+// most desktop learners have no Hebrew layout installed.
 templ HebrewKeyboard(target string, lang string) {
 	{{ c := KeyboardCopyFor(lang) }}
 	<link rel="stylesheet" href={ KeyboardCSS }/>
-	<div class="hk" data-hk data-target={ target } data-hints="off" role="group" aria-label={ c.Group } lang={ c.Lang } dir="ltr">
-		<button type="button" class="hk-hints" data-hk-hints aria-pressed="false" lang={ c.Lang } dir={ c.Dir }>{ c.Hints }</button>
+	<div class="hk-zone" data-hk-zone data-target={ target }>
+		<button type="button" class="hk-toggle" data-hk-toggle data-show={ c.Show } data-hide={ c.Hide } aria-expanded="false" aria-controls={ "hk-board-" + target } lang={ c.Lang } dir={ c.Dir }>{ c.Show }</button>
+		<div id={ "hk-board-" + target } class="hk" data-hk data-target={ target } data-hints="off" data-open="off" role="group" aria-label={ c.Group } lang={ c.Lang } dir="ltr">
+			<button type="button" class="hk-hints" data-hk-hints aria-pressed="false" lang={ c.Lang } dir={ c.Dir }>{ c.Hints }</button>
 		for i, row := range HebrewKeyRows {
 			<div class="hk-row" dir="ltr">
 				for _, k := range row {
@@ -25,13 +33,14 @@ templ HebrewKeyboard(target string, lang string) {
 				}
 			</div>
 		}
-		<div class="hk-row" dir="ltr">
-			<button type="button" class="hk-key hk-key--act hk-key--space" data-act="space" lang={ c.Lang } dir={ c.Dir }>
-				<span class="hk-key__cap">{ c.Space }</span>
-			</button>
-			<button type="button" class="hk-key hk-key--act hk-key--enter" data-act="enter" lang={ c.Lang } dir={ c.Dir }>
-				<span class="hk-key__cap">{ c.Enter }</span>
-			</button>
+			<div class="hk-row" dir="ltr">
+				<button type="button" class="hk-key hk-key--act hk-key--space" data-act="space" lang={ c.Lang } dir={ c.Dir }>
+					<span class="hk-key__cap">{ c.Space }</span>
+				</button>
+				<button type="button" class="hk-key hk-key--act hk-key--enter" data-act="enter" lang={ c.Lang } dir={ c.Dir }>
+					<span class="hk-key__cap">{ c.Enter }</span>
+				</button>
+			</div>
 		</div>
 	</div>
 	<script src={ KeyboardJS } defer></script>

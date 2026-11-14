@@ -596,3 +596,37 @@ templ selfGrade(value, label string) {
 		<span lang="en">{ label }</span>
 	</button>
 }
+
+// teachFrame is the first screen of a word the learner has never met. It shows
+// the word, how it sounds, what it means, and a clip, and asks nothing. Continue
+// asks the question. A learner who has never seen a word cannot answer a question
+// about it, so the question waits one screen.
+templ teachFrame(c ReviewCard) {
+	<section class="act act--teach" data-activity="teach" data-phase="ask" aria-label="A new word">
+		@actTop(c.Lang, c.Index-1, c.Total, c.Index)
+		<form class="act__form" method="post" action="/_hx/review/teach" hx-post="/_hx/review/teach" hx-target="#review-card" hx-swap="outerHTML" hx-select="unset" hx-boost="false">
+			<input type="hidden" name="_csrf" value={ c.CSRF }/>
+			<input type="hidden" name="card_id" value={ Num64(c.CardID) }/>
+			<div class="act__stage">
+				<p class="act__lead" lang="en" id="act-teach-lead">@E("A new word")</p>
+				<div class="act__word">
+					@WordBlock(flashHebrew(c), c.Translit, "", "display", "", true)
+					@flashAudio(c)
+				</div>
+				if c.Gloss != "" {
+					<p class="act__gloss" lang="en" dir="ltr">@E(c.Gloss)</p>
+					if c.Gender != "" {
+						<span class="gchip">@H(GenderLabel(c.Gender))</span>
+					}
+				}
+			</div>
+			<div class="act__thumb">
+				<div class="act__actions">
+					@ButtonWith(ButtonPrimary, submitAttrs(templ.Attributes{"data-act-primary": "", "aria-keyshortcuts": "Enter"})) {
+						@ReviewT(c.Lang, "Got it")
+					}
+				</div>
+			</div>
+		</form>
+	</section>
+}

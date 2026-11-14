@@ -16,6 +16,12 @@ type CourseLessonPage struct {
 	Done   bool
 	// Heard is the line about audio, set only when every word has a clip.
 	Heard string
+	// NextHref is the next lesson in the course, or empty on the last one.
+	// The lesson is where the learner is already reading; walking forward from
+	// here is the whole point, so it is not a trip back to Lessons.
+	NextHref string
+	// NextNumber names that lesson in the link.
+	NextNumber int
 }
 
 templ CourseLesson(v CourseLessonPage) {
@@ -51,6 +57,12 @@ templ CourseLesson(v CourseLessonPage) {
 			</form>
 			if v.Done {
 				<p class="course-lesson__done">Done. These words come back in review on later days.</p>
+			}
+			if v.NextHref != "" {
+				<a class="btn btn-tonal course-lesson__next" href={ templ.SafeURL(v.NextHref) }>
+					<span>Next lesson</span>
+					<span class="course-lesson__next-n" lang="en" dir="ltr">{ Num(v.NextNumber) }</span>
+				</a>
 			}
 			<p class="course-lesson__back"><a href={ templ.SafeURL(v.UI.Href("/lessons")) }>All lessons</a></p>
 		</article>

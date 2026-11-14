@@ -78,6 +78,9 @@ type ReviewCardVM struct {
 	// it has been checked. Both are nil for a flashcard and a drill.
 	Item   *activity.Item
 	Answer *answerState
+	// Teach is true on the first screen of a word the learner has never met: the
+	// word and its meaning, with no question and no grade (INIT-040).
+	Teach bool
 	// Drill is set after a two-letter letter pick until Continue.
 	Drill *drillState
 	// Sides and Example* are the letter or pattern answer. reviewView copies them
@@ -109,4 +112,10 @@ type ReviewCardVM struct {
 	PairsCleared int
 	Slow         int
 	NewMet       int
+	// Eased is how many cards frustration took out of this sitting.
+	Eased int
+	// NextHref and NextLabel are the next course lesson, shown on the done screen
+	// when there is one. Empty when the course is finished.
+	NextHref  string
+	NextLabel string
 }

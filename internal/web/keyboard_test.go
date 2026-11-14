@@ -227,13 +227,18 @@ func TestKeyboardMarkup(t *testing.T) {
 			`<script src="` + views.KeyboardJS + `" defer></script>`,
 			`data-hk `, `data-target="answer"`, `role="group"`, `dir="ltr"`,
 			`data-act="back"`, `data-act="space"`, `data-act="enter"`, `data-hk-hints`, `aria-pressed="false"`,
+			// The board starts collapsed on a phone (CSS hides it under a coarse
+			// pointer) and the toggle is the only thing that opens it.
+			`data-hk-toggle`, `data-show=`, `data-hide=`, `aria-expanded="false"`, `data-open="off"`,
 		} {
 			if !strings.Contains(html, part) {
 				t.Errorf("%s: missing %s", lang, part)
 			}
 		}
-		if got, want := strings.Count(html, "<button"), strings.Count(html, `<button type="button"`); got != want || got != 27+4 {
-			t.Errorf("%s: %d buttons, %d with type=button, want 31 (27 letters, delete, space, enter, hints) all type=button", lang, got, want)
+		// 32: 27 letters, delete, space, enter, the hints toggle, and the phone
+		// toggle that opens the board on a coarse pointer.
+		if got, want := strings.Count(html, "<button"), strings.Count(html, `<button type="button"`); got != want || got != 27+5 {
+			t.Errorf("%s: %d buttons, %d with type=button, want 32 (27 letters, delete, space, enter, hints, phone toggle) all type=button", lang, got, want)
 		}
 		if strings.Count(html, `class="hk-row"`) != 4 {
 			t.Errorf("%s: want 4 rows (three letter rows and space/enter)", lang)
@@ -375,8 +380,13 @@ func TestKeyboardJS(t *testing.T) {
 		t.Fatal(err)
 	}
 	js := string(b)
-	if len(b) > 4096 {
-		t.Errorf("hekbd.js is %d bytes; the budget is 4096 (minified, and this file is not minified)", len(b))
+	// The budget moved from 4096 when the phone toggle landed: the board now
+	// starts collapsed on a coarse pointer, which is the board() function, the
+	// coarse() probe, and their wiring. Growth is 14% for a feature that removes a
+	// keyboard; the ceiling still fails long before a dependency or a formatter
+	// pass could land here.
+	if len(b) > 4864 {
+		t.Errorf("hekbd.js is %d bytes; the budget is 4864 (minified, and this file is not minified)", len(b))
 	}
 	if !utf8.Valid(b) || !norm.NFC.IsNormalString(js) {
 		t.Error("hekbd.js is not NFC UTF-8")
@@ -386,7 +396,7 @@ func TestKeyboardJS(t *testing.T) {
 			t.Errorf("hekbd.js contains %q", bad)
 		}
 	}
-	for _, need := range []string{`\p{Cf}`, `.normalize("NFC")`, "data-code", "data-ch", "hekbd:enter", "preventScroll", `"mousedown"`, `"inputmode"`} {
+	for _, need := range []string{`\p{Cf}`, `.normalize("NFC")`, "data-code", "data-ch", "hekbd:enter", "preventScroll", `"mousedown"`, `"inputmode"`, "data-hk-toggle", "pointer: coarse"} {
 		if !strings.Contains(js, need) {
 			t.Errorf("hekbd.js lacks %s", need)
 		}

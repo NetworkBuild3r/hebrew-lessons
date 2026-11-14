@@ -247,3 +247,37 @@ func TestStudyCourseLessonIgnoresPostedIds(t *testing.T) {
 		t.Fatal("a posted id was studied")
 	}
 }
+
+// A finished lesson points at the next lesson, so finishing one is not a trip
+// back to Today to find the next. The last lesson has no next link.
+func TestCourseLessonLinksTheNextLesson(t *testing.T) {
+	now := time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC)
+	store, h := openShell(t, fixedClock(now), nil, nil)
+	l := addLearner(t, store, "learner1@example.com", "sub-next", now)
+	loadCourse(t, store)
+	lessons, err := speech.CourseLessons()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lessons) < 2 {
+		t.Skip("the course has one lesson")
+	}
+	first := getLearner(t, h, l, "/lessons/1")
+	if !strings.Contains(first, `class="btn btn-tonal course-lesson__next"`) {
+		t.Fatalf("lesson 1 has no next-lesson link:\n%s", first)
+	}
+	if !strings.Contains(first, `href="/lessons/2"`) {
+		t.Fatalf("lesson 1 does not link lesson 2:\n%s", first)
+	}
+	// A middle lesson links forward, never back to lesson 1 through the same button.
+	if len(lessons) > 2 {
+		mid := getLearner(t, h, l, "/lessons/2")
+		if !strings.Contains(mid, `href="/lessons/3"`) {
+			t.Fatalf("lesson 2 does not link lesson 3")
+		}
+	}
+	last := getLearner(t, h, l, "/lessons/"+strconv.Itoa(len(lessons)))
+	if strings.Contains(last, `course-lesson__next`) {
+		t.Fatalf("the last lesson links a next lesson:\n%s", last)
+	}
+}

@@ -86,6 +86,8 @@ type KeyboardCopy struct {
 	Enter  string
 	Hints  string // the "show key hints" toggle
 	Delete string // accessible name of the backspace key
+	Show   string // the toggle that opens the on-screen board
+	Hide   string // the toggle label once the board is open
 }
 
 // KeyboardCopyFor returns the control words for lang. Anything but "he" is English.
@@ -95,12 +97,14 @@ func KeyboardCopyFor(lang string) KeyboardCopy {
 			Lang: "he", Dir: "rtl",
 			Group: "מקלדת עברית", Back: "מחק", Space: "רווח", Enter: "שלח",
 			Hints: "הצג רמזי מקשים", Delete: "מחק אות",
+			Show: "מקלדת עברית", Hide: "סגור מקלדת",
 		}
 	}
 	return KeyboardCopy{
 		Lang: "en", Dir: "ltr",
 		Group: "Hebrew keyboard", Back: "Delete", Space: "Space", Enter: "Enter",
 		Hints: "Show key hints", Delete: "Delete the last letter",
+		Show: "Hebrew keys", Hide: "Hide keys",
 	}
 }
 

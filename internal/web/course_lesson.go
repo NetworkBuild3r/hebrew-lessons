@@ -35,6 +35,10 @@ func (s *server) serveCourseLesson(w http.ResponseWriter, r *http.Request, lang,
 	}
 	page.Title = "Lesson " + strconv.Itoa(number) + " · " + views.AppName
 	v := views.CourseLessonPage{Page: page, Number: number}
+	if count, err := s.studyableLessonCount(r); err == nil && number < count {
+		v.NextNumber = number + 1
+		v.NextHref = page.Href("/lessons/" + strconv.Itoa(number+1))
+	}
 	allHaveClips := true
 	for _, word := range lesson.Words {
 		row := views.CourseWordRow{Pointed: word.Pointed, English: word.Gloss, Translit: word.Translit}
@@ -155,13 +159,36 @@ func (s *server) lessonLexemeIDs(ctx context.Context, userID int64, words []spee
 // studyableLesson is the lesson at that number among the lessons whose words are
 // all in the database, which is the list the Lessons page shows.
 func (s *server) studyableLesson(r *http.Request, number int) (speech.CourseLesson, bool, error) {
-	lessons, err := speech.CourseLessons()
+	kept, err := s.studyableLessons(r)
 	if err != nil {
 		return speech.CourseLesson{}, false, err
 	}
+	if number < 1 || number > len(kept) {
+		return speech.CourseLesson{}, false, nil
+	}
+	return kept[number-1], true, nil
+}
+
+// studyableLessonCount is how many lessons the learner can open, so a lesson page
+// knows whether there is a next one to link to.
+func (s *server) studyableLessonCount(r *http.Request) (int, error) {
+	kept, err := s.studyableLessons(r)
+	if err != nil {
+		return 0, err
+	}
+	return len(kept), nil
+}
+
+// studyableLessons is the course lessons whose words are all stored, which is the
+// list the Lessons page shows.
+func (s *server) studyableLessons(r *http.Request) ([]speech.CourseLesson, error) {
+	lessons, err := speech.CourseLessons()
+	if err != nil {
+		return nil, err
+	}
 	course, err := s.store.CourseLexemes(r.Context())
 	if err != nil {
-		return speech.CourseLesson{}, false, err
+		return nil, err
 	}
 	byOrder := map[int]db.CourseLexeme{}
 	for _, row := range course {
@@ -180,8 +207,5 @@ func (s *server) studyableLesson(r *http.Request, number int) (speech.CourseLess
 			kept = append(kept, lesson)
 		}
 	}
-	if number < 1 || number > len(kept) {
-		return speech.CourseLesson{}, false, nil
-	}
-	return kept[number-1], true, nil
+	return kept, nil
 }

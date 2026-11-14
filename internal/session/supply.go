@@ -16,7 +16,7 @@ import (
 // above TargetSuccess and fewer due new cards wait than the accuracy tier
 // allows. Called only from a full build (only == nil), before ListStudyCards.
 // INIT-027/SPEC-005; ADR-0023 D5.
-func (s *Service) seedNewFromDeck(ctx context.Context, userID int64, accuracy float64, now time.Time, gate activity.Gate) error {
+func (s *Service) seedNewFromDeck(ctx context.Context, userID int64, accuracy float64, now time.Time, gate activity.Gate, stretched bool) error {
 	if accuracy < TargetSuccess {
 		return nil
 	}
@@ -24,7 +24,7 @@ func (s *Service) seedNewFromDeck(ctx context.Context, userID int64, accuracy fl
 	if err != nil {
 		return err
 	}
-	cap := newAllowance(accuracy, MaxNewPerSession)
+	cap := newAllowance(accuracy, MaxNewPerSession, stretched)
 	if waiting >= cap {
 		return nil
 	}
@@ -154,7 +154,7 @@ func (s *Service) CourseWaiting(ctx context.Context, userID int64) (int, string,
 	if err != nil {
 		return 0, "", err
 	}
-	cap := newAllowance(accuracy, MaxNewPerSession)
+	cap := newAllowance(accuracy, MaxNewPerSession, Stretched(ratings))
 	if waiting >= cap {
 		return 0, "", nil
 	}

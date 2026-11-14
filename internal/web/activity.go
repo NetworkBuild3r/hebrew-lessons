@@ -12,6 +12,7 @@ import (
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/activity"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/evidence"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/session"
+	"github.com/NetworkBuild3r/hebrew-lessons/internal/studyday"
 	"github.com/NetworkBuild3r/hebrew-lessons/internal/web/views"
 )
 
@@ -55,6 +56,29 @@ type answerState struct {
 	restored  bool
 }
 
+// recordExposure writes the lesson_intro exposure for a word the teach screen is
+// about to show. It is the same row prepareItem writes for a new word.
+func (s *server) recordExposure(ctx context.Context, userID, lexemeID int64) error {
+	if s.engine == nil || lexemeID <= 0 {
+		return nil
+	}
+	return s.engine.Expose(ctx, userID, []int64{lexemeID}, 0)
+}
+
+// isTeachable reports whether the word can be shown with its meaning before it is
+// asked. A word with no gloss has nothing to teach, and a word with no lexicon row
+// is not a study word at all, so those keep the old path.
+func (s *server) isTeachable(ctx context.Context, userID, lexemeID int64) bool {
+	if s.store == nil || lexemeID <= 0 {
+		return false
+	}
+	face, ok, err := s.store.LexemeByID(ctx, lexemeID)
+	if err != nil || !ok {
+		return false
+	}
+	return strings.TrimSpace(face.Gloss) != ""
+}
+
 // prepareItem records the exposure of a new word and builds the item the visit is asked
 // through. A visit whose activity the lexicon cannot support after all stays a
 // flashcard. The caller holds s.mu.
@@ -68,11 +92,13 @@ func (s *server) prepareItem(ctx context.Context, q *studyQueue) error {
 	if mode, ok := views.LookupReviewMode(ref.Kind); ok && !mode.Lexeme {
 		return nil
 	}
-	// A visit that comes back after a miss has shown the word already.
-	if ref.Intro && !q.retry {
+	// A visit that comes back after a miss has shown the word already, and the
+	// teach screen records the exposure when it is served.
+	if ref.Intro && !q.retry && !q.exposed {
 		if err := s.engine.Expose(ctx, q.userID, []int64{ref.LexemeID}, 0); err != nil {
 			return err
 		}
+		q.exposed = true
 	}
 	if ref.Activity != "" && ref.Activity != activity.Flashcard {
 		item, ok, err := s.buildItem(ctx, q.userID, ref)
@@ -219,6 +245,53 @@ func (s *server) answer(w http.ResponseWriter, r *http.Request) {
 		item: *q.item, resp: resp, text: strings.TrimSpace(resp.Text), res: res,
 		implied: outcome.Implied, slow: outcome.Slow, ownSkill: q.cur.Skill,
 		attemptID: attemptID,
+	}
+	vm, err := s.cardVM(r.Context(), q)
+	s.mu.Unlock()
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	s.finishReview(w, r, lang, vm)
+}
+
+// teach is Continue on the first screen of a new word. It records the exposure,
+// builds the question for the same visit, and renders it. The visit is not
+// graded, so nothing about the teach screen reaches FSRS.
+func (s *server) teach(w http.ResponseWriter, r *http.Request) {
+	cardID, ok := reviewCardID(w, r)
+	if !ok {
+		return
+	}
+	key, user, ok := s.sessionKey(r)
+	if !ok || user == nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	lang := reviewLang(r)
+	s.mu.Lock()
+	q := s.queues[key]
+	if q == nil || q.userID != user.ID || q.sess == nil || q.done || !q.has || !q.teach ||
+		q.cur.CardID != cardID || !q.sameDay(s.now()) {
+		s.mu.Unlock()
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	q.teach = false
+	if err := s.prepareItem(r.Context(), q); err != nil {
+		s.mu.Unlock()
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	if parts := pairParts(q); parts != nil {
+		z, err := s.learnerZone(r.Context(), q.userID)
+		if err != nil {
+			s.mu.Unlock()
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		q.asked = pickPart(q.cur.CardID, studyday.DueCutoff(s.now(), z), parts)
+		q.servedAt = s.now()
 	}
 	vm, err := s.cardVM(r.Context(), q)
 	s.mu.Unlock()

@@ -96,6 +96,13 @@ type studyQueue struct {
 	item    *activity.Item
 	fb      *answerState
 	drillFB *drillState
+	// teach is true when the current visit introduces a word the learner has
+	// never met. The first screen shows the word and its meaning, and Continue
+	// asks the question. Nothing is graded on the teach screen.
+	teach bool
+	// exposed is set once this visit has written its lesson_intro exposure, so the
+	// teach screen and the question that follows it cannot record it twice.
+	exposed bool
 	// tally is a copy of Session.Tally when the sitting finished, so a reload
 	// of the done screen shows the same rows.
 	tally    session.Tally
@@ -492,6 +499,8 @@ func (s *server) advance(ctx context.Context, q *studyQueue) error {
 		q.item = nil
 		q.fb = nil
 		q.drillFB = nil
+		q.teach = false
+		q.exposed = false
 	}
 	if q == nil || q.sess == nil {
 		if q != nil {
@@ -520,6 +529,20 @@ func (s *server) advance(ctx context.Context, q *studyQueue) error {
 		q.asked = ""
 		q.servedAt = time.Time{}
 		q.index, q.total, q.retry = q.sess.Place()
+		// A word the learner has never seen is taught before it is asked. The
+		// mix sets Intro on exactly that visit, and asking "What does this mean?"
+		// of a word shown for the first time a second ago is a guaranteed miss.
+		q.teach = card.Intro && !q.retry && s.isTeachable(ctx, q.userID, card.LexemeID)
+		if q.teach {
+			// The teach screen is the exposure: the word is shown with no question
+			// asked. Record it now, so the model knows the word was seen even if the
+			// learner leaves before Continue.
+			if err := s.recordExposure(ctx, q.userID, card.LexemeID); err != nil {
+				return err
+			}
+			q.exposed = true
+			return nil
+		}
 		if err := s.prepareItem(ctx, q); err != nil {
 			return err
 		}
@@ -607,6 +630,7 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 			vm.PairsCleared = q.tally.PairsCleared
 			vm.Slow = q.tally.Slow
 			vm.NewMet = q.tally.NewMet
+			vm.Eased = q.tally.Eased
 		}
 		return vm, nil
 	}
@@ -614,6 +638,28 @@ func (s *server) cardVM(ctx context.Context, q *studyQueue) (ReviewCardVM, error
 	vm.CardID = ref.CardID
 	vm.Kind = ref.Kind
 	vm.Source = string(ref.Source)
+	// The teach screen shows the word and its meaning. No item is built, so
+	// nothing is asked and nothing is graded until Continue.
+	if q.teach {
+		face, ok, err := s.store.LexemeByID(ctx, ref.LexemeID)
+		if err != nil {
+			return ReviewCardVM{}, err
+		}
+		if !ok {
+			return ReviewCardVM{}, fmt.Errorf("web: lexeme %d: not found", ref.LexemeID)
+		}
+		url, err := s.clipURL(ctx, face.TextNFC, face.AudioID)
+		if err != nil {
+			return ReviewCardVM{}, err
+		}
+		vm.Teach = true
+		vm.Pointed = face.TextNFC
+		vm.Unpointed = units.Plain(face.TextNFC)
+		vm.Translit = face.Translit
+		vm.AudioURL = url
+		vm.Back = CardBackVM{Translit: face.Translit, Gender: face.Gender, Gloss: face.Gloss}
+		return vm, nil
+	}
 	if q.item != nil {
 		// A checked activity carries its own prompt. Nothing about the word goes on
 		// the card: the answer is not in the page until Check has run.
@@ -1206,6 +1252,15 @@ func reviewView(lang, csrf, lede string, vm ReviewCardVM) views.ReviewCard {
 		Slow:          vm.Slow,
 		NewMet:        vm.NewMet,
 		Source:        vm.Source,
+		Teach:         vm.Teach,
+		Eased:         vm.Eased,
+		NextHref:      vm.NextHref,
+		NextLabel:     vm.NextLabel,
+	}
+	if vm.Teach {
+		// The teach screen's whole point is the meaning, so it returns before
+		// ConcealFront, which would take the gloss off a read card.
+		return card
 	}
 	if vm.Item != nil {
 		card.Act = activityView(lang, csrf, vm)

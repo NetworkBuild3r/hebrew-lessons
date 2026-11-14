@@ -322,14 +322,14 @@ func mix(cands []Candidate, accuracy float64, now time.Time, seed int64) []CardR
 // the old mix. Each card is then asked through its own skill, or moved up, as annotate
 // does (INIT-027/SPEC-004). SkippedNoAudio counts due listen cards left out because
 // they have no clip (ADR-0028 D6). The queue holds at most SessionCap study cards.
-func mixGate(cands []Candidate, accuracy float64, now time.Time, seed int64, gate activity.Gate) ([]CardRef, int) {
-	return mixGateCap(cands, accuracy, now, seed, gate, SessionCap)
+func mixGate(cands []Candidate, accuracy float64, now time.Time, seed int64, gate activity.Gate, stretched ...bool) ([]CardRef, int) {
+	return mixGateCap(cands, accuracy, now, seed, gate, SessionCap, stretched...)
 }
 
 // mixGateCap is mixGate with an explicit card count from the minute budget.
-func mixGateCap(cands []Candidate, accuracy float64, now time.Time, seed int64, gate activity.Gate, cap int) ([]CardRef, int) {
+func mixGateCap(cands []Candidate, accuracy float64, now time.Time, seed int64, gate activity.Gate, cap int, stretched ...bool) ([]CardRef, int) {
 	askable, skipped := filterReviewAskable(cands, now)
-	queue := mixCards(askable, accuracy, now, seed, cap)
+	queue := mixCards(askable, accuracy, now, seed, cap, stretched...)
 	byID := make(map[int64]Candidate, len(askable))
 	for _, c := range askable {
 		byID[c.ID] = c
@@ -487,7 +487,7 @@ func ownSkillStrong(c Candidate) bool {
 	return false
 }
 
-func mixCards(cands []Candidate, accuracy float64, now time.Time, seed int64, cap int) []CardRef {
+func mixCards(cands []Candidate, accuracy float64, now time.Time, seed int64, cap int, stretched ...bool) []CardRef {
 	study, letters, patterns := splitKinds(cands)
 	ordered := append([]Candidate(nil), study...)
 	sortCandidates(seed, ordered)
@@ -498,7 +498,7 @@ func mixCards(cands []Candidate, accuracy float64, now time.Time, seed int64, ca
 	// they are not a block at the end. A pass then separates two visits
 	// of one lexeme when another card can stand between them.
 	fresh = orderNew(fresh)
-	n := newAllowance(accuracy, len(fresh))
+	n := newAllowance(accuracy, len(fresh), stretched...)
 	woven := weave(planned, drillCards(letters), drillCards(patterns))
 	return separateLexemes(interleaveNew(woven, newRefs(take(fresh, n)), seed))
 }
@@ -963,7 +963,13 @@ func take(in []Candidate, n int) []Candidate {
 // NewPerSessionMid; above NewTierHigh it is NewPerSessionHigh. No-history
 // accuracy (NoHistoryAccuracy) lands in the mid tier. The planned-queue
 // size does not change the cap.
-func newAllowance(accuracy float64, available int) int {
+func newAllowance(accuracy float64, available int, stretched ...bool) int {
+	// A sitting that ran a long right streak earned the high new-card tier even
+	// when the rolling accuracy has not crossed HighAccuracy yet: five right in a
+	// row is the signal that the learner can take more words (temper.go).
+	if len(stretched) > 0 && stretched[0] {
+		accuracy = stretchedShare()
+	}
 	limit := NewPerSessionMid
 	switch {
 	case accuracy < LowAccuracy:

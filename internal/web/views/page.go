@@ -272,6 +272,11 @@ type ReviewCard struct {
 	// Act is the checked activity this visit is asked through. Nil means the card is
 	// a flashcard (or a drill), graded by the learner.
 	Act *ActivityView
+	// Teach is true on the first screen of a word the learner has never met. The
+	// page shows the word and its meaning and asks nothing; Continue builds the
+	// question. This is the answer to "why am I being quizzed on a word I have
+	// never seen": nothing is asked before it is shown.
+	Teach bool
 	// Sides, ExampleText, ExampleTranslit, and ExampleGloss are the drill answer.
 	// They are empty until the card is revealed, so the front has no answer markup.
 	// TellApart and DageshNote are the same: empty when the data has no cue.
@@ -308,8 +313,15 @@ type ReviewCard struct {
 	PairsCleared int
 	Slow         int
 	NewMet       int
+	// Eased is how many cards frustration took out of this sitting.
+	Eased int
 	// Source is course, tutor, or other. The front of a study card names it.
 	Source string
+	// NextHref and NextLabel are the next thing to do on the done screen. A
+	// sitting that ends on its own with only "Back to Today" sends the learner
+	// away; the next course lesson keeps them in.
+	NextHref  string
+	NextLabel string
 }
 
 // DrillSide is one letter, or one agreement form, on the back of a drill card.
